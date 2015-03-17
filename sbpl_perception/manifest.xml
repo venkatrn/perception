@@ -1,0 +1,24 @@
+<package>
+  <description brief="sbpl_perception">
+
+     sbpl_perception
+
+  </description>
+  <author>Venkatraman Narayanan</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/sbpl_perception</url>
+  <depend package="geometry_msgs"/>
+  <depend package="sensor_msgs"/>
+  <depend package="roscpp"/>
+  <depend package="roslib"/>
+  <!--<depend package="pcl"/>-->
+  <depend package="pcl_ros"/>
+  <depend package="kinect_sim"/>
+  <depend package="sbpl"/>
+  <depend package="cv_bridge"/>
+  <depend package="opencv2"/>
+
+</package>
+
+

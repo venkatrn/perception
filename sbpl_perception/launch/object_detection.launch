@@ -1,0 +1,34 @@
+<launch>
+  <master auto="start"/>
+  <param name="/use_sim_time" value="false"/>
+
+  <arg name="debug" default="false" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix" value="gdb --ex run --args" />
+  <!--<include file="$(find pr2_description)/robots/upload_pr2.launch" />-->
+  <!--<param name="robot_description" command="$(find xacro)/xacro.py '$(find pr2_description)/robots/pr2.urdf.xacro'" />-->
+
+    <node pkg="sbpl_perception" type="object_recognition_node" name="object_recognition" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false">
+      <param name="reference_frame" value="/base_link"/>
+      <!-- <param name="reference_frame" value="head_mount_kinect_rgb_optical_frame"/>&#45;&#45;> -->
+      <param name="pcl_visualization" value="false"/> 
+      <remap from="input_cloud" to="/kinect_head/depth_registered/points"/>
+      <remap from="input_depth_image" to="/kinect_head/depth_registered/image_raw"/>
+       <rosparam param="model_files" subst_value="True">
+         [$(find kinect_sim)/data/birdhouse/1-S.obj,
+         $(find kinect_sim)/data/birdhouse/2-SC.obj,
+         <!-- $(find kinect_sim)/data/birdhouse/3&#45;SH.obj, -->
+         <!-- $(find kinect_sim)/data/birdhouse/4&#45;SDC.obj, -->
+         <!-- $(find kinect_sim)/data/birdhouse/5&#45;T.obj, -->
+         <!-- $(find kinect_sim)/data/birdhouse/6&#45;R.obj, -->
+         <!-- $(find kinect_sim)/data/birdhouse/7&#45;TH.obj, -->
+         <!-- $(find kinect_sim)/data/birdhouse/8&#45;RH.obj, -->
+         $(find kinect_sim)/data/birdhouse/9-RC.obj]
+        <!-- [$(find kinect_sim)/data/mug.obj, -->
+        <!-- $(find kinect_sim)/data/wine_bottle.obj] -->
+        <!-- [$(find kinect_sim)/data/mug.obj] -->
+      </rosparam>
+  </node>
+
+  <!--<node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />-->
+</launch>

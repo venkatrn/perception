@@ -1,0 +1,24 @@
+<package>
+  <description brief="kinect_sim">
+
+     kinect_sim
+
+  </description>
+  <author>Venkatraman Narayanan</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/kinect_sim</url>
+  <depend package="geometry_msgs"/>
+  <depend package="sensor_msgs"/>
+  <depend package="roscpp"/>
+  <depend package="roslib"/>
+  <!--<depend package="pcl"/>-->
+  <depend package="pcl_ros"/>
+
+  <export>
+    <cpp cflags="`pkg-config --cflags eigen3` -I${prefix}/include" 
+      lflags="-Wl,-rpath,${prefix}/lib -L${prefix}/lib -lkinect_sim"/>
+  </export>
+</package>
+
+
