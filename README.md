@@ -13,7 +13,7 @@ It internally uses kinect_sim to generate 'states' for the planner to search thr
 Setup
 -----
 
-1. Get ROS hydro from http://wiki.ros.org/hydro/Installation/Ubuntu
+1. Get ROS Hydro from http://wiki.ros.org/hydro/Installation/Ubuntu
 2. Create a rosbuild workspace ~/hydro_workspace as described in http://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment
 
 ```bash
