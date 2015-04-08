@@ -17,8 +17,8 @@ Setup
 2. Create a rosbuild workspace ~/hydro_workspace as described in http://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment
 
 ```bash
-git clone https://github.com/venkatrn/perception.git ~/hydro_workspace
-git clone https://github.com/venkatrn/improved-mha-planner.git ~/hydro_workspace
+git clone https://github.com/venkatrn/perception.git ~/hydro_workspace/perception
+git clone https://github.com/venkatrn/improved-mha-planner.git ~/hydro_workspace/improved-mha-planner
 rosmake sbpl_perception
 #If above fails, try the following to diagnose error:
 #rosmake sbpl
