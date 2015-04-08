@@ -23,5 +23,8 @@ rosmake sbpl_perception
 #If above fails, try the following to diagnose error:
 #rosmake sbpl
 #rosmake kinect_sim
-
 ```
+ If you have any missing ROS package dependencies, do:
+ ```bash
+ sudo apt-get install ros-hydro-<package> #or replace 'hydro' by appropriate version name
+ ```
