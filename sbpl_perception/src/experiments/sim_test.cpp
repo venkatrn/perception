@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
   EnvObjectRecognition *env_obj = new EnvObjectRecognition(nh);
 
   // SBPLPlanner *planner  = new LazyARAPlanner(env_obj, true);
-  MHAPlanner *planner  = new MHAPlanner(env_obj, 2, true);
+  MHAPlanner *planner  = new MHAPlanner(env_obj, 1, true);
 
   // Set model files
   // vector<bool> symmetries;
@@ -136,12 +136,12 @@ int main(int argc, char **argv) {
 
   // Occlusion example
 
-// Pose p1(0.296691, 0.110056, 1.869107);
-// Pose p2( 0.209879, -0.171593, 1.910538);
-// Pose p3( 0.414808, -0.174167, 3.746371);
-//
-//   poses.push_back(p1); poses.push_back(p2); poses.push_back(p3);
-//   model_ids.push_back(0); model_ids.push_back(1); model_ids.push_back(2);
+Pose p1(0.296691, 0.110056, 1.869107);
+Pose p2( 0.209879, -0.171593, 1.910538);
+Pose p3( 0.414808, -0.174167, 3.746371);
+
+  poses.push_back(p1); poses.push_back(p2); poses.push_back(p3);
+  model_ids.push_back(0); model_ids.push_back(1); model_ids.push_back(2);
 
 // Min z test
 //  0.013908 0.367176 3.825993
@@ -149,13 +149,13 @@ int main(int argc, char **argv) {
 //  -0.134038 -0.246560 4.138588
 
 // Challenging
-Pose p1( 0.509746, 0.039520, 0.298403);
-Pose p2( 0.550498, -0.348341, 5.665042);
-Pose p3( 0.355350, -0.002500, 5.472355);
-Pose p4( 0.139923, -0.028259, 3.270873);
-Pose p5( -0.137201, -0.057090, 5.188886);
-poses.push_back(p1); poses.push_back(p2); poses.push_back(p3); poses.push_back(p4); poses.push_back(p5);
-model_ids.push_back(0); model_ids.push_back(1); model_ids.push_back(2);model_ids.push_back(3); model_ids.push_back(4);
+// Pose p1( 0.509746, 0.039520, 0.298403);
+// Pose p2( 0.550498, -0.348341, 5.665042);
+// Pose p3( 0.355350, -0.002500, 5.472355);
+// Pose p4( 0.139923, -0.028259, 3.270873);
+// Pose p5( -0.137201, -0.057090, 5.188886);
+// poses.push_back(p1); poses.push_back(p2); poses.push_back(p3); poses.push_back(p4); poses.push_back(p5);
+// model_ids.push_back(0); model_ids.push_back(1); model_ids.push_back(2);model_ids.push_back(3); model_ids.push_back(4);
 
 
 // Pose p1(0.328387, -0.289632, 0.718626);

@@ -13,6 +13,8 @@
 #include <pcl/common/time.h>
 #include <kinect_sim/range_likelihood.h>
 
+#include <ros/package.h>
+
 // For adding noise:
 static boost::minstd_rand generator (static_cast<unsigned int> (std::time (
                                                                   0))); // seed
@@ -21,6 +23,11 @@ static boost::minstd_rand generator (static_cast<unsigned int> (std::time (
 #define DO_TIMING_PROFILE 0
 
 using namespace std;
+
+const string kComputeScoreVertFile =  ros::package::getPath("kinect_sim") +
+                                      "/src/compute_score.vert";
+const string kComputeScoreFragFile =  ros::package::getPath("kinect_sim") +
+                                      "/src/compute_score.frag";
 
 // 301 values, 0.0 uniform  1.0 normal. properly truncated/normalized
 float normal_sigma0x5_normal1x0_range0to3_step0x01[] = {1.59576912f, 1.59545000f, 1.59449302f, 1.59289932f, 1.59067083f,
@@ -308,13 +315,13 @@ pcl::simulation::RangeLikelihood::RangeLikelihood (int rows, int cols,
   likelihood_program_ = gllib::Program::Ptr (new gllib::Program ());
 
   // TODO: to remove file dependency include the shader source in the binary
-  if (!likelihood_program_->addShaderFile ("/usr0/home/venkatrn/hydro_workspace/kinect_sim/src/compute_score.vert",
+  if (!likelihood_program_->addShaderFile (kComputeScoreVertFile.c_str(),
                                            gllib::VERTEX)) {
     std::cout << "Failed loading vertex shader" << std::endl;
     exit (-1);
   }
 
-  if (!likelihood_program_->addShaderFile ("/usr0/home/venkatrn/hydro_workspace/kinect_sim/src/compute_score.frag",
+  if (!likelihood_program_->addShaderFile (kComputeScoreFragFile.c_str(),
                                            gllib::FRAGMENT)) {
     std::cout << "Failed loading fragment shader" << std::endl;
     exit (-1);
@@ -819,14 +826,14 @@ pcl::simulation::RangeLikelihood::getGlobalPoint (int u, int v, float range,
   transform = transform * T;
   Eigen::Matrix<float, 3, 1> pt (p.x, p.y, p.z);
   world_point[0] = static_cast<float> (transform (0,
-                                       0) * pt.coeffRef (0) + transform (0, 1) * pt.coeffRef (1) + transform (0,
-                                           2) * pt.coeffRef (2) + transform (0, 3));
+                                                  0) * pt.coeffRef (0) + transform (0, 1) * pt.coeffRef (1) + transform (0,
+                                                      2) * pt.coeffRef (2) + transform (0, 3));
   world_point[1] = static_cast<float> (transform (1,
-                                       0) * pt.coeffRef (0) + transform (1, 1) * pt.coeffRef (1) + transform (1,
-                                           2) * pt.coeffRef (2) + transform (1, 3));
+                                                  0) * pt.coeffRef (0) + transform (1, 1) * pt.coeffRef (1) + transform (1,
+                                                      2) * pt.coeffRef (2) + transform (1, 3));
   world_point[2] = static_cast<float> (transform (2,
-                                       0) * pt.coeffRef (0) + transform (2, 1) * pt.coeffRef (1) + transform (2,
-                                           2) * pt.coeffRef (2) + transform (2, 3));
+                                                  0) * pt.coeffRef (0) + transform (2, 1) * pt.coeffRef (1) + transform (2,
+                                                      2) * pt.coeffRef (2) + transform (2, 3));
   // world_point << pc.points[0].x, pc.points[0].y, pc.points[0].z;
 
 }
@@ -1275,5 +1282,6 @@ RangeLikelihood::getScoreBuffer () {
 
   return score_buffer_;
 }
+
 
 

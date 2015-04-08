@@ -10,6 +10,8 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #set(ROS_BUILD_TYPE RelWithDebInfo)
 set(ROS_BUILD_TYPE Debug)
 set(CMAKE_CXX_FLAGS "-std=c++0x")
+# set(CMAKE_COLOR_MAKEFILE ON)
+
 
 rosbuild_init()
 #find_package(PCL 1.7 REQUIRED)

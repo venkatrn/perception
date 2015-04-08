@@ -1,6 +1,13 @@
 #include <kinect_sim/sum_reduce.h>
 
+#include <ros/package.h>
+
 using namespace pcl::simulation;
+
+const std::string kSumScoreVertFile =  ros::package::getPath("kinect_sim") +
+                              "/src/sum_score.vert";
+const std::string kSumScoreFragFile =  ros::package::getPath("kinect_sim") +
+                              "/src/sum_score.frag";
 
 pcl::simulation::SumReduce::SumReduce (int width, int height, int levels) : levels_ (levels),
                                                                             width_ (width),
@@ -11,14 +18,14 @@ pcl::simulation::SumReduce::SumReduce (int width, int height, int levels) : leve
   // Load shader
   sum_program_ = gllib::Program::Ptr (new gllib::Program ());
   // TODO: to remove file dependency include the shader source in the binary
-  if (!sum_program_->addShaderFile ("/usr0/home/venkatrn/hydro_workspace/kinect_sim/src/sum_score.vert", gllib::VERTEX))
+  if (!sum_program_->addShaderFile (kSumScoreVertFile.c_str(), gllib::VERTEX))
   {
     std::cout << "Failed loading vertex shader" << std::endl;
     exit (-1);
   }
 
   // TODO: to remove file dependency include the shader source in the binary
-  if (!sum_program_->addShaderFile ("/usr0/home/venkatrn/hydro_workspace/kinect_sim/src/sum_score.frag", gllib::FRAGMENT))
+  if (!sum_program_->addShaderFile (kSumScoreFragFile.c_str(), gllib::FRAGMENT))
   {
     std::cout << "Failed loading fragment shader" << std::endl;
     exit (-1);

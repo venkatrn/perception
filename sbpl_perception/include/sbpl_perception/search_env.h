@@ -52,6 +52,48 @@ inline double WrapAngle(double x) {
   return x;
 }
 
+class ObjectModel {
+ public:
+  ObjectModel(const pcl::PolygonMesh mesh, const bool symmetric);
+
+  // Accessors
+  const pcl::PolygonMesh &mesh() {
+    return mesh_;
+  }
+  const bool symmetric() {
+    return symmetric_;
+  }
+  const double min_x() {
+    return min_x_;
+  }
+  const double min_y() {
+    return min_y_;
+  }
+  const double min_z() {
+    return min_z_;
+  }
+  const double max_x() {
+    return max_x_;
+  }
+  const double max_y() {
+    return max_y_;
+  }
+  const double max_z() {
+    return max_z_;
+  }
+  const double rad() {
+    return rad_;
+  }
+ private:
+  pcl::PolygonMesh mesh_;
+  bool symmetric_;
+  double min_x_, min_y_, min_z_; // Bounding box in default orientation
+  double max_x_, max_y_, max_z_;
+  double rad_; // Circumscribing cylinder radius
+  void SetObjectProperties();
+};
+
+
 
 struct EnvParams {
   double table_height;
@@ -75,21 +117,7 @@ struct Pose {
     y = y_val;
     theta = theta_val;
   }
-  //   bool operator==(const Pose &p) const {
-  //     // if (fabs(x - p.x) < 1e-3 && fabs(y - p.y) < 1e-3 &&
-  //     //     fabs(theta - p.theta) < 1e-3) {
-  //     bool sym_obj = symmetric || p.symmetric;
-  //     if (fabs(x - p.x) < 0.05 && fabs(y - p.y) < 0.05 &&
-  //     (sym_obj || fabs(WrapAngle(theta) - WrapAngle(p.theta)) < M_PI / 18.0)) {
-  //     return true;
-  //   }
-  //   return false;
-  // }
   bool Equals(const Pose &p, bool symmetric) const {
-    // if (fabs(x - p.x) < 0.02 && fabs(y - p.y) < 0.02 &&
-    //     fabs(WrapAngle(theta) - WrapAngle(p.theta)) < 0.1) { //1e-3
-    // if (fabs(x - p.x) < 0.01 && fabs(y - p.y) < 0.01 &&
-    //     fabs(theta - p.theta) < 0.02) { //1e-3
     if (fabs(x - p.x) < 0.02 && fabs(y - p.y) < 0.02 &&
         (symmetric || fabs(WrapAngle(theta) - WrapAngle(p.theta)) < 0.1)) {  //M_PI/18
       return true;
@@ -122,7 +150,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
  public:
   EnvObjectRecognition(ros::NodeHandle nh);
   ~EnvObjectRecognition();
-  void LoadObjFiles(const std::vector<std::string> &model_files, const std::vector<bool> model_symmetric);
+  void LoadObjFiles(const std::vector<std::string> &model_files,
+                    const std::vector<bool> model_symmetric);
   void SetScene();
   void WriteSimOutput(std::string fname_root);
   void PrintState(int state_id, std::string fname);
@@ -132,7 +161,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void TransformPolyMesh(const pcl::PolygonMesh::Ptr mesh_in,
                          pcl::PolygonMesh::Ptr mesh_out, Eigen::Matrix4f transform);
   void PreprocessModel(const pcl::PolygonMesh::Ptr mesh_in,
-                         pcl::PolygonMesh::Ptr mesh_out);
+                       pcl::PolygonMesh::Ptr mesh_out);
   const float *GetDepthImage(State s, std::vector<unsigned short> *depth_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
@@ -147,7 +176,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetObservation(std::vector<int> object_ids,
                       std::vector<Pose> poses);
   void SetObservation(int num_objects,
-                      const std::vector<unsigned short> observed_depth_image, const PointCloudPtr observed_organized_cloud);
+                      const std::vector<unsigned short> observed_depth_image,
+                      const PointCloudPtr observed_organized_cloud);
   void SetObservation(int num_objects,
                       const unsigned short *observed_depth_image);
   void SetCameraPose(Eigen::Isometry3d camera_pose);
@@ -176,7 +206,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
     return env_params_.start_state_id;  // Goal state has unique id
   }
 
-  bool StatesEqual(const State& s1, const State& s2);
+  bool StatesEqual(const State &s1, const State &s2);
 
   /**@brief State to State ID mapping**/
   int StateToStateID(State &s);
@@ -250,9 +280,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
  private:
   ros::NodeHandle nh_;
 
+  std::vector<ObjectModel> obj_models_;
   std::vector<std::string> model_files_;
-  std::vector<pcl::PolygonMesh> model_meshes_;
-  std::vector<bool> model_symmetric_;
   pcl::simulation::Scene::Ptr scene_;
 
   std::string reference_frame_;
@@ -273,7 +302,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 
   std::vector<unsigned short> observed_depth_image_;
-  PointCloudPtr observed_cloud_, downsampled_observed_cloud_, observed_organized_cloud_;
+  PointCloudPtr observed_cloud_, downsampled_observed_cloud_,
+                observed_organized_cloud_;
   pcl::RangeImagePlanar empty_range_image_;
 
   State start_state_, goal_state_;
@@ -288,6 +318,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 };
 
 #endif /** _SBPL_PERCEPTION_SEARCH_ENV **/
+
 
 
 
