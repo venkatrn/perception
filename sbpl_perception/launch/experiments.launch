@@ -16,25 +16,25 @@
       <param name="image_debug" value="$(arg image_debug)"/>
       <param name="icp_succ" value="$(arg icp_succ)"/>
       <!-- <param name="reference_frame" value="head_mount_kinect_rgb_optical_frame"/>&#45;&#45;> -->
-      <param name="pcd_file" value="$(find kinect_sim)/data/RAM/pcd_files/occlusions/frame_20111220T115445.303284.pcd"/>
-      <!-- <param name="pcd_file" value="$(find kinect_sim)/data/RAM/pcd_files/occlusions/frame_20111221T142303.479339.pcd"/> -->
+      <param name="pcd_file" value="$(find sbpl_perception)/data/RAM/pcd_files/occlusions/frame_20111220T115445.303284.pcd"/>
+      <!-- <param name="pcd_file" value="$(find sbpl_perception)/data/RAM/pcd_files/occlusions/frame_20111221T142303.479339.pcd"/> -->
       <rosparam param="model_files" subst_value="True">
 
 
 
-<!-- [$(find kinect_sim)/data/RAM/cad_models/201.327.78.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/300.151.23.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/800.919.49.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/963.111.00.dec.ply] -->
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/201.327.78.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/300.151.23.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/800.919.49.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/963.111.00.dec.ply] -->
 
-[$(find kinect_sim)/data/RAM/cad_models/201.327.78_flipped.ply,
-$(find kinect_sim)/data/RAM/cad_models/300.151.23_flipped.ply,
-$(find kinect_sim)/data/RAM/cad_models/800.919.49.dec_flipped.ply,
-$(find kinect_sim)/data/RAM/cad_models/963.111.00.dec_flipped.ply]
+[$(find sbpl_perception)/data/RAM/cad_models/201.327.78_flipped.ply,
+$(find sbpl_perception)/data/RAM/cad_models/300.151.23_flipped.ply,
+$(find sbpl_perception)/data/RAM/cad_models/800.919.49.dec_flipped.ply,
+$(find sbpl_perception)/data/RAM/cad_models/963.111.00.dec_flipped.ply]
 
-<!-- [$(find kinect_sim)/data/RAM/cad_models/all.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/odwalla_jug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/tide.ply] -->
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/all.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/tide.ply] -->
 
 
       </rosparam>
@@ -47,39 +47,39 @@ $(find kinect_sim)/data/RAM/cad_models/963.111.00.dec_flipped.ply]
   <!--<node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />-->
 </launch>
 
-<!-- [$(find kinect_sim)/data/RAM/cad_models/000.921.13.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/001.172.98.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/100.919.00&#45;cup.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/100.922.16.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/101.328.92.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/200.572.55.ply, -->
-<!-- [$(find kinect_sim)/data/RAM/cad_models/200.580.66.ply, -->
-<!-- [$(find kinect_sim)/data/RAM/cad_models/201.327.78.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/242.09.6219&#45;pitcher.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/300.151.23.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/300.834.71.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/301.290.30.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/500.312.83.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/600.832.62.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/700.580.64.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/701.330.68.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/800.919.49.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/800.921.09.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/801.348.21.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/963.111.00.dec.ply] -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/all.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/all&#45;small.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/Brita_water_filter_pitcher_6cup_x2.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/clorox.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/milk_carton.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/milkjug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/odwalla_jug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/orange_juice_jug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/peroxide.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/pur_water_pitcher_filter.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/red_mug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/simple_green.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/suave&#45;3in1.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/tide.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/tilex_spray_bottle.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/vf_paper_bowl.ply] -->
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/000.921.13.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/001.172.98.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/100.919.00&#45;cup.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/100.922.16.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/101.328.92.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/200.572.55.ply, -->
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply, -->
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/201.327.78.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/242.09.6219&#45;pitcher.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/300.151.23.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/300.834.71.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/301.290.30.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/500.312.83.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/600.832.62.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/700.580.64.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/701.330.68.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/800.919.49.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/800.921.09.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/801.348.21.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/963.111.00.dec.ply] -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/all.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/all&#45;small.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/Brita_water_filter_pitcher_6cup_x2.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/clorox.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/milk_carton.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/milkjug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/peroxide.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/red_mug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/simple_green.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/suave&#45;3in1.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/tide.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/tilex_spray_bottle.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/vf_paper_bowl.ply] -->

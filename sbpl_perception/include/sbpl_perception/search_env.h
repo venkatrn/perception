@@ -142,7 +142,6 @@ struct State {
   std::vector<int> object_ids;
   std::vector<DiscPose> disc_object_poses;
   std::vector<Pose> object_poses;
-  std::vector<int> counted_pixels;
 };
 
 // class EnvObjectRecognition : public DiscreteSpaceInformation {
@@ -184,12 +183,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetTableHeight(double height);
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
 
-  double ComputeScore(const std::vector<unsigned short> &depth_image,
-                      const std::vector<int> &pixels);
-  double ComputeScore(const std::vector<unsigned short> &depth_image,
-                      const std::vector<int> &pixels, bool cloud_on);
-  double ComputeScore(const PointCloudPtr cloud,
-                      const std::vector<int> &pixels, bool cloud_on);
   double ComputeScore(const PointCloudPtr cloud);
 
   double GetICPAdjustedPose(const PointCloudPtr cloud_in, const Pose &pose_in,
@@ -216,9 +209,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 
   void GetSuccs(int source_state_id, std::vector<int> *succ_ids,
-                std::vector<int> *costs) {
-    GetLazySuccs(source_state_id, succ_ids, costs, NULL);
-  }
+                std::vector<int> *costs);
 
   void GetLazySuccs(int source_state_id, std::vector<int> *succ_ids,
                     std::vector<int> *costs,
@@ -230,13 +221,20 @@ class EnvObjectRecognition : public EnvironmentMHA {
   }
 
   // For MHA
+  void GetSuccs(int q_id, int source_state_id, std::vector<int> *succ_ids,
+                    std::vector<int> *costs) {
+    printf("Expanding from %d\n", q_id);
+    GetSuccs(source_state_id, succ_ids, costs);
+  }
+
   void GetLazySuccs(int q_id, int source_state_id, std::vector<int> *succ_ids,
                     std::vector<int> *costs,
                     std::vector<bool> *true_costs) {
+    throw std::runtime_error("don't use lazy for now...");
     printf("Expanding from %d\n", q_id);
     GetLazySuccs(source_state_id, succ_ids, costs, true_costs);
-
   }
+  
   void GetLazyPreds(int q_id, int source_state_id, std::vector<int> *pred_ids,
                     std::vector<int> *costs,
                     std::vector<bool> *true_costs) {
@@ -250,6 +248,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   }
 
   int GetTrueCost(int parent_id, int child_id);
+  int ComputeCost(const std::vector<unsigned short> &
+                  source_depth_image, const std::vector<unsigned short> &succ_depth_image,
+                  int parent_id, int child_id); //TODO: Refactor so this does not need state ids.
 
   bool IsValidPose(State s, int model_id, Pose p);
 
@@ -296,6 +297,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, std::vector<int>> succ_cache;
   std::unordered_map<int, std::vector<int>> cost_cache;
   std::unordered_map<int, unsigned short> minz_map_;
+  std::unordered_map<int, std::vector<int>>
+                                         counted_pixels_map_; // Keep track of the pixels we have accounted for in cost computation for a given state
 
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
@@ -318,6 +321,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 };
 
 #endif /** _SBPL_PERCEPTION_SEARCH_ENV **/
+
+
 
 
 

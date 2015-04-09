@@ -281,6 +281,101 @@ bool EnvObjectRecognition::StatesEqual(const State &s1, const State &s2) {
   return true;
 }
 
+
+void EnvObjectRecognition::GetSuccs(int source_state_id,
+                                        vector<int> *succ_ids, vector<int> *costs) {
+  succ_ids->clear();
+  costs->clear();
+
+  if (source_state_id == env_params_.goal_state_id) {
+    HeuristicMap[source_state_id] = static_cast<int>(0.0);
+    return;
+  }
+
+  // If in cache, return
+  auto it = succ_cache.find(source_state_id);
+
+  if (it !=  succ_cache.end()) {
+    *succ_ids = succ_cache[source_state_id];
+    *costs = succ_cache[source_state_id];
+    return;
+  }
+
+  State source_state = StateIDToState(source_state_id);
+  vector<int> candidate_succ_ids, candidate_costs;
+
+  if (IsGoalState(source_state)) {
+    // NOTE: We shouldn't really get here at all
+    int succ_id = StateToStateID(goal_state_);
+    succ_ids->push_back(succ_id);
+    costs->push_back(0);
+    HeuristicMap[succ_id] = static_cast<int>(0.0);
+    return;
+  }
+
+  for (int ii = 0; ii < env_params_.num_models; ++ii) {
+
+    // Skip object if it has already been assigned
+    auto it = std::find(source_state.object_ids.begin(),
+                        source_state.object_ids.end(),
+                        ii);
+
+    if (it != source_state.object_ids.end()) {
+      continue;
+    }
+
+    for (double x = env_params_.x_min; x <= env_params_.x_max;
+         x += env_params_.res) {
+      for (double y = env_params_.y_min; y <= env_params_.y_max;
+           y += env_params_.res) {
+        for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
+          Pose p(x, y, theta);
+
+          if (!IsValidPose(source_state, ii, p)) {
+            continue;
+          }
+
+          State s = source_state; // Can only add objects, not remove them
+          s.object_ids.push_back(ii);
+          s.object_poses.push_back(p);
+          int succ_id = StateToStateID(s);
+
+          candidate_succ_ids.push_back(succ_id);
+          HeuristicMap[succ_id] = static_cast<int>(0.0);
+        }
+      }
+    }
+  }
+
+  //---- PARALLELIZE THIS LOOP-----------//
+  for (int ii = 0; ii < candidate_succ_ids.size(); ++ii)
+  {
+    int cost = GetTrueCost(source_state_id, candidate_succ_ids[ii]);
+    candidate_costs.push_back(cost);
+  }
+  //--------------------------------------//
+
+  for (int ii = 0; ii < candidate_succ_ids.size(); ++ii)
+  {
+    if (candidate_costs[ii] == -1) continue; // Invalid successor
+    succ_ids->push_back(candidate_succ_ids[ii]);
+    costs->push_back(candidate_costs[ii]);
+  }
+
+  // cache succs and costs
+  succ_cache[source_state_id] = *succ_ids;
+  cost_cache[source_state_id] = *costs;
+
+
+  ROS_INFO("Expanded state: %d with %d objects and %d successors",
+           source_state_id,
+           source_state.object_ids.size(), costs->size());
+  string fname = "/tmp/expansion_" + to_string(source_state_id) + ".png";
+  PrintState(source_state_id, fname);
+}
+
+
+
 void EnvObjectRecognition::GetLazySuccs(int source_state_id,
                                         vector<int> *succ_ids, vector<int> *costs,
                                         vector<bool> *true_costs) {
@@ -372,316 +467,6 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   PrintState(source_state_id, fname);
 }
 
-/*
-void EnvObjectRecognition::GetLazySuccs(int source_state_id,
-                                        vector<int> *succ_ids, vector<int> *costs,
-                                        vector<bool> *true_costs) {
-  succ_ids->clear();
-  costs->clear();
-
-  if (true_costs != NULL) {
-    true_costs->clear();
-  }
-
-  if (source_state_id == env_params_.goal_state_id) {
-    HeuristicMap[source_state_id] = static_cast<int>(0.0);
-    return;
-  }
-
-
-  // If in cache, return
-  auto it = succ_cache.find(source_state_id);
-
-  if (it !=  succ_cache.end()) {
-    *succ_ids = succ_cache[source_state_id];
-    *costs = succ_cache[source_state_id];
-    true_costs->resize(costs->size(), true);
-    return;
-  }
-
-  State source_state = StateIDToState(source_state_id);
-  vector<State> succs;
-
-  //-------------Actually expand state---------------//
-
-  if (IsGoalState(source_state)) {
-    // NOTE: We shouldn't really get here at all
-    succs.push_back(goal_state_);
-    int succ_id = StateToStateID(goal_state_);
-    succ_ids->push_back(succ_id);
-    costs->push_back(0);
-    true_costs->push_back(true);
-    HeuristicMap[succ_id] = static_cast<int>(0.0);
-    return;
-  }
-
-
-  vector<unsigned short> source_depth_image;
-  const float *depth_buffer = GetDepthImage(source_state, &source_depth_image);
-  const int num_pixels = env_params_.img_width * env_params_.img_height;
-
-
-  // Compute the closest range in source image
-  unsigned short source_min_depth = 20000;
-  unsigned short source_max_depth = 0;
-
-  for (int ii = 0; ii < num_pixels; ++ii) {
-    if (source_depth_image[ii] < source_min_depth) {
-      source_min_depth = source_depth_image[ii];
-    }
-
-    if (source_depth_image[ii] != 20000 &&
-        source_depth_image[ii] > source_max_depth) {
-      source_max_depth = source_depth_image[ii];
-    }
-  }
-
-  if (source_min_depth == 20000) {
-    source_min_depth = 0;
-  }
-
-
-  //Inadmissible pruning
-  // if (source_max_depth > max_z_seen_) {
-  //   max_z_seen_ = source_max_depth;
-  // } else {
-  //   return;
-  // }
-
-  for (int ii = 0; ii < env_params_.num_models; ++ii) {
-
-    // Skip object if it has already been assigned
-    auto it = std::find(source_state.object_ids.begin(),
-                        source_state.object_ids.end(),
-                        ii);
-
-    if (it != source_state.object_ids.end()) {
-      continue;
-    }
-
-    for (double x = env_params_.x_min; x <= env_params_.x_max;
-         x += env_params_.res) {
-      for (double y = env_params_.y_min; y <= env_params_.y_max;
-           y += env_params_.res) {
-        for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-          Pose p(x, y, theta);
-
-          if (!IsValidPose(source_state, ii, p)) {
-            continue;
-          }
-
-          State s = source_state; // Can only add objects, not remove them
-          s.object_ids.push_back(ii);
-          s.object_poses.push_back(p);
-          // int succ_id = StateToStateID(s);
-
-          vector<unsigned short> depth_image, new_obj_depth_image;
-          const float *succ_depth_buffer;
-          Pose pose_in(x, y, theta), pose_out(0, 0, 0);
-          PointCloudPtr cloud_in(new PointCloud);
-          PointCloudPtr cloud_out(new PointCloud);
-
-
-
-          if (icp_succ_) {
-            State s_new_obj;
-            s_new_obj.object_ids.push_back(ii);
-            s_new_obj.object_poses.push_back(p);
-            succ_depth_buffer = GetDepthImage(s_new_obj, &new_obj_depth_image);
-
-            // Align with ICP
-            kinect_simulator_->rl_->getPointCloud (cloud_in, true,
-                                                   env_params_.camera_pose);
-            double icp_fitness_score = GetICPAdjustedPose(cloud_in, pose_in, cloud_out,
-                                                          &pose_out);
-
-
-            int last_idx = s.object_poses.size() - 1;
-            s.object_poses[last_idx] = pose_out;
-            // StateMap[succ_id] = s;
-          }
-
-          // Check again after icp
-          if (!IsValidPose(source_state, ii, s.object_poses.back())) {
-            continue;
-          }
-
-          int succ_id = StateToStateID(s);
-
-          if (icp_succ_ && image_debug_) {
-            std::stringstream ss1, ss2;
-            ss1.precision(20);
-            ss2.precision(20);
-            ss1 << "/tmp/cloud_" << succ_id << ".pcd";
-            ss2 << "/tmp/cloud_aligned_" << succ_id << ".pcd";
-            pcl::PCDWriter writer;
-            writer.writeBinary (ss1.str()  , *cloud_in);
-            writer.writeBinary (ss2.str()  , *cloud_out);
-          }
-
-          succ_depth_buffer = GetDepthImage(s, &depth_image);
-
-          vector<int> new_pixels, obs_pixels;
-          bool skip_succ = false;
-          unsigned short max_succ_depth = 0;
-          unsigned short  min_succ_depth = 20000;
-
-          for (int jj = 0; jj < num_pixels; ++jj) {
-            if (depth_image[jj] != 20000 && depth_image[jj] > max_succ_depth) {
-              max_succ_depth = depth_image[jj];
-            }
-
-            if (depth_image[jj] != 20000 && depth_image[jj] < min_succ_depth &&
-                source_depth_image[jj] == 20000) {
-              min_succ_depth = depth_image[jj];
-            }
-
-            // If new object occupies jj and occludes a previous object, then the successor is invalid
-            if (depth_image[jj] < source_min_depth) {
-              skip_succ = true;
-              break;
-            }
-
-            // if (depth_image[jj] != 20000 && source_depth_image[jj] != 20000 &&
-            //     depth_image[jj] < source_depth_image[jj]) {
-            //   skip_succ = true;
-            //   break;
-            // }
-
-            if (depth_image[jj] != 20000 && source_depth_image[jj] == 20000) {
-              new_pixels.push_back(jj);
-            }
-
-            // if(s.object_ids.size() == env_params_.num_objects && depth_image[jj] == 20000 && observed_depth_image_[jj] != 20000) {
-            if (depth_image[jj] == 20000 && observed_depth_image_[jj] != 20000) {
-              obs_pixels.push_back(jj);
-            }
-          }
-
-          if (skip_succ || new_pixels.size() == 0) {
-            continue;
-          }
-
-
-          double new_pixel_cost = 0;
-          double unexplained_pixel_cost  = 0;
-          double bg_pixel_cost = 0;
-          double heuristic_cost = 0;
-          int pixels_bg = 0;
-
-
-          for (int pix = 0; pix < static_cast<int>(new_pixels.size()); ++pix) {
-            int pixel = new_pixels[pix];
-            double v1, v2;
-            v1 = depth_image[pixel] / 1000.0;
-            v2 = observed_depth_image_[pixel] / 1000.0;
-            // v2 = (observed_depth_image_[pixel] == 20000) ? 0 :
-            //      observed_depth_image_[pixel] / 1000.0;
-            unsigned short interval = min_succ_depth - source_min_depth;
-
-            if (observed_depth_image_[pixel] == 20000) {
-              new_pixel_cost += fabs(v2 - v1);
-            } else if (observed_depth_image_[pixel] < depth_image[pixel]) {
-              new_pixel_cost += fabs(v1 - (double(source_min_depth) / 1000.0));
-            } else {
-              new_pixel_cost += fabs((double(interval) / 1000.0)) + fabs(v2 - v1);
-            }
-          }
-
-          for (int pix = 0; pix < static_cast<int>(obs_pixels.size()); ++pix) {
-            int pixel = obs_pixels[pix];
-
-            int u = pixel / env_params_.img_width;
-            int v = pixel % env_params_.img_width;
-            Eigen::Vector3f point;
-            kinect_simulator_->rl_->getGlobalPoint(v, u,
-                                                   static_cast<float>(min_succ_depth) / 1000.0, cam_to_world_, point);
-            bool no_bg = point[2] <= env_params_.table_height;
-            // printf("uv: %d %d,  range: %f       point: %f %f %f\n", u, v, static_cast<float>(min_succ_depth)/1000.0, point[0], point[1], point[2]);
-            // if (no_bg) {
-            //   printf("NO BG point: %f %f %f\n", point[0], point[1],
-            //          point[2]);
-            // }
-
-            double v1, v2;
-            v1 = depth_image[pixel] / 1000.0;
-            v2 = observed_depth_image_[pixel] / 1000.0;
-            unsigned short interval = min_succ_depth - source_min_depth;
-
-            if (!no_bg) {
-              if (observed_depth_image_[pixel] >= source_min_depth &&
-                  observed_depth_image_[pixel] < min_succ_depth) {
-                unexplained_pixel_cost += fabs(double(min_succ_depth) / 1000.0 - v2) ;
-              } else if (observed_depth_image_[pixel] < source_min_depth) {
-                unexplained_pixel_cost += fabs((double(interval) / 1000.0));
-                bg_pixel_cost += fabs(double(min_succ_depth) / 1000.0 - 20000.0 / 1000.0);
-              } else {
-                bg_pixel_cost += fabs(double(min_succ_depth) / 1000.0 - v2);
-              }
-            } else {
-              if (observed_depth_image_[pixel] >= source_min_depth &&
-                  observed_depth_image_[pixel] < min_succ_depth) {
-                unexplained_pixel_cost += fabs(20000.0 / 1000.0 - v2);
-              }
-            }
-          }
-
-          if (s.object_ids.size() == env_params_.num_objects) {
-            new_pixel_cost += (bg_pixel_cost);
-          }
-
-
-          if (env_params_.num_objects == s.object_ids.size()) {
-            HeuristicMap[succ_id] = 0;
-          } else {
-            HeuristicMap[succ_id] = static_cast<int>(0);
-          }
-
-          if (image_debug_) {
-            std::stringstream ss;
-            ss.precision(20);
-            ss << "/tmp/succ_" << succ_id << ".png";
-            PrintImage(ss.str(), depth_image);
-            printf("%d,  %d,  %d,   %d,   %d            Z: %d %d\n", succ_id,
-                   s.object_ids.size(), static_cast<int>(new_pixel_cost),
-                   static_cast<int>(unexplained_pixel_cost),
-                   static_cast<int>(unexplained_pixel_cost + new_pixel_cost), min_succ_depth,
-                   source_min_depth);
-          }
-
-
-          succs.push_back(s);
-          succ_ids->push_back(succ_id);
-          costs->push_back(static_cast<int>(new_pixel_cost + unexplained_pixel_cost));
-
-
-
-          // kinect_simulator_->write_depth_image(succ_depth_buffer,
-          //                                      string (ss.str() + "_depth.png"));
-          // printf("%d,  %d,     %d,   %f,   %f\n", succ_id, s.object_ids[0], new_pixels.size(), cost, heur);
-        }
-      }
-    }
-  }
-
-  // cache succs and costs
-  succ_cache[source_state_id] = *succ_ids;
-  cost_cache[source_state_id] = *costs;
-
-  //--FInish state expansion---------//
-
-  if (true_costs != NULL) {
-    true_costs->resize(costs->size(), true);
-  }
-
-  //PrintState(source_state, string("/tmp/expanded_state.png"));
-  ROS_INFO("Expanded state: %d with %d objects and %d successors",
-           source_state_id,
-           source_state.object_ids.size(), costs->size());
-  string fname = "/tmp/expansion_" + to_string(source_state_id) + ".png";
-  PrintImage(fname, source_depth_image);
-}
-*/
 
 int EnvObjectRecognition::GetGoalHeuristic(int state_id) {
 
@@ -776,7 +561,7 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   int depth_first_heur;
   int num_objects_left = env_params_.num_objects - s.object_ids.size();
   // depth_first_heur = 100000 * (env_params_.num_objects - s.object_ids.size());
-  depth_first_heur = 10000000 * num_objects_left;
+  depth_first_heur = num_objects_left;
   // printf("State %d: %d %d\n", state_id, icp_heur, depth_first_heur);
 
   // return icp_heur + depth_first_heur;
@@ -804,18 +589,19 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
 int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
   auto it = succ_cache.find(parent_id);
 
-  if (it ==  succ_cache.end()) {
-    ROS_ERROR("Parent state was never expanded");
-    return -1;
-  }
-
-  vector<int> succ_ids = succ_cache[parent_id];
-  auto succ_it = find(succ_ids.begin(), succ_ids.end(), child_id);
-
-  if (succ_it == succ_ids.end()) {
-    ROS_ERROR("Child state not found in successor cache");
-    return -1;
-  }
+  // Check cache only when doing lazy
+  // if (it ==  succ_cache.end()) {
+  //   ROS_ERROR("Parent state was never expanded");
+  //   return -1;
+  // }
+  //
+  // vector<int> succ_ids = succ_cache[parent_id];
+  // auto succ_it = find(succ_ids.begin(), succ_ids.end(), child_id);
+  //
+  // if (succ_it == succ_ids.end()) {
+  //   ROS_ERROR("Child state not found in successor cache");
+  //   return -1;
+  // }
 
   State source_state = StateIDToState(parent_id);
   State child_state = StateIDToState(child_id);
@@ -827,31 +613,9 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
   const int num_pixels = env_params_.img_width * env_params_.img_height;
 
 
-  // Compute the closest range in source image
-  unsigned short source_min_depth = 0;
-
-  source_min_depth = minz_map_[parent_id];
-
-  // for (int ii = 0; ii < num_pixels; ++ii) {
-  //   if (source_depth_image[ii] < source_min_depth) {
-  //     source_min_depth = source_depth_image[ii];
-  //   }
-  //
-  //   if (source_depth_image[ii] != 20000 &&
-  //       source_depth_image[ii] > source_max_depth) {
-  //     source_max_depth = source_depth_image[ii];
-  //   }
-  // }
-  //
-  // if (source_min_depth == 20000) {
-  //   source_min_depth = 0;
-  // }
-
 
   Pose child_pose = child_state.object_poses.back();
   int last_object_id = child_state.object_ids.back();
-
-
 
   vector<unsigned short> depth_image, new_obj_depth_image;
   const float *succ_depth_buffer;
@@ -859,8 +623,6 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
        pose_out(child_pose.x, child_pose.y, child_pose.theta);
   PointCloudPtr cloud_in(new PointCloud);
   PointCloudPtr cloud_out(new PointCloud);
-
-
 
   if (icp_succ_) {
     State s_new_obj;
@@ -871,18 +633,8 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
     // Align with ICP
     kinect_simulator_->rl_->getPointCloud (cloud_in, true,
                                            env_params_.camera_pose);
-    // pcl::PolygonMesh::Ptr mesh_cloud (new pcl::PolygonMesh (model_meshes_[last_object_id]));
-    // Eigen::Matrix4f transform;
-    // transform <<
-    //               cos(child_pose.theta), -sin(child_pose.theta) , 0, child_pose.x,
-    //               sin(child_pose.theta) , cos(child_pose.theta) , 0, child_pose.y,
-    //               0, 0 , 1 , env_params_.table_height,
-    //               0, 0 , 0 , 1;
-    //   TransformPolyMesh(mesh_cloud, mesh_cloud, transform);
-    // fromPCLPointCloud2(mesh_cloud->cloud, *cloud_in);
     double icp_fitness_score = GetICPAdjustedPose(cloud_in, pose_in, cloud_out,
                                                   &pose_out);
-
 
     int last_idx = child_state.object_poses.size() - 1;
     child_state.object_poses[last_idx] = pose_out;
@@ -922,6 +674,25 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
 
   succ_depth_buffer = GetDepthImage(child_state, &depth_image);
 
+  return ComputeCost(source_depth_image, depth_image, parent_id, child_id);
+}
+
+int EnvObjectRecognition::ComputeCost(const vector<unsigned short> &
+                                          source_depth_image, const vector<unsigned short>& succ_depth_image,
+                                          int parent_id, int child_id) {
+
+  const int num_pixels = env_params_.img_width * env_params_.img_height;
+  assert(source_depth_image.size() == num_pixels);
+  assert(succ_depth_image.size() == num_pixels);
+
+  int cost = -1;
+
+  // Compute the closest range in source image
+  unsigned short source_min_depth = 0;
+  source_min_depth = minz_map_[parent_id];
+  State child_state = StateIDToState(child_id);
+  Pose last_obj_pose = child_state.object_poses.back(); // TODO: assert non-empty?
+
   vector<int> new_pixels, obs_pixels;
   bool skip_succ = false;
   unsigned short max_succ_depth = 0;
@@ -929,34 +700,28 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
   unsigned short bad_pixel = 0;
 
   for (int jj = 0; jj < num_pixels; ++jj) {
-    if (depth_image[jj] != 20000 && depth_image[jj] > max_succ_depth) {
-      max_succ_depth = depth_image[jj];
+    if (succ_depth_image[jj] != 20000 && succ_depth_image[jj] > max_succ_depth) {
+      max_succ_depth = succ_depth_image[jj];
     }
 
-    // If new object occupies jj and occludes a previous object, then the successor is invalid
-    // if (depth_image[jj] < source_min_depth && depth_image[jj] < source_depth_image[jj]) {
-    //   skip_succ = true;
-    //   bad_pixel = depth_image[jj];
-    //   break;
-    // }
 
-    if (depth_image[jj] != 20000 && depth_image[jj] < min_succ_depth &&
-        depth_image[jj] < source_depth_image[jj]) {
-      min_succ_depth = depth_image[jj];
+    if (succ_depth_image[jj] != 20000 && succ_depth_image[jj] < min_succ_depth &&
+        succ_depth_image[jj] < source_depth_image[jj]) {
+      min_succ_depth = succ_depth_image[jj];
     }
 
-    //if (depth_image[jj] != 20000 && source_depth_image[jj] == 20000) {
-    if (depth_image[jj] != 20000 && depth_image[jj] < source_depth_image[jj]) {
+    //if (succ_depth_image[jj] != 20000 && source_depth_image[jj] == 20000) {
+    if (succ_depth_image[jj] != 20000 && succ_depth_image[jj] < source_depth_image[jj]) {
       new_pixels.push_back(jj);
 
-      if (depth_image[jj] < source_min_depth) {
+      if (succ_depth_image[jj] < source_min_depth) {
         skip_succ = true;
-        bad_pixel = depth_image[jj];
+        bad_pixel = succ_depth_image[jj];
         break;
       }
     }
 
-    if (depth_image[jj] == 20000 && observed_depth_image_[jj] != 20000) {
+    if (succ_depth_image[jj] == 20000 && observed_depth_image_[jj] != 20000) {
       obs_pixels.push_back(jj);
     }
   }
@@ -979,14 +744,14 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
   for (int pix = 0; pix < static_cast<int>(new_pixels.size()); ++pix) {
     int pixel = new_pixels[pix];
     double v1, v2;
-    v1 = depth_image[pixel] / 1000.0;
+    v1 = succ_depth_image[pixel] / 1000.0;
     v2 = observed_depth_image_[pixel] == 20000 ? env_params_.observed_max_range /
          1000.0 : observed_depth_image_[pixel] / 1000.0;
     unsigned short interval = min_succ_depth - source_min_depth;
 
     if (observed_depth_image_[pixel] == 20000) {
       new_pixel_cost += fabs(v2 - v1);
-    } else if (observed_depth_image_[pixel] > depth_image[pixel]) {
+    } else if (observed_depth_image_[pixel] > succ_depth_image[pixel]) {
       new_pixel_cost += fabs(v1 - double(source_min_depth) / 1000.0) + fabs(v2 - v1);
     } else if (observed_depth_image_[pixel] < min_succ_depth &&
                observed_depth_image_[pixel] >= source_min_depth) {
@@ -1004,10 +769,11 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
   for (int pix = 0; pix < static_cast<int>(obs_pixels.size()); ++pix) {
     int pixel = obs_pixels[pix];
 
-    auto it = find(child_state.counted_pixels.begin(),
-                   child_state.counted_pixels.end(), pixel);
+    vector<int> counted_pixels = counted_pixels_map_[child_id];
+    auto it = find(counted_pixels.begin(),
+                   counted_pixels.end(), pixel);
 
-    if (it != child_state.counted_pixels.end()) {
+    if (it != counted_pixels.end()) {
       continue;
     }
 
@@ -1068,8 +834,8 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
     // obs_point << pcl_obs.x, pcl_obs.y, pcl_obs.z;
     bool collision_point = false;
 
-    if (fabs(obs_point[0] - pose_out.x) < 0.1 &&
-        fabs(obs_point[1] - pose_out.y) < 0.1 &&
+    if (fabs(obs_point[0] - last_obj_pose.x) < 0.1 &&
+        fabs(obs_point[1] - last_obj_pose.y) < 0.1 &&
         fabs(obs_point[2] - env_params_.table_height) < 2.0) {
       collision_point = true;
       unsigned short z_start = observed_depth_image_[pixel] +
@@ -1098,7 +864,6 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
         int num_neighbors_found = knn->radiusSearch(pcl_point, env_params_.res / 2,
                                                     indices,
                                                     sqr_dists, 1); //0.2
-
         if (num_neighbors_found > 0) {
           collision_point = false;
           break;
@@ -1112,7 +877,7 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
     if (no_bg || collision_point) {
       unexplained_pixel_cost += fabs(double(env_params_.observed_max_range) / 1000.0
                                      - v2);
-      child_state.counted_pixels.push_back(pixel);
+      counted_pixels_map_[child_id].push_back(pixel);
 
       if (collision_point) {
         num_collisions++;
@@ -1147,9 +912,6 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
     }
   }
 
-  StateMap[child_id] = child_state; //counted_pixels might have changed
-
-
   if (env_params_.num_objects == child_state.object_ids.size()) {
     HeuristicMap[child_id] = 0;
   } else {
@@ -1160,7 +922,7 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
     std::stringstream ss;
     ss.precision(20);
     ss << "/tmp/succ_" << child_id << ".png";
-    PrintImage(ss.str(), depth_image);
+    PrintImage(ss.str(), succ_depth_image);
     printf("%d,  %d,  %d,   %d,   %d            Z: %d %d         C: %d, B: %d\n",
            child_id,
            child_state.object_ids.size(), static_cast<int>(new_pixel_cost),
@@ -1169,10 +931,13 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
            source_min_depth, num_collisions, num_no_bgs);
   }
 
-  int final_cost = static_cast<int>(new_pixel_cost + unexplained_pixel_cost);
+  cost = static_cast<int>(new_pixel_cost + unexplained_pixel_cost);
 
-  return final_cost;
+  return cost;
 }
+
+
+
 
 void EnvObjectRecognition::PrintState(int state_id, string fname) {
 
@@ -1613,100 +1378,7 @@ void EnvObjectRecognition::SetObservation() {
   writer.writeBinary (ss.str()  , *observed_cloud_);
 }
 
-double EnvObjectRecognition::ComputeScore(const vector<unsigned short> &
-                                          depth_image, const vector<int> &pixels) {
 
-  const int num_pixels = env_params_.img_width * env_params_.img_height;
-  assert(observed_depth_image_.size() == num_pixels);
-  double score = 0;
-
-  for (int ii = 0; ii < static_cast<int>(pixels.size()); ++ii) {
-    int pixel = pixels[ii];
-
-    // TODO: experimental
-    // if (observed_depth_image_[pixel] == 20000)
-    // {
-    //   continue;
-    // }
-
-    double v1, v2;
-    // v1 = (depth_image[pixel] == 20000) ? 0 : depth_image[pixel] / 1000;
-    v1 = depth_image[pixel] / 1000.0;
-    v2 = (observed_depth_image_[pixel] == 20000) ? 0 :
-         observed_depth_image_[pixel] / 1000.0;
-    // score += (v1 - v2) *
-    //          (v1 - v2);
-    score += abs(v1 - v2) ;
-  }
-
-  return score;
-}
-
-double EnvObjectRecognition::ComputeScore(const PointCloudPtr cloud,
-                                          const vector<int> &pixels, bool cloud_on) {
-
-  const int num_pixels = env_params_.img_width * env_params_.img_height;
-  double score = 0;
-
-  for (int ii = 0; ii < static_cast<int>(pixels.size()); ++ii) {
-    int pixel = pixels[ii];
-    vector<int> indices;
-    vector<float> sqr_dists;
-    int num_neighbors_found = knn->radiusSearch(cloud->points[pixel], 0.1, indices,
-                                                sqr_dists, 1); //0.2
-
-    if (sqr_dists.size() > 0) {
-      //printf("sqr dist is %f\n", sqr_dists[0]);
-      score += sqr_dists[0];
-    } else {
-      num_neighbors_found = knn->radiusSearch(cloud->points[pixel], 1.0, indices,
-                                              sqr_dists, 1); //0.2
-
-      if (sqr_dists.size() > 0) {
-        //printf("sqr dist is %f\n", sqr_dists[0]);
-        score += sqr_dists[0];
-      } else {
-        double z = cloud->points[pixel].z;
-        score += z * z;
-      }
-    }
-  }
-
-  return score;
-}
-
-double EnvObjectRecognition::ComputeScore(const vector<unsigned short> &
-                                          depth_image, const vector<int> &pixels, bool cloud_on) {
-
-  const int num_pixels = env_params_.img_width * env_params_.img_height;
-  assert(observed_depth_image_.size() == num_pixels);
-  double score = 0;
-
-  for (int ii = 0; ii < static_cast<int>(pixels.size()); ++ii) {
-    int pixel = pixels[ii];
-    vector<int> indices;
-    vector<float> sqr_dists;
-    Eigen::Vector3f point_eig;
-    int x = pixel % env_params_.img_width;
-    int y = pixel / env_params_.img_width;
-    empty_range_image_.calculate3DPoint(float(y), float(x), depth_image[pixel],
-                                        point_eig);
-    PointT point;
-    point.x = point_eig[0];
-    point.y = point_eig[1];
-    point.z = point_eig[2];
-    //int num_neighbors_found = knn.nearestKSearch(point, 1, indices, sqr_dists);
-    int num_neighbors_found = knn->radiusSearch(point, 0.5, indices, sqr_dists, 1);
-
-    if (sqr_dists.size() > 0) {
-      score += sqr_dists[0];
-    } else {
-      score += (depth_image[pixel] / 1000) * (depth_image[pixel] / 1000);
-    }
-  }
-
-  return score;
-}
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const Pose &pose_in, PointCloudPtr cloud_out, Pose *pose_out) {

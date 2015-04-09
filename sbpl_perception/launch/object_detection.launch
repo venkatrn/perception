@@ -15,18 +15,18 @@
       <remap from="input_cloud" to="/kinect_head/depth_registered/points"/>
       <remap from="input_depth_image" to="/kinect_head/depth_registered/image_raw"/>
        <rosparam param="model_files" subst_value="True">
-         [$(find kinect_sim)/data/birdhouse/1-S.obj,
-         $(find kinect_sim)/data/birdhouse/2-SC.obj,
-         <!-- $(find kinect_sim)/data/birdhouse/3&#45;SH.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/4&#45;SDC.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/5&#45;T.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/6&#45;R.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/7&#45;TH.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/8&#45;RH.obj, -->
-         $(find kinect_sim)/data/birdhouse/9-RC.obj]
-        <!-- [$(find kinect_sim)/data/mug.obj, -->
-        <!-- $(find kinect_sim)/data/wine_bottle.obj] -->
-        <!-- [$(find kinect_sim)/data/mug.obj] -->
+         [$(find sbpl_perception)/data/birdhouse/1-S.obj,
+         $(find sbpl_perception)/data/birdhouse/2-SC.obj,
+         <!-- $(find sbpl_perception)/data/birdhouse/3&#45;SH.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/4&#45;SDC.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/5&#45;T.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/6&#45;R.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/7&#45;TH.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/8&#45;RH.obj, -->
+         $(find sbpl_perception)/data/birdhouse/9-RC.obj]
+        <!-- [$(find sbpl_perception)/data/mug.obj, -->
+        <!-- $(find sbpl_perception)/data/wine_bottle.obj] -->
+        <!-- [$(find sbpl_perception)/data/mug.obj] -->
       </rosparam>
   </node>
 

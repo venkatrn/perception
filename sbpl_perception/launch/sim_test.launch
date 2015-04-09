@@ -16,68 +16,67 @@
       <param name="icp_succ" value="$(arg icp_succ)"/>
       <!-- <param name="reference_frame" value="head_mount_kinect_rgb_optical_frame"/>&#45;&#45;> -->
        <rosparam param="model_files" subst_value="True">
-         <!-- [$(find kinect_sim)/data/birdhouse/1&#45;S.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/2&#45;SC.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/3&#45;SH.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/4&#45;SDC.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/5&#45;T.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/6&#45;R.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/7&#45;TH.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/8&#45;RH.obj, -->
-         <!-- $(find kinect_sim)/data/birdhouse/9&#45;RC.obj] -->
+         <!-- [$(find sbpl_perception)/data/birdhouse/1&#45;S.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/2&#45;SC.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/3&#45;SH.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/4&#45;SDC.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/5&#45;T.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/6&#45;R.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/7&#45;TH.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/8&#45;RH.obj, -->
+         <!-- $(find sbpl_perception)/data/birdhouse/9&#45;RC.obj] -->
 
-        <!-- [$(find kinect_sim)/data/mug.obj, -->
-        <!-- $(find kinect_sim)/data/mug.obj, -->
-        <!-- $(find kinect_sim)/data/wine_bottle.obj] -->
-        <!-- $(find kinect_sim)/data/phone.obj] -->
+        <!-- [$(find sbpl_perception)/data/mug.obj, -->
+        <!-- $(find sbpl_perception)/data/mug.obj, -->
+        <!-- $(find sbpl_perception)/data/wine_bottle.obj] -->
+        <!-- $(find sbpl_perception)/data/phone.obj] -->
 
-<!-- [$(find kinect_sim)/data/RAM/cad_models/000.921.13.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/001.172.98.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/100.919.00&#45;cup.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/100.922.16.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/101.328.92.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/200.572.55.ply, -->
-<!-- [$(find kinect_sim)/data/RAM/cad_models/200.580.66.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/201.327.78.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/242.09.6219&#45;pitcher.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/300.151.23.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/300.834.71.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/301.290.30.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/500.312.83.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/600.832.62.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/700.580.64.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/701.330.68.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/800.919.49.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/800.921.09.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/801.348.21.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/963.111.00.dec.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/all.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/all&#45;small.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/Brita_water_filter_pitcher_6cup_x2.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/clorox.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/milk_carton.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/milkjug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/odwalla_jug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/orange_juice_jug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/peroxide.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/pur_water_pitcher_filter.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/red_mug.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/simple_green.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/suave&#45;3in1.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/tide.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/tilex_spray_bottle.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/vf_paper_bowl.ply] -->
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/000.921.13.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/001.172.98.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/100.919.00&#45;cup.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/100.922.16.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/101.328.92.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/200.572.55.ply, -->
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/201.327.78.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/242.09.6219&#45;pitcher.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/300.151.23.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/300.834.71.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/301.290.30.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/500.312.83.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/600.832.62.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/700.580.64.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/701.330.68.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/800.919.49.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/800.921.09.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/801.348.21.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/963.111.00.dec.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/all.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/all&#45;small.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/Brita_water_filter_pitcher_6cup_x2.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/clorox.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/milk_carton.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/milkjug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/peroxide.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/red_mug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/simple_green.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/suave&#45;3in1.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/tide.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/tilex_spray_bottle.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/vf_paper_bowl.ply] -->
 
 
-[$(find kinect_sim)/data/RAM/cad_models/200.580.66.ply,
-$(find kinect_sim)/data/RAM/cad_models/clorox.ply,
-<!-- $(find kinect_sim)/data/RAM/cad_models/milk_carton.ply, -->
-<!-- $(find kinect_sim)/data/RAM/cad_models/milkjug.ply, -->
-$(find kinect_sim)/data/RAM/cad_models/odwalla_jug.ply,
-$(find kinect_sim)/data/RAM/cad_models/orange_juice_jug.ply,
-<!-- $(find kinect_sim)/data/RAM/cad_models/peroxide.ply, -->
-$(find kinect_sim)/data/RAM/cad_models/pur_water_pitcher_filter.ply]
-
+[$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply,
+$(find sbpl_perception)/data/RAM/cad_models/clorox.ply,
+<!-- $(find sbpl_perception)/data/RAM/cad_models/milk_carton.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/milkjug.ply, -->
+$(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply,
+$(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply,
+<!-- $(find sbpl_perception)/data/RAM/cad_models/peroxide.ply, -->
+$(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply]
 
       </rosparam>
       <rosparam param="model_symmetries">
