@@ -14,7 +14,7 @@ Setup
 -----
 
 1. Get ROS Hydro from http://wiki.ros.org/hydro/Installation/Ubuntu
-2. Create a rosbuild workspace ~/hydro_workspace as described in http://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment
+2. Create a rosbuild workspace ~/hydro_workspace as described in http://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment and make sure ~/hydro_workspace/sandbox is in your ROS package path.
 
 ```bash
 cd ~/hydro_workspace/sandbox && git clone https://github.com/venkatrn/perception.git
