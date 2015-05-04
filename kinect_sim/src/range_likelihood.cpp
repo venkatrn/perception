@@ -805,6 +805,100 @@ pcl::simulation::RangeLikelihood::getPointCloud (
 }
 
 void
+pcl::simulation::RangeLikelihood::getPointCloudFromBuffer (
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc, const float *depth_buffer,
+  bool make_global,
+  const Eigen::Isometry3d &pose) {
+  // TODO: check if this works for for rows/cols >1  and for width&height != 640x480
+  // i.e. multiple tiled images
+  pc->width    = col_width_;
+  pc->height   = row_height_;
+  // Was:
+  //pc->width    = camera_width_;
+  //pc->height   = camera_height_;
+
+  pc->is_dense = false;
+  pc->points.resize (pc->width * pc->height);
+
+  int points_added = 0;
+
+  float camera_fx_reciprocal_ = 1.0f / camera_fx_;
+  float camera_fy_reciprocal_ = 1.0f / camera_fy_;
+  float zn = z_near_;
+  float zf = z_far_;
+
+
+  // TODO: support decimation
+  // Copied the format of RangeImagePlanar::setDepthImage()
+  // Use this as a template for decimation
+  for (int y = 0; y < row_height_ ; ++y) { //camera_height_
+    for (int x = 0; x < col_width_ ; ++x) { // camera_width_
+      // Find XYZ from normalized 0->1 mapped disparity
+      int idx = points_added; // y*camera_width_ + x;
+      float d = depth_buffer[y * camera_width_ + x] ;
+
+      if (d < 1.0) { // only add points with depth buffer less than max (20m) range
+        float z = zf * zn / ((zf - zn) * (d - zf / (zf - zn)));
+
+        // TODO: add mode to ignore points with no return i.e. depth_buffer ==1
+        // NB: OpenGL uses a Right Hand system with +X right, +Y up, +Z back out of the screen,
+        // The Z-buffer is natively -1 (far) to 1 (near)
+        // But in this class we invert this to be 0 (near, 0.7m) and 1 (far, 20m)
+        // ... so by negating y we get to a right-hand computer vision system
+        // which is also used by PCL and OpenNi
+        pc->points[idx].z = z;
+        pc->points[idx].x = (static_cast<float> (x) - camera_cx_) * z *
+                            (-camera_fx_reciprocal_);
+        pc->points[idx].y = (static_cast<float> (y) - camera_cy_) * z *
+                            (-camera_fy_reciprocal_);
+
+        int rgb_idx = y * col_width_ + x; //camera_width_
+        pc->points[idx].b = 0; // blue
+        pc->points[idx].g = 0; // green
+        pc->points[idx].r = 0; // red
+        points_added++;
+      }
+    }
+  }
+
+  pc->width    = 1;
+  pc->height   = points_added;
+  pc->points.resize (points_added);
+
+  if (make_global) {
+    // Go from OpenGL to (Z-up, X-forward, Y-left)
+    Eigen::Matrix4f T;
+    T <<  0, 0, -1, 0,
+    -1, 0,  0, 0,
+    0, 1,  0, 0,
+    0, 0,  0, 1;
+    Eigen::Matrix4f m = pose.matrix ().cast<float> ();
+    m = m * T;
+    pcl::transformPointCloud (*pc, *pc, m);
+  } else {
+    // Go from OpenGL to Camera (Z-forward, X-right, Y-down)
+    Eigen::Matrix4f T;
+    T <<  1,  0,  0, 0,
+    0, -1,  0, 0,
+    0,  0, -1, 0,
+    0,  0,  0, 1;
+    pcl::transformPointCloud (*pc, *pc, T);
+
+    // Go from Camera to body (Z-up, X-forward, Y-left)
+    Eigen::Matrix4f cam_to_body;
+    cam_to_body <<  0,  0, 1, 0,
+                -1,  0, 0, 0,
+                0, -1, 0, 0,
+                0,  0, 0, 1;
+    Eigen::Matrix4f camera = pose.matrix ().cast<float> ();
+    camera = camera * cam_to_body;
+    pc->sensor_origin_ = camera.rightCols (1);
+    Eigen::Quaternion<float> quat (camera.block<3, 3> (0, 0));
+    pc->sensor_orientation_ = quat;
+  }
+}
+
+void
 pcl::simulation::RangeLikelihood::getGlobalPoint (int u, int v, float range,
                                                   const Eigen::Isometry3d &pose, Eigen::Vector3f &world_point) {
   pcl::PointXYZ p;
@@ -1282,6 +1376,3 @@ RangeLikelihood::getScoreBuffer () {
 
   return score_buffer_;
 }
-
-
-

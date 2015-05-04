@@ -136,9 +136,12 @@ int main(int argc, char **argv) {
 
   // Occlusion example
 
-  Pose p1(0.296691, 0.110056, 1.869107);
-  Pose p2( 0.209879, -0.171593, 1.910538);
+  Pose p1(0.296691, 0.110056, 1.369107);
+  Pose p2( 0.209879, -0.171593, 0.210538);
   Pose p3( 0.414808, -0.174167, 3.746371);
+  // Pose p1(0.296691, 0.110056, 1.869107);
+  // Pose p2( 0.209879, -0.171593, 1.910538);
+  // Pose p3( 0.414808, -0.174167, 3.746371);
 
   poses.push_back(p1);
   poses.push_back(p2);
@@ -170,6 +173,15 @@ int main(int argc, char **argv) {
 
 
   env_obj->SetObservation(model_ids, poses);
+  // env_obj->PrecomputeHeuristics();
+
+
+  
+  //-------------------------------------------------------------------//
+  // // Greedy ICP Planner
+  // State greedy_state = env_obj->ComputeGreedyICPPoses();
+  // return 0;
+
 
   //-------------------------------------------------------------------//
 
@@ -196,13 +208,13 @@ int main(int argc, char **argv) {
   replan_params.return_first_solution =
     true; // Setting this to true also means planner will ignore max time limit.
   replan_params.repair_time = -1;
-  replan_params.inflation_eps = 10000000.0;
+  replan_params.inflation_eps = 10.0; //10000000.0
   replan_params.anchor_eps = 1.0;
   replan_params.use_anchor = true;
   replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN;
   replan_params.planner_type = mha_planner::PlannerType::SMHA;
   replan_params.mha_type =
-    mha_planner::MHAType::PLUS;
+    mha_planner::MHAType::PLUS; // PLUS
 
   // ReplanParams params(600.0);
   // params.max_time = 600.0;

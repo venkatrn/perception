@@ -17,7 +17,7 @@
   <depend package="kinect_sim"/>
   <depend package="sbpl"/>
   <depend package="cv_bridge"/>
-  <depend package="opencv2"/>
+  <!-- <depend package="opencv2"/> -->
 
 </package>
 

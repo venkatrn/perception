@@ -57,32 +57,35 @@ class ObjectModel {
   ObjectModel(const pcl::PolygonMesh mesh, const bool symmetric);
 
   // Accessors
-  const pcl::PolygonMesh &mesh() {
+  const pcl::PolygonMesh &mesh() const {
     return mesh_;
   }
-  const bool symmetric() {
+  bool symmetric() const {
     return symmetric_;
   }
-  const double min_x() {
+  double min_x() const {
     return min_x_;
   }
-  const double min_y() {
+  double min_y() const {
     return min_y_;
   }
-  const double min_z() {
+  double min_z() const {
     return min_z_;
   }
-  const double max_x() {
+  double max_x() const {
     return max_x_;
   }
-  const double max_y() {
+  double max_y() const {
     return max_y_;
   }
-  const double max_z() {
+  double max_z() const {
     return max_z_;
   }
-  const double rad() {
+  double rad() const {
     return rad_;
+  }
+  double inscribed_rad() const {
+    return  std::min(fabs(max_x_ - min_x_), fabs(max_y_ - min_y_)) / 2.0;
   }
  private:
   pcl::PolygonMesh mesh_;
@@ -112,6 +115,11 @@ struct Pose {
   double x;
   double y;
   double theta;
+  Pose() {
+    x = 0.0;
+    y = 0.0;
+    theta = 0.0;
+  }
   Pose(double x_val, double y_val, double theta_val) {
     x = x_val;
     y = y_val;
@@ -171,7 +179,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
     int n_poses);
 
   /** Methods to set the observed depth image**/
-  void SetObservation();
   void SetObservation(std::vector<int> object_ids,
                       std::vector<Pose> poses);
   void SetObservation(int num_objects,
@@ -182,11 +189,18 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetCameraPose(Eigen::Isometry3d camera_pose);
   void SetTableHeight(double height);
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
+  void PrecomputeHeuristics();
 
   double ComputeScore(const PointCloudPtr cloud);
 
   double GetICPAdjustedPose(const PointCloudPtr cloud_in, const Pose &pose_in,
                             PointCloudPtr cloud_out, Pose *pose_out);
+
+  // Greedy ICP planner
+  State ComputeGreedyICPPoses();
+
+  // Heuristics
+  int GetICPHeuristic(State s);
 
 
   void GetSuccs(State source_state, std::vector<State> *succs,
@@ -199,7 +213,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
     return env_params_.start_state_id;  // Goal state has unique id
   }
 
-  bool StatesEqual(const State &s1, const State &s2);
+  bool StatesEqual(const State &s1,
+                   const State &s2); // Two states are equal if they have the same set of objects in the same poses
+  bool StatesEqualOrdered(const State &s1,
+                          const State &s2); // Two states are 'ordered' equal if they have the same set of objects in the same poses, and placed in the same sequential order
 
   /**@brief State to State ID mapping**/
   int StateToStateID(State &s);
@@ -222,7 +239,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // For MHA
   void GetSuccs(int q_id, int source_state_id, std::vector<int> *succ_ids,
-                    std::vector<int> *costs) {
+                std::vector<int> *costs) {
     printf("Expanding from %d\n", q_id);
     GetSuccs(source_state_id, succ_ids, costs);
   }
@@ -234,7 +251,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
     printf("Expanding from %d\n", q_id);
     GetLazySuccs(source_state_id, succ_ids, costs, true_costs);
   }
-  
+
   void GetLazyPreds(int q_id, int source_state_id, std::vector<int> *pred_ids,
                     std::vector<int> *costs,
                     std::vector<bool> *true_costs) {
@@ -243,14 +260,23 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   int GetGoalHeuristic(int state_id);
   int GetGoalHeuristic(int q_id, int state_id); // For MHA*
-  int  SizeofCreatedEnv() {
+  int SizeofCreatedEnv() {
     return static_cast<int>(StateMap.size());
   }
 
   int GetTrueCost(int parent_id, int child_id);
-  int ComputeCost(const std::vector<unsigned short> &
-                  source_depth_image, const std::vector<unsigned short> &succ_depth_image,
-                  int parent_id, int child_id); //TODO: Refactor so this does not need state ids.
+
+  // Cost for newly rendered object. Input cloud must contain only newly rendered points.
+  int GetTargetCost(const PointCloudPtr partial_rendered_cloud);
+  // Cost for points in observed cloud that can be computed based on the rendered cloud.
+  int GetSourceCost(const PointCloudPtr full_rendered_cloud, const int parent_id,
+                    const int child_id);
+  // Returns true if parent is occluded by successor. Additionally returns min and max depth for newly rendered pixels
+  // when occlusion-free.
+  bool IsOccluded(const std::vector<unsigned short> &parent_depth_image,
+                  const std::vector<unsigned short> &succ_depth_image,
+                  std::vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
+                  unsigned short *max_succ_depth);
 
   bool IsValidPose(State s, int model_id, Pose p);
 
@@ -297,6 +323,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, std::vector<int>> succ_cache;
   std::unordered_map<int, std::vector<int>> cost_cache;
   std::unordered_map<int, unsigned short> minz_map_;
+  std::unordered_map<int, unsigned short> maxz_map_;
   std::unordered_map<int, std::vector<int>>
                                          counted_pixels_map_; // Keep track of the pixels we have accounted for in cost computation for a given state
 
@@ -318,9 +345,13 @@ class EnvObjectRecognition : public EnvironmentMHA {
   Eigen::Matrix4f gl_inverse_transform_;
   Eigen::Isometry3d cam_to_world_;
 
+  std::vector<int> sorted_greedy_icp_ids_;
+  std::vector<double> sorted_greedy_icp_scores_;
+
 };
 
 #endif /** _SBPL_PERCEPTION_SEARCH_ENV **/
+
 
 
 

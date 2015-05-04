@@ -133,6 +133,9 @@ class PCL_EXPORTS RangeLikelihood {
   // global=true  - PointCloud is transformed into the model/world frame using the camera pose
   void getPointCloud (pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc,
                       bool make_global, const Eigen::Isometry3d &pose);
+  void getPointCloudFromBuffer (pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc,
+                                const float *depth_buffer,
+                                bool make_global, const Eigen::Isometry3d &pose);
   void getOrganizedPointCloud (pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc,
                                bool make_global, const Eigen::Isometry3d &pose);
 
@@ -272,4 +275,3 @@ sqr(T val) {
 } // namespace - pcl
 
 #endif
-
