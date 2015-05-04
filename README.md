@@ -28,3 +28,15 @@ rosmake sbpl_perception
  ```bash
  sudo apt-get install ros-hydro-<package> #or replace 'hydro' by appropriate version name
  ```
+
+Test
+----
+
+Please download required data files from https://sbpl.pc.cs.cmu.edu/shared/Venkat/sbpl_perception/ and place the data directory under ~/hydro_workspace/sandbox/perception/sbpl_perception/
+
+To test the system, run 
+```bash
+roslaunch sbpl_perception sim_test.launch 
+```
+
+This should dump some output images into your /tmp folder. Upon successful completion of the search, you should see an image named goal_state.png.
