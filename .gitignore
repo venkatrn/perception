@@ -6,3 +6,8 @@ BUGS.txt
 bugs.txt
 *.bag
 *.pcd
+*.png
+*.jpg
+*.jpeg
+*.avi
+*.mp4

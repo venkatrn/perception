@@ -1,4 +1,3 @@
-
 /**
  * @file search_env.cpp
  * @brief Object recognition search environment
@@ -43,6 +42,9 @@ using namespace Eigen;
 const int kICPCostMultiplier = 1000000;
 const double kSensorResolution = 0.01 / 2;//0.01
 const double kSensorResolutionSqr = kSensorResolution * kSensorResolution;
+
+const string kDebugDir = ros::package::getPath("sbpl_perception") +
+                         "/visualization/";
 
 ObjectModel::ObjectModel(const pcl::PolygonMesh mesh, const bool symmetric) {
   mesh_ = mesh;
@@ -356,7 +358,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   ROS_INFO("Expanding state: %d with %zu objects",
            source_state_id,
            source_state.object_ids.size());
-  string fname = "/tmp/expansion_" + to_string(source_state_id) + ".png";
+  string fname = kDebugDir + "expansion_" + to_string(source_state_id) + ".png";
   PrintState(source_state_id, fname);
 
   vector<int> candidate_succ_ids, candidate_costs;
@@ -436,7 +438,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   // ROS_INFO("Expanding state: %d with %d objects and %d successors",
   //          source_state_id,
   //          source_state.object_ids.size(), costs->size());
-  // string fname = "/tmp/expansion_" + to_string(source_state_id) + ".png";
+  // string fname = kDebugDir + "expansion_" + to_string(source_state_id) + ".png";
   // PrintState(source_state_id, fname);
 }
 
@@ -529,7 +531,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   ROS_INFO("Expanded state: %d with %zu objects and %zu successors",
            source_state_id,
            source_state.object_ids.size(), costs->size());
-  string fname = "/tmp/expansion_" + to_string(source_state_id) + ".png";
+  string fname = kDebugDir + "expansion_" + to_string(source_state_id) + ".png";
   PrintState(source_state_id, fname);
 }
 
@@ -586,68 +588,21 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
     return 0;
   }
 
-  if (state_id == env_params_.start_state_id) {
-    return 0;
-  }
-
-
-  int icp_heur = 0;
   State s = StateIDToState(state_id);
 
-  // if (s.object_poses.size() != 0) {
-  //   Pose last_pose = s.object_poses.back();
-  //   int last_id = s.object_ids.back();
-  //   pcl::PolygonMesh::Ptr mesh (new pcl::PolygonMesh (
-  //                                 model_meshes_[last_id]));
-  //   PointCloudPtr cloud_in(new PointCloud);
-  //   PointCloudPtr cloud_out(new PointCloud);
-  //   PointCloudPtr cloud_aligned(new PointCloud);
-  //   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_xyz (new
-  //                                                     pcl::PointCloud<pcl::PointXYZ>);
-  //
-  //   pcl::fromPCLPointCloud2(mesh->cloud, *cloud_in_xyz);
-  //   copyPointCloud(*cloud_in_xyz, *cloud_in);
-  //
-  //   Eigen::Matrix4f transform;
-  //   transform <<
-  //             cos(last_pose.theta), -sin(last_pose.theta) , 0, last_pose.x,
-  //                 sin(last_pose.theta) , cos(last_pose.theta) , 0, last_pose.y,
-  //                 0, 0 , 1 , env_params_.table_height,
-  //                 0, 0 , 0 , 1;
-  //
-  //
-  //   transformPointCloud(*cloud_in, *cloud_out, transform);
-  //   Pose pose_out(0, 0, 0);
-  //   double icp_fitness_score = GetICPAdjustedPose(cloud_out, last_pose,
-  //                                                 cloud_aligned, &pose_out) / double(cloud_out->points.size());
-  //   // double icp_fitness_score = GetICPAdjustedPose(cloud_out, last_pose, cloud_aligned, &pose_out) ;
-  //   icp_heur = static_cast<int>(1e9 * icp_fitness_score);
-  // }
-
-  int depth_first_heur;
   int num_objects_left = env_params_.num_objects - s.object_ids.size();
-  // depth_first_heur = 100000 * (env_params_.num_objects - s.object_ids.size());
-  depth_first_heur = num_objects_left;
+  int depth_first_heur = num_objects_left;
   // printf("State %d: %d %d\n", state_id, icp_heur, depth_first_heur);
-
-  // return icp_heur + depth_first_heur;
 
   switch (q_id) {
   case 0:
     return 0;
-
-  // return depth_first_heur;
-  // return GetICPHeuristic(s);
-
-  // return icp_heur;
-  //return depth_first_heur;
+    // return depth_first_heur;
   case 1:
-    //return icp_heur * (num_objects_left + 1);
-    // return icp_heur;
     return depth_first_heur;
 
   case 2:
-    return 100000 * icp_heur;
+    return GetICPHeuristic(s);
 
   default:
     return 0;
@@ -753,8 +708,8 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
   //   std::stringstream ss1, ss2;
   //   ss1.precision(20);
   //   ss2.precision(20);
-  //   ss1 << "/tmp/cloud_" << child_id << ".pcd";
-  //   ss2 << "/tmp/cloud_aligned_" << child_id << ".pcd";
+  //   ss1 << kDebugDir + "cloud_" << child_id << ".pcd";
+  //   ss2 << kDebugDir + "cloud_aligned_" << child_id << ".pcd";
   //   pcl::PCDWriter writer;
   //   writer.writeBinary (ss1.str()  , *cloud_in);
   //   writer.writeBinary (ss2.str()  , *cloud_out);
@@ -785,7 +740,7 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
   if (image_debug_) {
     std::stringstream ss;
     ss.precision(20);
-    ss << "/tmp/succ_" << child_id << ".png";
+    ss << kDebugDir + "succ_" << child_id << ".png";
     PrintImage(ss.str(), depth_image);
     ROS_INFO("State %d,       %d      %d      %d          (%d, %d)   %zu", child_id,
              target_cost,
@@ -1080,7 +1035,7 @@ void EnvObjectRecognition::PrintImage(string fname,
   cv::Mat c_image;
   cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
   cv::imwrite(fname.c_str(), c_image);
-  //http://docs.opencv.org/master/modules/contrib/doc/facerec/colormaps.html
+  //http://docs.opencv.org/modules/contrib/doc/facerec/colormaps.html
 }
 
 bool EnvObjectRecognition::IsGoalState(State state) {
@@ -1302,10 +1257,10 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   std::stringstream ss;
   ss.precision(20);
-  ss << "/tmp/obs_cloud" << ".pcd";
+  ss << kDebugDir + "obs_cloud" << ".pcd";
   pcl::PCDWriter writer;
   writer.writeBinary (ss.str()  , *observed_cloud_);
-  PrintImage(string("/tmp/ground_truth.png"), observed_depth_image_);
+  PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
 }
 
 void EnvObjectRecognition::SetObservation(int num_objects,
@@ -1386,10 +1341,10 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
 
   std::stringstream ss;
   ss.precision(20);
-  ss << "/tmp/obs_cloud" << ".pcd";
+  ss << kDebugDir + "obs_cloud" << ".pcd";
   pcl::PCDWriter writer;
   writer.writeBinary (ss.str()  , *observed_cloud_);
-  PrintImage(string("/tmp/ground_truth.png"), observed_depth_image_);
+  PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
 }
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
@@ -1735,7 +1690,7 @@ State EnvObjectRecognition::ComputeGreedyICPPoses() {
           succ_state.object_poses[0] = p_out;
 
           if (image_debug_) {
-            string fname = "/tmp/succ_" + to_string(succ_id) + ".png";
+            string fname = kDebugDir + "succ_" + to_string(succ_id) + ".png";
             PrintState(succ_state, fname);
             printf("%d: %f\n", succ_id, icp_fitness_score);
           }
@@ -1802,7 +1757,7 @@ State EnvObjectRecognition::ComputeGreedyICPPoses() {
     greedy_state.object_poses.push_back(icp_adjusted_poses[object_id]);
   }
 
-  string fname = "/tmp/greedy_state.png";
+  string fname = kDebugDir + "greedy_state.png";
   PrintState(greedy_state, fname);
   return greedy_state;
 }

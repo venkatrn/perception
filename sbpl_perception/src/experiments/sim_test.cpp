@@ -35,8 +35,6 @@ int main(int argc, char **argv) {
 
   EnvObjectRecognition *env_obj = new EnvObjectRecognition(nh);
 
-  // SBPLPlanner *planner  = new LazyARAPlanner(env_obj, true);
-  MHAPlanner *planner  = new MHAPlanner(env_obj, 1, true);
 
   // Set model files
   // vector<bool> symmetries;
@@ -186,6 +184,11 @@ int main(int argc, char **argv) {
   //-------------------------------------------------------------------//
 
   // Plan
+  
+
+  // SBPLPlanner *planner  = new LazyARAPlanner(env_obj, true);
+  MHAPlanner *planner  = new MHAPlanner(env_obj, 2, true);
+
   int goal_id = env_obj->GetGoalStateID();
   int start_id = env_obj->GetStartStateID();
 
@@ -211,7 +214,7 @@ int main(int argc, char **argv) {
   replan_params.inflation_eps = 10.0; //10000000.0
   replan_params.anchor_eps = 1.0;
   replan_params.use_anchor = true;
-  replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN;
+  replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
   replan_params.planner_type = mha_planner::PlannerType::SMHA;
   replan_params.mha_type =
     mha_planner::MHAType::PLUS; // PLUS
