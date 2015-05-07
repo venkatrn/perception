@@ -96,8 +96,6 @@ class ObjectModel {
   void SetObjectProperties();
 };
 
-
-
 struct EnvParams {
   double table_height;
   Eigen::Isometry3d camera_pose;
@@ -150,6 +148,11 @@ struct State {
   std::vector<int> object_ids;
   std::vector<DiscPose> disc_object_poses;
   std::vector<Pose> object_poses;
+};
+
+struct StateProperties {
+  unsigned short last_min_depth;
+  unsigned short last_max_depth;
 };
 
 // class EnvObjectRecognition : public DiscreteSpaceInformation {
@@ -214,9 +217,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
   }
 
   bool StatesEqual(const State &s1,
-                   const State &s2); // Two states are equal if they have the same set of objects in the same poses
+                   const State
+                   &s2); // Two states are equal if they have the same set of objects in the same poses
   bool StatesEqualOrdered(const State &s1,
-                          const State &s2); // Two states are 'ordered' equal if they have the same set of objects in the same poses, and placed in the same sequential order
+                          const State
+                          &s2); // Two states are 'ordered' equal if they have the same set of objects in the same poses, and placed in the same sequential order
 
   /**@brief State to State ID mapping**/
   int StateToStateID(State &s);
@@ -264,10 +269,15 @@ class EnvObjectRecognition : public EnvironmentMHA {
     return static_cast<int>(StateMap.size());
   }
 
-  int GetTrueCost(int parent_id, int child_id);
+  // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
+  // of the last added object is adjusted using ICP and the computed state properties.
+  int GetTrueCost(const State source_state, const State child_state,
+                  int parent_id, int child_id, State *adjusted_child_state,
+                  StateProperties *state_properties);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
-  int GetTargetCost(const PointCloudPtr partial_rendered_cloud);
+  int GetTargetCost(const PointCloudPtr
+                    partial_rendered_cloud);
   // Cost for points in observed cloud that can be computed based on the rendered cloud.
   int GetSourceCost(const PointCloudPtr full_rendered_cloud, const int parent_id,
                     const int child_id);
@@ -351,6 +361,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 };
 
 #endif /** _SBPL_PERCEPTION_SEARCH_ENV **/
+
+
 
 
 

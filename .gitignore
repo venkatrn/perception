@@ -11,3 +11,9 @@ bugs.txt
 *.jpeg
 *.avi
 *.mp4
+
+#flann files
+*.list
+*.h5
+*.idx
+*.tbz

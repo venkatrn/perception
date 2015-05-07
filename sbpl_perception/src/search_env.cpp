@@ -117,7 +117,6 @@ EnvObjectRecognition::EnvObjectRecognition(ros::NodeHandle nh) : nh_(nh),
   env_params_.observed_max_range = 20000;
   env_params_.observed_min_range = 0;
 
-
   Pose fake_pose(0.0, 0.0, 0.0);
   goal_state_.object_ids.push_back(
     -1); // This state should never be generated during the search
@@ -303,6 +302,7 @@ bool EnvObjectRecognition::StatesEqual(const State &s1, const State &s2) {
       return false;
     }
   }
+
   return true;
 }
 
@@ -362,6 +362,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   PrintState(source_state_id, fname);
 
   vector<int> candidate_succ_ids, candidate_costs;
+  vector<State> candidate_succs;
 
   if (IsGoalState(source_state)) {
     // NOTE: We shouldn't really get here at all
@@ -402,6 +403,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
           // TODO: simple check to ensure we don't add duplicate children
 
           candidate_succ_ids.push_back(succ_id);
+          candidate_succs.push_back(s);
           HeuristicMap[succ_id] = static_cast<int>(0.0);
 
           // If symmetric object, don't iterate over all thetas
@@ -415,7 +417,30 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
-    int cost = GetTrueCost(source_state_id, candidate_succ_ids[ii]);
+    State adjusted_child_state;
+    StateProperties child_properties;
+    int cost = GetTrueCost(source_state, candidate_succs[ii], source_state_id,
+                           candidate_succ_ids[ii],
+                           &adjusted_child_state, &child_properties);
+
+    minz_map_[candidate_succ_ids[ii]] = child_properties.last_min_depth;
+    maxz_map_[candidate_succ_ids[ii]] = child_properties.last_max_depth;
+
+    for (auto it = StateMap.begin(); it != StateMap.end(); ++it) {
+      if (it->first == candidate_succ_ids[ii]) {
+        continue;  // This is the original state
+      }
+
+      if (StatesEqual(adjusted_child_state, it->second)) {
+        cost = -1;
+        break;
+      }
+    }
+
+    if (cost != -1) {
+      StateMap[candidate_succ_ids[ii]] = adjusted_child_state;
+    }
+
     candidate_costs.push_back(cost);
   }
 
@@ -597,7 +622,8 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   switch (q_id) {
   case 0:
     return 0;
-    // return depth_first_heur;
+
+  // return depth_first_heur;
   case 1:
     return depth_first_heur;
 
@@ -609,26 +635,15 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   }
 }
 
-int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
-  auto it = succ_cache.find(parent_id);
+int EnvObjectRecognition::GetTrueCost(const State source_state,
+                                      const State child_state, int parent_id, int child_id,
+                                      State *adjusted_child_state, StateProperties *child_properties) {
 
-  // Check cache only when doing lazy
-  // if (it ==  succ_cache.end()) {
-  //   ROS_ERROR("Parent state was never expanded");
-  //   return -1;
-  // }
-  //
-  // vector<int> succ_ids = succ_cache[parent_id];
-  // auto succ_it = find(succ_ids.begin(), succ_ids.end(), child_id);
-  //
-  // if (succ_it == succ_ids.end()) {
-  //   ROS_ERROR("Child state not found in successor cache");
-  //   return -1;
-  // }
-
-  State source_state = StateIDToState(parent_id);
-  State child_state = StateIDToState(child_id);
   assert(child_state.object_ids.size() > 0);
+
+  *adjusted_child_state = child_state;
+  child_properties->last_max_depth = 20000;
+  child_properties->last_min_depth = 0;
 
   vector<unsigned short> source_depth_image;
   const float *depth_buffer = GetDepthImage(source_state, &source_depth_image);
@@ -678,23 +693,8 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
                                                   &pose_out);
     // icp_cost = static_cast<int>(kICPCostMultiplier * icp_fitness_score);
     int last_idx = child_state.object_poses.size() - 1;
-    child_state.object_poses[last_idx] = pose_out;
 
-    // If this state is already a successor from the same parent, skip it
-    for (auto it = StateMap.begin(); it != StateMap.end(); ++it) {
-      if (it->first == child_id) {
-        continue;  // This is the original state
-      }
-      if (StatesEqual(child_state, it->second)) {
-      // if (StatesEqualOrdered(child_state, it->second)) {
-        // printf(" state %d already generated\n ", child_id);
-        // printf(" %f %f %f\n ",  pose_out.x, pose_out.y, pose_out.theta);
-        // Pose old_pose = it->second.object_poses.back();
-        // printf("ID: %d  %f %f %f\n ",  it->first, old_pose.x, old_pose.y, old_pose.theta);
-        return -1;
-      }
-    }
-    StateMap[child_id] = child_state;
+    adjusted_child_state->object_poses[last_idx] = pose_out;
   }
 
   // Check again after icp
@@ -723,14 +723,15 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
   unsigned short succ_min_depth, succ_max_depth;
   vector<int> new_pixel_indices;
 
-  if (IsOccluded(source_depth_image, depth_image, &new_pixel_indices, &succ_min_depth,
+  if (IsOccluded(source_depth_image, depth_image, &new_pixel_indices,
+                 &succ_min_depth,
                  &succ_max_depth)) {
     return -1;
   }
 
   // Cache the min and max depths
-  minz_map_[child_id] = succ_min_depth;
-  maxz_map_[child_id] = succ_max_depth;
+  child_properties->last_min_depth = succ_min_depth;
+  child_properties->last_max_depth = succ_max_depth;
 
   // Compute costs
   int target_cost = 0, source_cost = 0, total_cost = 0;
@@ -742,10 +743,9 @@ int EnvObjectRecognition::GetTrueCost(int parent_id, int child_id) {
     ss.precision(20);
     ss << kDebugDir + "succ_" << child_id << ".png";
     PrintImage(ss.str(), depth_image);
-    ROS_INFO("State %d,       %d      %d      %d          (%d, %d)   %zu", child_id,
+    ROS_INFO("State %d,       %d      %d      %d", child_id,
              target_cost,
-             source_cost, total_cost, maxz_map_[parent_id],
-             maxz_map_[child_id], counted_pixels_map_[parent_id].size());
+             source_cost, total_cost);
   }
 
   return total_cost;
@@ -922,6 +922,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     bool too_far_in_front = false;
 
     const unsigned short min_succ_depth = minz_map_[child_id];
+
     if (observed_depth_image_[ii] < min_succ_depth) {
       too_far_in_front = true;
     }
@@ -1761,17 +1762,5 @@ State EnvObjectRecognition::ComputeGreedyICPPoses() {
   PrintState(greedy_state, fname);
   return greedy_state;
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 

@@ -26,7 +26,7 @@ rosbuild_init()
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS} )
 
-
+find_package(HDF5)
 
 #set the default path for built executables to the "bin" directory
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
@@ -40,6 +40,7 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 #common commands for building c++ executables and libraries
 rosbuild_add_library(${PROJECT_NAME}
+  src/vfh_pose_estimation.cpp
   src/perception_interface.cpp
   src/perception_utils.cpp
   src/search_env.cpp)
@@ -62,6 +63,20 @@ target_link_libraries(experiments ${PROJECT_NAME})
 target_link_libraries(experiments libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
 
+rosbuild_add_executable(vfh_train src/vfh_train.cpp)
+target_link_libraries(vfh_train ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
+target_link_libraries(vfh_train libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  libvtkGraphics.so)
+
+rosbuild_add_executable(vfh_test src/vfh_test.cpp)
+target_link_libraries(vfh_test ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
+target_link_libraries(vfh_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  libvtkGraphics.so)
+
+rosbuild_add_executable(vfh_generate_views src/vfh_generate_views.cpp)
+target_link_libraries(vfh_generate_views ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
+target_link_libraries(vfh_generate_views libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  libvtkGraphics.so)
 # rosbuild_add_executable(search_env src/search_env.cpp)
 # target_link_libraries(search_env ${PROJECT_NAME})
 # target_link_libraries(search_env libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
