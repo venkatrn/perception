@@ -437,6 +437,17 @@ PointCloudPtr perception_utils::DownsamplePointCloud(PointCloudPtr cloud)
   return downsampled_cloud;
 }
 
+PointCloudPtr perception_utils::DownsamplePointCloud(PointCloudPtr cloud, double voxel_size)
+{
+  // Perform the actual filtering
+  PointCloudPtr downsampled_cloud(new PointCloud);
+  pcl::VoxelGrid<PointT> sor;
+  sor.setInputCloud(cloud);
+  sor.setLeafSize(voxel_size, voxel_size, voxel_size);
+  sor.filter(*downsampled_cloud);
+  return downsampled_cloud;
+}
+
 void perception_utils::GetPolygonVertices(PointCloudPtr cloud, std::vector<PointT>* poly_vertices)
 {
   PointCloudPtr convex_hull(new PointCloud);

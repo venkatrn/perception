@@ -1,9 +1,12 @@
 #include <sbpl_perception/vfh_pose_estimation.h>
 #include <sbpl_perception/pcl_typedefs.h>
+#include <sbpl_perception/perception_utils.h>
 
 #include <pcl/io/vtk_lib_io.h>
 #include <vtkPolyDataMapper.h>
 #include <pcl/apps/render_views_tesselated_sphere.h>
+
+#include <ros/package.h>
 
 /** \brief loads either a .pcd or .ply file into a pointcloud
     \param cloud pointcloud to load data into
@@ -169,9 +172,16 @@ bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud, float &roll,
   vfh.compute(*vfhs);
 
   //filenames
-  std::string featuresFileName = "training_features.h5";
-  std::string anglesFileName = "training_angles.list";
-  std::string kdtreeIdxFileName = "training_kdtree.idx";
+  const std::string kTrainPath =  ros::package::getPath("sbpl_perception") + "/config/";
+
+  std::string featuresFileName = kTrainPath + "training_features.h5";
+  std::string anglesFileName = kTrainPath + "training_angles.list";
+  std::string kdtreeIdxFileName = kTrainPath + "training_kdtree.idx";
+  // std::string featuresFileName = "training_features.h5";
+  // std::string anglesFileName = "training_angles.list";
+  // std::string kdtreeIdxFileName = "training_kdtree.idx";
+ 
+  cout << featuresFileName << endl;
 
   //allocate flann matrices
   std::vector<CloudInfo> cloudInfoList;
@@ -185,12 +195,16 @@ bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud, float &roll,
   }
 
   flann::load_from_file (data, featuresFileName, "training_data");
+  // flann::Index<flann::ChiSquareDistance<float>> index (data,
+  //                                                      flann::SavedIndexParams ("training_kdtree.idx"));
+  //
   flann::Index<flann::ChiSquareDistance<float>> index (data,
-                                                       flann::SavedIndexParams ("training_kdtree.idx"));
-
+                                                       flann::SavedIndexParams (kdtreeIdxFileName.c_str()));
   //perform knn search
   index.buildIndex ();
-  nearestKSearch (index, vfhs, 1, k_indices, k_distances);
+  int k = 1;
+  nearestKSearch (index, vfhs, k, k_indices, k_distances);
+
   roll  = cloudInfoList.at(k_indices[0][0]).roll;
   pitch = cloudInfoList.at(k_indices[0][0]).pitch;
   yaw   = cloudInfoList.at(k_indices[0][0]).yaw;
@@ -292,7 +306,7 @@ bool VFHPoseEstimator::generateTrainingViewsFromModels(boost::filesystem::path
     // If true, the resulting clouds of the snapshots will be organized.
     render_views.setGenOrganized(true);
     // How much to subdivide the icosahedron. Increasing this will result in a lot more snapshots.
-    render_views.setTesselationLevel(1);
+    render_views.setTesselationLevel(3); //1
     // If true, the camera will be placed at the vertices of the triangles. If false, at the centers.
     // This will affect the number of snapshots produced (if true, less will be made).
     // True: 42 for level 1, 162 for level 2, 642 for level 3...
@@ -410,6 +424,12 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
     if (!loadCloudAngleData(angleDataPath, cloudInfo)) {
       return false;
     }
+
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_rgb (new
+                                             pcl::PointCloud<pcl::PointXYZRGB>);
+    copyPointCloud(*cloud, *cloud_rgb);
+    cloud_rgb = perception_utils::DownsamplePointCloud(cloud_rgb, 0.003);
+    copyPointCloud(*cloud_rgb, *cloud);
 
     //setup normal estimation class
     Normals::Ptr normals (new Normals);

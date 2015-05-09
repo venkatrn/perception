@@ -49,6 +49,7 @@ namespace perception_utils
 
   /**@brief Downsample point cloud**/
   PointCloudPtr DownsamplePointCloud(PointCloudPtr cloud);
+  PointCloudPtr DownsamplePointCloud(PointCloudPtr cloud, double voxel_size);
 
   /**@brief Draw bounding box for point cloud**/
   void DrawOrientedBoundingBox(pcl::visualization::PCLVisualizer& viewer, PointCloudPtr cloud, std::string box_id);

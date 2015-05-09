@@ -1328,7 +1328,7 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
   // kinect_simulator_->rl_->getPointCloud (observed_cloud_, true,
   //                                                 kinect_simulator_->camera_->getPose ());
   kinect_simulator_->rl_->getPointCloud (observed_cloud_, true,
-                                         env_params_.camera_pose);
+                                         env_params_.camera_pose); //GLOBAL
   downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
 
 
@@ -1763,4 +1763,43 @@ State EnvObjectRecognition::ComputeGreedyICPPoses() {
   return greedy_state;
 }
 
+State EnvObjectRecognition::ComputeVFHPoses() {
+  vector<PointCloudPtr> cluster_clouds;
+  DoEuclideanClustering(observed_cloud_, &cluster_clouds);
+  const size_t num_clusters = cluster_clouds.size();
+  for (size_t ii = 0; ii < num_clusters; ++ii)
+  {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new
+                                             pcl::PointCloud<pcl::PointXYZ>);
+    copyPointCloud(*cluster_clouds[ii], *cloud);
+
+    // Eigen::Matrix4f world_to_cam = cam_to_world_.matrix().cast<float>();
+    // Eigen::Vector4f centroid;
+    // compute3DCentroid(*cloud, centroid);
+    // demeanPointCloud(*cloud, centroid, *cloud);
+    // Eigen::Matrix4f cam_to_world;
+    // Eigen::Matrix4f transform;
+// transform <<  1,  0,  0, 0,
+//           0, -1,  0, 0,
+//           0,  0, -1, 0,
+//           0,  0,  0, 1;
+
+
+    // transformPointCloud(*cloud, *cloud, transform);
+
+
+
+    pcl::PCDWriter writer;
+    stringstream ss;
+    ss.precision(20);
+    ss << kDebugDir + "cluster_" << ii << ".pcd";
+    writer.writeBinary (ss.str()  , *cloud);
+
+    float roll, pitch, yaw;
+    vfh_pose_estimator_.getPose(cloud, roll, pitch, yaw, true);
+    std::cout << roll << " " << pitch << " " << yaw << std::endl;
+  }
+  State vfh_state;
+  return vfh_state;
+}
 

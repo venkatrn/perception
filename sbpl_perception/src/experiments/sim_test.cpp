@@ -179,6 +179,10 @@ int main(int argc, char **argv) {
   // // Greedy ICP Planner
   // State greedy_state = env_obj->ComputeGreedyICPPoses();
   // return 0;
+  
+  // VFH Estimator
+  // State vfh_state = env_obj->ComputeVFHPoses();
+  // return 0;
 
 
   //-------------------------------------------------------------------//

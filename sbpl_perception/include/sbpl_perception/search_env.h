@@ -1,5 +1,4 @@
 /**
-    if (perception_interface.pcl_visualization())
  * @file search_env.h
  * @brief Object recognition search environment
  * @author Venkatraman Narayanan
@@ -14,6 +13,7 @@
 #include <tf/transform_listener.h>
 
 #include <sbpl_perception/pcl_typedefs.h>
+#include <sbpl_perception/vfh_pose_estimation.h>
 
 #include <kinect_sim/simulation_io.hpp>
 #include <kinect_sim/scene.h>
@@ -201,10 +201,15 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // Greedy ICP planner
   State ComputeGreedyICPPoses();
+  State ComputeVFHPoses();
 
   // Heuristics
   int GetICPHeuristic(State s);
-
+  int GetVFHHeuristic(State s);
+  VFHPoseEstimator vfh_pose_estimator_;
+  std::vector<Pose> vfh_poses_;
+  std::vector<int> vfh_ids_;
+  
 
   void GetSuccs(State source_state, std::vector<State> *succs,
                 std::vector<int> *costs);
@@ -361,6 +366,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 };
 
 #endif /** _SBPL_PERCEPTION_SEARCH_ENV **/
+
 
 
 
