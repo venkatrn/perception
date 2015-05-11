@@ -10,8 +10,8 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <tf/transform_listener.h>
 
+#include <sbpl_perception/object_model.h>
 #include <sbpl_perception/pcl_typedefs.h>
 #include <sbpl_perception/vfh_pose_estimation.h>
 
@@ -51,50 +51,6 @@ inline double WrapAngle(double x) {
 
   return x;
 }
-
-class ObjectModel {
- public:
-  ObjectModel(const pcl::PolygonMesh mesh, const bool symmetric);
-
-  // Accessors
-  const pcl::PolygonMesh &mesh() const {
-    return mesh_;
-  }
-  bool symmetric() const {
-    return symmetric_;
-  }
-  double min_x() const {
-    return min_x_;
-  }
-  double min_y() const {
-    return min_y_;
-  }
-  double min_z() const {
-    return min_z_;
-  }
-  double max_x() const {
-    return max_x_;
-  }
-  double max_y() const {
-    return max_y_;
-  }
-  double max_z() const {
-    return max_z_;
-  }
-  double rad() const {
-    return rad_;
-  }
-  double inscribed_rad() const {
-    return  std::min(fabs(max_x_ - min_x_), fabs(max_y_ - min_y_)) / 2.0;
-  }
- private:
-  pcl::PolygonMesh mesh_;
-  bool symmetric_;
-  double min_x_, min_y_, min_z_; // Bounding box in default orientation
-  double max_x_, max_y_, max_z_;
-  double rad_; // Circumscribing cylinder radius
-  void SetObjectProperties();
-};
 
 struct EnvParams {
   double table_height;
@@ -158,7 +114,7 @@ struct StateProperties {
 // class EnvObjectRecognition : public DiscreteSpaceInformation {
 class EnvObjectRecognition : public EnvironmentMHA {
  public:
-  EnvObjectRecognition(ros::NodeHandle nh);
+  EnvObjectRecognition();
   ~EnvObjectRecognition();
   void LoadObjFiles(const std::vector<std::string> &model_files,
                     const std::vector<bool> model_symmetric);
@@ -295,6 +251,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   bool IsValidPose(State s, int model_id, Pose p);
 
+
+  void SetDebugOptions(bool image_debug);
+
   // Not needed
   bool InitializeEnv(const char *sEnvFile) {
     return false;
@@ -320,16 +279,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 
  private:
-  ros::NodeHandle nh_;
 
   std::vector<ObjectModel> obj_models_;
   std::vector<std::string> model_files_;
   pcl::simulation::Scene::Ptr scene_;
-
-  std::string reference_frame_;
-  tf::TransformListener tf_listener_;
-
-  bool use_cloud_cost_;
 
   EnvParams env_params_;
   /**@brief Mapping from State to State ID**/
@@ -353,10 +306,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   State start_state_, goal_state_;
 
-  double max_z_seen_;
-
   bool image_debug_;
-  bool icp_succ_;
+
   Eigen::Matrix4f gl_inverse_transform_;
   Eigen::Isometry3d cam_to_world_;
 
@@ -365,7 +316,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 };
 
-#endif /** _SBPL_PERCEPTION_SEARCH_ENV **/
+#endif /** _SBPL_PERCEPTION_SEARCH_ENV_H **/
 
 
 

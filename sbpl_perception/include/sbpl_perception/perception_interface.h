@@ -23,6 +23,8 @@
 
 #include <sbpl/headers.h>
 
+#include <memory>
+
 class PerceptionInterface
 {
   public:
@@ -54,8 +56,8 @@ class PerceptionInterface
     tf::TransformListener tf_listener_;
 
     // Environment and planner variables
-    EnvObjectRecognition* env_obj_;
-    SBPLPlanner* planner_;
+    std::unique_ptr<EnvObjectRecognition> env_obj_;
+    std::unique_ptr<SBPLPlanner> planner_;
     sensor_msgs::Image recent_depth_image_;
     PointCloudPtr recent_cloud_; 
 

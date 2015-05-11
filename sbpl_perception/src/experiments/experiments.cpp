@@ -20,6 +20,8 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/features/normal_3d.h>
 
+#include <memory>
+
 using namespace std;
 
 //const string filename = "raw_0.pcd";
@@ -206,8 +208,10 @@ int main(int argc, char **argv) {
 
   vector<string> model_files, empty_model_files;
   vector<bool> symmetries, empty_symmetries;
+  bool image_debug;
   private_nh.param("model_files", model_files, empty_model_files);
   private_nh.param("model_symmetries", symmetries, empty_symmetries);
+  private_nh.param("image_debug", image_debug, false);
 
   string pcd_file;
   private_nh.param("pcd_file", pcd_file, string(""));
@@ -228,10 +232,11 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  EnvObjectRecognition *env_obj = new EnvObjectRecognition(nh);
-  MHAPlanner *planner  = new MHAPlanner(env_obj, 2, true);
+  unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition());
+  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
 
   env_obj->LoadObjFiles(model_files, symmetries);
+  env_obj->SetDebugOptions(image_debug);
 
 
   // Setup camera

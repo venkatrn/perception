@@ -41,6 +41,7 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #common commands for building c++ executables and libraries
 rosbuild_add_library(${PROJECT_NAME}
   src/vfh_pose_estimation.cpp
+  src/object_model.cpp
   src/perception_interface.cpp
   src/perception_utils.cpp
   src/search_env.cpp)

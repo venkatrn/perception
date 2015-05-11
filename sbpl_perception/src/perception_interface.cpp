@@ -48,8 +48,8 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh) {
                                   this);
   recent_cloud_.reset(new PointCloud);
 
-  env_obj_ = new EnvObjectRecognition(nh);
-  planner_ = new LazyARAPlanner(env_obj_, true);
+  env_obj_ = unique_ptr<EnvObjectRecognition>(new EnvObjectRecognition());
+  planner_ = unique_ptr<SBPLPlanner>(new LazyARAPlanner(env_obj_.get(), true));
   planning_ = false;
   table_height_ = 0.67;
   vector<bool> symmetries;

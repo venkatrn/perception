@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <random>
+#include <memory>
 
 
 using namespace std;
@@ -29,28 +30,21 @@ int main(int argc, char **argv) {
 
   vector<string> model_files, empty_model_files;
   vector<bool> symmetries, empty_symmetries;
+  bool image_debug;
   private_nh.param("model_files", model_files, empty_model_files);
   private_nh.param("model_symmetries", symmetries, empty_symmetries);
+  private_nh.param("image_debug", image_debug, false);
   printf("There are %d model files\n", model_files.size());
 
-  EnvObjectRecognition *env_obj = new EnvObjectRecognition(nh);
-
+  unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition());
 
   // Set model files
-  // vector<bool> symmetries;
-  // symmetries.resize(model_files.size(), false);
-  // symmetries[0] = true;
-  // symmetries[4] = true;
   env_obj->LoadObjFiles(model_files, symmetries);
+  // Set debug options
+  env_obj->SetDebugOptions(image_debug);
 
 
   // Setup camera
-  // double roll = 0.0;
-  // double pitch = M_PI / 3;
-  // double yaw = 0.0;
-  // double x = -0.6;
-  // double y = 0.0;
-  // double z = 1.0;
   double roll = 0.0;
   double pitch = 20.0 * (M_PI / 180.0);
   double yaw = 0.0;
@@ -190,8 +184,8 @@ int main(int argc, char **argv) {
   // Plan
   
 
-  // SBPLPlanner *planner  = new LazyARAPlanner(env_obj, true);
-  MHAPlanner *planner  = new MHAPlanner(env_obj, 2, true);
+  // unique_ptr<SBPLPlanner> planner(new LazyARAPlanner(env_obj, true));
+  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
 
   int goal_id = env_obj->GetGoalStateID();
   int start_id = env_obj->GetStartStateID();
