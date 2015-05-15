@@ -16,8 +16,13 @@
       <param name="image_debug" value="$(arg image_debug)"/>
       <param name="icp_succ" value="$(arg icp_succ)"/>
       <!-- <param name="reference_frame" value="head_mount_kinect_rgb_optical_frame"/>&#45;&#45;> -->
+
       <param name="pcd_file" value="$(find sbpl_perception)/data/RAM/pcd_files/occlusions/frame_20111220T115445.303284.pcd"/>
+      <param name="z_limit" value="1.3"/>
+
       <!-- <param name="pcd_file" value="$(find sbpl_perception)/data/RAM/pcd_files/occlusions/frame_20111221T142303.479339.pcd"/> -->
+      <!-- <param name="z_limit" value="1.7"/> -->
+
       <rosparam param="model_files" subst_value="True">
 
 
@@ -31,6 +36,7 @@
 $(find sbpl_perception)/data/RAM/cad_models/300.151.23_flipped.ply,
 $(find sbpl_perception)/data/RAM/cad_models/800.919.49.dec_flipped.ply,
 $(find sbpl_perception)/data/RAM/cad_models/963.111.00.dec_flipped.ply]
+
 
 <!-- [$(find sbpl_perception)/data/RAM/cad_models/all.ply, -->
 <!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply, -->

@@ -25,6 +25,8 @@
 #include <pcl/filters/passthrough.h>
 #include "pcl/filters/project_inliers.h"
 #include "pcl/filters/statistical_outlier_removal.h"
+#include <pcl/filters/radius_outlier_removal.h>
+
 #include <pcl/segmentation/organized_multi_plane_segmentation.h>
 #include <pcl/segmentation/euclidean_plane_coefficient_comparator.h>
 #include <pcl/features/integral_image_normal.h> 
@@ -349,7 +351,7 @@ PointCloudPtr perception_utils::RemoveGroundPlane(PointCloudPtr cloud, pcl::Mode
   //seg.setAxis (Eigen::Vector3f (0.0, 0.0, 1.0));
   //seg.setEpsAngle (15*3.14/180);
   seg.setMethodType (pcl::SAC_RANSAC);
-  seg.setDistanceThreshold (0.02); //0.1
+  seg.setDistanceThreshold (0.02); //0.02
   seg.setInputCloud (cloud->makeShared ());
   seg.segment (*inliers, *coefficients);
   // std::cerr << "Model coefficients: " << coefficients->values[0] << " " 
@@ -637,6 +639,18 @@ PointCloudPtr perception_utils::RemoveOutliers(PointCloudPtr cloud)
   sor.setMeanK(kOutlierNumNeighborPoints);
   sor.setStddevMulThresh(kOutlierStdDev);
   sor.filter(*filtered_cloud);
+  return filtered_cloud;
+}
+
+PointCloudPtr perception_utils::RemoveRadiusOutliers(PointCloudPtr cloud, double radius, int min_neighbors)
+{
+  PointCloudPtr filtered_cloud(new PointCloud);
+  pcl::RadiusOutlierRemoval<PointT> ror;
+  ror.setKeepOrganized (false); //NOTE: organized doesn't work -- possible bug in PCL
+  ror.setInputCloud(cloud);
+  ror.setRadiusSearch(radius);
+  ror.setMinNeighborsInRadius(min_neighbors);
+  ror.filter(*filtered_cloud);
   return filtered_cloud;
 }
 

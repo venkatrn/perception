@@ -64,7 +64,7 @@ EnvObjectRecognition::EnvObjectRecognition() :
   // env_params_.res = 0.05;
   // env_params_.theta_res = M_PI / 10; //8
 
-  env_params_.res = 0.2; //0.2
+  env_params_.res = 0.1; //0.2
   const int num_thetas = 16;
   env_params_.theta_res = 2 * M_PI / static_cast<double>(num_thetas); //8
 
@@ -205,7 +205,8 @@ bool EnvObjectRecognition::IsValidPose(State s, int model_id, Pose p) {
 
   // TODO: revisit this and accomodate for collision model
   double rad_1, rad_2;
-  rad_1 = obj_models_[model_id].GetCircumscribedRadius();
+  // rad_1 = obj_models_[model_id].GetCircumscribedRadius();
+  rad_1 = obj_models_[model_id].GetInscribedRadius();
 
   for (size_t ii = 0; ii < s.object_ids.size(); ++ii) {
     int obj_id = s.object_ids[ii];
@@ -216,7 +217,8 @@ bool EnvObjectRecognition::IsValidPose(State s, int model_id, Pose p) {
     //   return false;
     // }
 
-    rad_2 = obj_models_[obj_id].GetCircumscribedRadius();
+    // rad_2 = obj_models_[obj_id].GetCircumscribedRadius();
+    rad_2 = obj_models_[obj_id].GetInscribedRadius();
 
     if ((p.x - obj_pose.x) * (p.x - obj_pose.x) + (p.y - obj_pose.y) *
         (p.y - obj_pose.y) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
@@ -655,23 +657,12 @@ int EnvObjectRecognition::GetTrueCost(const State source_state,
 
   // Check again after icp
   if (!IsValidPose(source_state, last_object_id,
-                   child_state.object_poses.back())) {
+                   adjusted_child_state->object_poses.back())) {
     // printf(" state %d is invalid\n ", child_id);
     return -1;
   }
 
-  // if (icp_succ_ && image_debug_) {
-  //   std::stringstream ss1, ss2;
-  //   ss1.precision(20);
-  //   ss2.precision(20);
-  //   ss1 << kDebugDir + "cloud_" << child_id << ".pcd";
-  //   ss2 << kDebugDir + "cloud_aligned_" << child_id << ".pcd";
-  //   pcl::PCDWriter writer;
-  //   writer.writeBinary (ss1.str()  , *cloud_in);
-  //   writer.writeBinary (ss2.str()  , *cloud_out);
-  // }
-
-  succ_depth_buffer = GetDepthImage(child_state, &depth_image);
+  succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
   // All points
   kinect_simulator_->rl_->getPointCloud(succ_cloud, true,
                                         env_params_.camera_pose);
@@ -689,6 +680,30 @@ int EnvObjectRecognition::GetTrueCost(const State source_state,
   child_properties->last_min_depth = succ_min_depth;
   child_properties->last_max_depth = succ_max_depth;
 
+
+
+  // Must use re-rendered adjusted partial cloud for cost
+  for (int y = 0; y <  env_params_.img_height; ++y) {
+    for (int x = 0; x < env_params_.img_width; ++x) {
+      int i = y * env_params_.img_width + x ; // depth image index
+      int i_in = (env_params_.img_height - 1 - y) * env_params_.img_width + x
+                 ; // flip up down (buffer index)
+
+      // auto it = find(new_pixel_indices.begin(), new_pixel_indices.end(), i);
+      // if (it == new_pixel_indices.end()) continue; //Skip source pixels
+
+      if (depth_image[i] != 20000 && source_depth_image[i] == 20000) {
+        new_pixel_buffer[i_in] = succ_depth_buffer[i_in];
+      } else {
+        new_pixel_buffer[i_in] = 1.0; // max range
+      }
+    }
+  }
+  kinect_simulator_->rl_->getPointCloudFromBuffer (cloud_out, new_pixel_buffer,
+                                                   true,
+                                                   env_params_.camera_pose);
+
+
   // Compute costs
   int target_cost = 0, source_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
@@ -703,6 +718,17 @@ int EnvObjectRecognition::GetTrueCost(const State source_state,
              target_cost,
              source_cost, total_cost);
   }
+  // if (image_debug_) {
+  //   std::stringstream ss1, ss2;
+  //   ss1.precision(20);
+  //   ss2.precision(20);
+  //   ss1 << kDebugDir + "cloud_" << child_id << ".pcd";
+  //   ss2 << kDebugDir + "cloud_aligned_" << child_id << ".pcd";
+  //   pcl::PCDWriter writer;
+  //   writer.writeBinary (ss1.str()  , *cloud_in);
+  //   writer.writeBinary (ss2.str()  , *cloud_out);
+  // }
+
 
   return total_cost;
 }

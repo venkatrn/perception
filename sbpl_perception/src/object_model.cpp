@@ -36,11 +36,12 @@ void ObjectModel::SetObjectProperties() {
 }
 
 double ObjectModel::GetInscribedRadius() const {
-    return  std::min(fabs(max_x_ - min_x_), fabs(max_y_ - min_y_)) / 2.0;
+  return std::min(fabs(max_x_ - min_x_), fabs(max_y_ - min_y_)) / 2.0;
 }
 
 double ObjectModel::GetCircumscribedRadius() const {
-  return max(fabs(max_x_ - min_x_), fabs(max_y_ - min_y_)) / 2.0;
+  return std::max(fabs(max_x_ - min_x_), fabs(max_y_ - min_y_)) / 2.0;
 }
+
 
 

@@ -29,14 +29,15 @@ using namespace std;
 const string kPCDFilename =  ros::package::getPath("sbpl_perception") +
                              "/data/pointclouds/test14.pcd";
 
-bool viewer_on = true;
+bool viewer_on = false;
+double z_limit; // TODO: elimiate globals
 
 pcl::visualization::PCLVisualizer *viewer;
 
 
 void GetDepthImageFromPointCloud(PointCloudPtr cloud,
                                  vector<unsigned short> *depth_image, PointCloudPtr cloud_out,
-                                 Eigen::Isometry3d &camera_pose, PointT &min_pt, PointT &max_pt) {
+                                 Eigen::Isometry3d &camera_pose, PointT &min_pt, PointT &max_pt, double &table_height) {
   const int num_pixels = 480 * 640;
   const int height = 480;
   const int width = 640;
@@ -44,11 +45,7 @@ void GetDepthImageFromPointCloud(PointCloudPtr cloud,
   depth_image->resize(num_pixels);
   assert(cloud->points.size() == num_pixels);
 
-  double z_limit = 1.3;
-
   PointCloudPtr trans_cloud(new PointCloud(*cloud));
-  PointCloudPtr depth_img_cloud(new PointCloud);
-
 
   // Pass through far range
   pcl::PassThrough<PointT> pass;
@@ -60,32 +57,16 @@ void GetDepthImageFromPointCloud(PointCloudPtr cloud,
   pass.filter(*trans_cloud);
 
   pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-  depth_img_cloud = perception_utils::RemoveGroundPlane(trans_cloud,
-                                                        coefficients);
-
-  // Compute depth image before further transformations
-  for (int ii = 0; ii < height; ++ii) {
-    for (int jj = 0; jj < width; ++jj) {
-      PointT p = depth_img_cloud->at(jj, ii);
-
-      if (p.z != p.z) {
-        (*depth_image)[ii * width + jj] = 20000;
-      } else {
-        (*depth_image)[ii * width + jj] = static_cast<unsigned short>(p.z * 1000.0);
-      }
-    }
-  }
-
 
   //---------------------------------------------------
 
   // Transform to ROS frame convention - x forward, y left, z up, and remove outliers
-  Eigen::Matrix4f cam_to_world;
-  cam_to_world << 0, 0, 1, 0,
+  Eigen::Matrix4f cam_to_body;
+  cam_to_body << 0, 0, 1, 0,
                -1, 0, 0, 0,
                0, -1, 0, 0,
                0, 0, 0, 1;
-  transformPointCloud(*trans_cloud, *trans_cloud, cam_to_world);
+  transformPointCloud(*trans_cloud, *trans_cloud, cam_to_body);
   printf("RO W: %d H: %d\n", trans_cloud->width, trans_cloud->height);
   trans_cloud = perception_utils::RemoveOutliers(trans_cloud);
   printf("W: %d H: %d\n", trans_cloud->width, trans_cloud->height);
@@ -99,10 +80,15 @@ void GetDepthImageFromPointCloud(PointCloudPtr cloud,
                                                         table_points);
 
   trans_cloud = perception_utils::RemoveGroundPlane(trans_cloud, coefficients);
+  // Remove outliers after table filtering 
   // std::cerr << "Model coefficients: " << coefficients->values[0] << " "
   // << coefficients->values[1] << " "
   // << coefficients->values[2] << " "
   // << coefficients->values[3] << std::endl;
+  
+
+  // trans_cloud = perception_utils::RemoveRadiusOutliers(trans_cloud, 0.05, 20);
+
   Eigen::Matrix3f eig_vecs;
   pcl::PCA<PointT> pca;
   pca.setInputCloud(table_points);
@@ -137,12 +123,18 @@ void GetDepthImageFromPointCloud(PointCloudPtr cloud,
 
 
   // Remove points below table surface
-  double table_height = table_points->points[0].z;
+  // Eigen::Vector4f table_centroid;
+  // compute3DCentroid(*table_points, table_centroid);
+  // table_height = table_centroid[2] + 0.002; //Hack
+  PointT table_min_pt, table_max_pt;
+  getMinMax3D(*table_points, table_min_pt, table_max_pt);
+  table_height = table_max_pt.z;
   ROS_INFO("Table height: %f", table_height);
+
   pass.setKeepOrganized (true);
   pass.setInputCloud (trans_cloud);
   pass.setFilterFieldName ("z");
-  pass.setFilterLimits (table_height + 0.01, table_height + 1.0);
+  pass.setFilterLimits (table_height, table_height + 1.0); //TODO: do something principled
   //pass.setFilterLimitsNegative (true);
   pass.filter(*trans_cloud);
 
@@ -199,6 +191,22 @@ void GetDepthImageFromPointCloud(PointCloudPtr cloud,
 
   *cloud_out = *trans_cloud;
 
+
+  // Convert cloud in world frame to depth image in camera frame
+  PointCloudPtr depth_img_cloud(new PointCloud);
+  Eigen::Matrix4f world_to_cam = camera_pose.matrix().cast<float>().inverse();
+  transformPointCloud(*trans_cloud, *depth_img_cloud, cam_to_body.inverse()*world_to_cam);
+  for (int ii = 0; ii < height; ++ii) {
+    for (int jj = 0; jj < width; ++jj) {
+      PointT p = depth_img_cloud->at(jj, ii);
+      if (isnan(p.z) || isinf(p.z)) {
+        (*depth_image)[ii * width + jj] = 20000;
+      } else {
+        (*depth_image)[ii * width + jj] = static_cast<unsigned short>(p.z * 1000.0);
+      }
+    }
+  }
+
 }
 
 int main(int argc, char **argv) {
@@ -215,6 +223,7 @@ int main(int argc, char **argv) {
 
   string pcd_file;
   private_nh.param("pcd_file", pcd_file, string(""));
+  private_nh.param("z_limit", z_limit, 1.3);
   // printf("There are %d model files\n", model_files.size());
 
   cout << "PCD file: " << pcd_file;
@@ -266,8 +275,9 @@ int main(int argc, char **argv) {
   int num_models = 4;
   vector<unsigned short> depth_image;
   PointT min_pt, max_pt;
+  double table_height;
   GetDepthImageFromPointCloud(cloud_in, &depth_image, cloud_out, camera_pose,
-                              min_pt, max_pt);
+                              min_pt, max_pt, table_height);
   printf("cloud has %d points\n", cloud_out->points.size());
 
   env_obj->SetCameraPose(camera_pose);
@@ -288,7 +298,7 @@ int main(int argc, char **argv) {
   const double max_y = max_pt.y; //0.5
   const double min_z = min_pt.z;
   const double max_z = max_pt.z;
-  const double table_height = min_z;
+  // const double table_height = min_z - 0.01; //hack
 
   env_obj->SetBounds(min_x, max_x, min_y, max_y);
   env_obj->SetTableHeight(table_height);
