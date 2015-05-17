@@ -243,9 +243,3 @@ int main(int argc, char **argv) {
                       string("/tmp/goal_state.png"));
   return 0;
 }
-
-
-
-
-
-

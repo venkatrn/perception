@@ -44,7 +44,6 @@ const double kSensorResolutionSqr = kSensorResolution * kSensorResolution;
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
 
-
 EnvObjectRecognition::EnvObjectRecognition() :
   image_debug_(false) {
 
