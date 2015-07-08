@@ -5,8 +5,11 @@
 #include <pcl/io/vtk_lib_io.h>
 #include <vtkPolyDataMapper.h>
 #include <pcl/apps/render_views_tesselated_sphere.h>
+#include <sbpl_perception/render_views_cylinder.h>
 
 #include <ros/package.h>
+
+
 
 /** \brief loads either a .pcd or .ply file into a pointcloud
     \param cloud pointcloud to load data into
@@ -380,6 +383,152 @@ bool VFHPoseEstimator::generateTrainingViewsFromModels(boost::filesystem::path
       // Save cloud
       cloud_path = full_path.native() + "_" + std::to_string(ii) + ".pcd";
       writer.writeBinary (cloud_path.c_str(), *(views[ii]));
+
+      // Save r,p,y
+      angles_path = full_path.native() + "_" + std::to_string(ii) + ".txt";
+      // Eigen::Matrix<float,3,1> euler = poses[ii].eulerAngles(2,1,0);
+      float yaw, pitch, roll;
+      Eigen::Affine3f affine_mat(poses[ii]);
+      pcl::getEulerAngles(affine_mat, roll, pitch, yaw);
+      // yaw = euler(0,0); pitch = euler(1,0); roll = euler(2,0);
+      fs.open(angles_path.c_str());
+      fs << roll << " " << pitch << " " << yaw << "\n";
+      fs.close ();
+    }
+  }
+
+  return true;
+}
+
+bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem::path
+                                                       &dataDir) {
+
+  boost::filesystem::path output_dir = dataDir / "rendered_views";
+
+  if (!boost::filesystem::is_directory(output_dir)) {
+    boost::filesystem::create_directory(output_dir);
+  }
+
+  //loop over all ply files in the data directry and calculate vfh features
+  boost::filesystem::directory_iterator dirItr(dataDir), dirEnd;
+
+
+  for (dirItr; dirItr != dirEnd; ++dirItr) {
+    if (dirItr->path().extension().native().compare(".obj") != 0) {
+      continue;
+    }
+
+    std::cout << "Generating views for: " << dirItr->path().string() << std::endl;
+
+    // Need to re-initialize this for every model because generated_views is not cleared internally.
+    //pcl::apps::RenderViewsTesselatedSphere render_views;
+    RenderViewsCylinder render_views;
+
+    render_views.setResolution(227);
+    // Horizontal FoV of the virtual camera.
+    render_views.setViewAngle(57.0f);
+    
+
+    //set texture image format here
+    render_views.setPNGImageFormat(true);    
+
+    //this handle has to change to PLYReader for .ply
+    vtkSmartPointer<vtkOBJReader> reader = vtkSmartPointer<vtkOBJReader>::New();
+    reader->SetFileName(dirItr->path().string().c_str());
+    reader->Update();
+
+    // VTK is not exactly straightforward...
+    vtkSmartPointer < vtkPolyDataMapper > mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+    mapper->SetInputConnection(reader->GetOutputPort());
+    mapper->Update();
+    
+    //texture stuff from directory
+    boost::filesystem::path base_path = dirItr->path().stem();
+    std::string Img_path = base_path.native() + ".png"; //for png
+    //std::string Img_path = base_path.native() + ".png"; // for jpeg
+    boost::filesystem::path texture_path = dataDir / Img_path ;
+    
+    //  png 
+    vtkSmartPointer<vtkPNGReader> IMGReader = vtkSmartPointer<vtkPNGReader>::New();
+    
+    // jpeg
+    //vtkSmartPointer<vtkJPEGReader> IMGReader = vtkSmartPointer<vtkJPEGReader>::New();
+
+    IMGReader->SetFileName (texture_path.string().c_str());
+    IMGReader->Update();
+    render_views.addModelPNGImage(IMGReader);
+  
+    // cad model handle 
+    vtkSmartPointer<vtkPolyData> object = mapper->GetInput();
+
+    // Render
+    render_views.addModelFromPolyData(object);
+    render_views.generateViews();
+    
+    // Object for storing the rendered views.
+    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> views;
+    // Object for storing the poses, as 4x4 transformation matrices.
+    std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>> poses;
+    // Object for storing the entropies (optional).
+    std::vector<float> entropies;
+    //render_views.getViews(views);
+    render_views.getPoses(poses);
+    render_views.getEntropies(entropies);
+
+    //get RGB Window
+    std::vector<vtkSmartPointer<vtkWindowToImageFilter> > Imgwindows;
+    render_views.getWindows(Imgwindows);    
+
+    //get depth windows handles
+    std::vector<vtkSmartPointer<vtkWindowToImageFilter> > DepthImgwindows;
+    render_views.getDepthWindows(DepthImgwindows);    
+
+    size_t num_views = poses.size();
+    cout << "Number of views: " << num_views << endl;
+
+    std::ofstream fs;
+    pcl::PCDWriter writer;
+
+    for (size_t ii = 0; ii < num_views; ++ii) {
+      // Write cloud info
+      std::string transform_path, cloud_path, angles_path;
+      boost::filesystem::path base_path = dirItr->path().stem();
+      boost::filesystem::path full_path = output_dir / base_path;
+      transform_path = full_path.native() + "_" + std::to_string(ii) + ".eig";
+      cout << "Out path: " << transform_path << endl;
+      fs.open(transform_path.c_str());
+      fs << poses[ii] << "\n";
+      fs.close ();
+
+
+      //save RGB Image (png)
+      vtkSmartPointer<vtkPNGWriter> pngwriter = vtkSmartPointer<vtkPNGWriter>::New();  
+      cloud_path = full_path.native() + "_" + std::to_string(ii) + ".png";
+      pngwriter->SetFileName(cloud_path.c_str());
+      pngwriter->SetInputConnection(Imgwindows[ii]->GetOutputPort());
+      pngwriter->Write();
+
+      
+      // Save Depth Imge
+      vtkSmartPointer<vtkImageShiftScale> scale = vtkSmartPointer<vtkImageShiftScale>::New();
+      scale->SetOutputScalarTypeToUnsignedShort() ;
+      scale->SetInputConnection(DepthImgwindows[ii]->GetOutputPort());
+      scale->SetShift(0);
+      scale->SetScale(65535);
+      //scale->SetScale(255);
+      cloud_path = full_path.native() + "_depth_" + std::to_string(ii) + ".png";
+      vtkSmartPointer<vtkPNGWriter> imageWriter = vtkSmartPointer<vtkPNGWriter>::New();
+      imageWriter->SetFileName(cloud_path.c_str());
+      imageWriter->SetInputConnection(scale->GetOutputPort());
+      imageWriter->Write();
+
+      //stuff on depth conversion
+      //http://sjbaker.org/steve/omniv/love_your_z_buffer.html
+      //AWESOME LINK FOR Z UNDERSTANDING IT IS IMPORTANT THAT U UNDERSTAND THE RESOULUTION
+      //FOR FORMULA
+      // dist = (NEAR_PLANE*FAR_PLANE/(NEAR_PLANE-FAR_PLANE))/(zbuffer-FAR_PLANE/(FAR_PLANE-NEAR_PLANE)) 
+      //https://www.opengl.org/discussion_boards/showthread.php/154989-How-to-get-the-real-depth-value
+ 
 
       // Save r,p,y
       angles_path = full_path.native() + "_" + std::to_string(ii) + ".txt";

@@ -14,6 +14,9 @@ int main (int argc, char **argv)
     boost::filesystem::path dataDir(dataDirName);
    
     VFHPoseEstimator poseEstimator;
-    poseEstimator.generateTrainingViewsFromModels(dataDir);
+    
+    //poseEstimator.generateTrainingViewsFromModels(dataDir);
+    poseEstimator.generateTrainingViewsFromModelsCylinder(dataDir);
+    
     return 0;
 }

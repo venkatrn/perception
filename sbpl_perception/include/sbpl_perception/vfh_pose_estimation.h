@@ -89,5 +89,7 @@ public:
      */
     bool generateTrainingViewsFromModels(boost::filesystem::path
                                                        &dataDir);
+    bool generateTrainingViewsFromModelsCylinder(boost::filesystem::path
+                                                       &dataDir);
 };
 #endif

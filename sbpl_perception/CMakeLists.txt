@@ -22,6 +22,8 @@ rosbuild_init()
 #  MESSAGE(FATAL_ERROR "PCL not found.\n")
 #endif (NOT PCL_FOUND)
 
+find_package(VTK REQUIRED)
+include(${VTK_USE_FILE})
 
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS} )
@@ -40,6 +42,7 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 #common commands for building c++ executables and libraries
 rosbuild_add_library(${PROJECT_NAME}
+  src/render_views_cylinder.cpp
   src/vfh_pose_estimation.cpp
   src/object_model.cpp
   src/perception_interface.cpp
@@ -78,6 +81,10 @@ rosbuild_add_executable(vfh_generate_views src/vfh_generate_views.cpp)
 target_link_libraries(vfh_generate_views ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
 target_link_libraries(vfh_generate_views libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
+
+rosbuild_add_executable(render_views_cylinder src/render_views_cylinder.cpp)
+target_link_libraries(render_views_cylinder ${PROJECT_NAME}  ${VTK_LIBRARIES})
+
 # rosbuild_add_executable(search_env src/search_env.cpp)
 # target_link_libraries(search_env ${PROJECT_NAME})
 # target_link_libraries(search_env libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
