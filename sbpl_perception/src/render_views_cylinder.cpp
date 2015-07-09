@@ -152,10 +152,10 @@ else
   renderer->SetBackground (1.0, 1.0, 1.0);
 
   //adding lighting kalyan!
-  vtkSmartPointer<vtkLight> light = vtkSmartPointer<vtkLight>::New();
+/*  vtkSmartPointer<vtkLight> light = vtkSmartPointer<vtkLight>::New();
   light->SetFocalPoint(1.875,0.6125,0);
   light->SetPosition(0.875,1.6125,1);
-  //renderer->AddLight(light);
+  renderer->AddLight(light);*/
 
 
   //set global farplane clipping value for z in camera

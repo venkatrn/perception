@@ -469,16 +469,16 @@ for (dirItr; dirItr != dirEnd; ++dirItr) {
     float radius;
     size_t index = 0;
 
-for (height = 0; height < .2; height = height + 0.5) {
+for (height = 0; height < .2; height = height + 0.1) {
 
-    for (radius = 1; radius < 2.1; radius = radius + 1) {
+    for (radius = 1; radius < 2.1; radius = radius + .2) {
 
 
     // Need to re-initialize this for every model because generated_views is not cleared internally.
     //pcl::apps::RenderViewsTesselatedSphere render_views;
     RenderViewsCylinder render_views;
 
-    render_views.setResolution(27);
+    render_views.setResolution(227);
     // Horizontal FoV of the virtual camera.
     render_views.setViewAngle(57.0f);
     //set texture image format here
