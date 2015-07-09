@@ -412,15 +412,16 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
   //loop over all ply files in the data directry and calculate vfh features
   boost::filesystem::directory_iterator dirItr(dataDir), dirEnd;
 
-    std::ofstream fs1;
-    std::ofstream fs2;
-    std::ofstream fs;
+
+  std::ofstream fs;
+  std::ofstream fs1;
+  std::ofstream fs2;
 
   //text file with image paths
   boost::filesystem::path RGB_Image_directory_path = dataDir / "RGBtest.txt" ;
   boost::filesystem::path Depth_Image_directory_path = dataDir / "Depthtest.txt" ;
 
-  fs1.open(RGB_Image_directory_path.c_str());        
+  fs1.open(RGB_Image_directory_path.c_str());  
   fs2.open(Depth_Image_directory_path.c_str());  
     
 
@@ -466,7 +467,7 @@ for (dirItr; dirItr != dirEnd; ++dirItr) {
     //Start adding radius and height stuff here !!!
     float height;
     float radius;
-    size_t ii = 0;
+    size_t index = 0;
 
 for (height = 0; height < .2; height = height + 0.5) {
 
@@ -477,7 +478,7 @@ for (height = 0; height < .2; height = height + 0.5) {
     //pcl::apps::RenderViewsTesselatedSphere render_views;
     RenderViewsCylinder render_views;
 
-    render_views.setResolution(227);
+    render_views.setResolution(27);
     // Horizontal FoV of the virtual camera.
     render_views.setViewAngle(57.0f);
     //set texture image format here
@@ -517,13 +518,17 @@ for (height = 0; height < .2; height = height + 0.5) {
 
     
 
+size_t index_prev = index ;
 
-    for (ii; ii < num_views; ++ii) {
+
+    for (size_t ii = 0; ii < num_views; ++ii) {
+
+      index = ii + index_prev;
       // Write cloud info
       std::string transform_path, cloud_path, angles_path;
       boost::filesystem::path base_path = dirItr->path().stem();
       boost::filesystem::path full_path = output_dir / base_path;
-      transform_path = full_path.native() + "_" + std::to_string(ii) + ".eig";
+      transform_path = full_path.native() + "_" + std::to_string(index) + ".eig";
       //cout << "Out path: " << transform_path << endl;
       fs.open(transform_path.c_str());
       fs << poses[ii] << "\n";
@@ -532,13 +537,15 @@ for (height = 0; height < .2; height = height + 0.5) {
 
       //save RGB Image (png)
       vtkSmartPointer<vtkPNGWriter> pngwriter = vtkSmartPointer<vtkPNGWriter>::New();  
-      cloud_path = full_path.native() + "_" + std::to_string(ii) + ".png";
+      cloud_path = full_path.native() + "_" + std::to_string(index) + ".png";
       pngwriter->SetFileName(cloud_path.c_str());
       pngwriter->SetInputConnection(Imgwindows[ii]->GetOutputPort());
       pngwriter->Write();
 
-      fs1 << cloud_path << " " << ii << "\n"; //add label insted of ii
       
+      fs1 << cloud_path << " " << index << "\n"; //add label insted of ii
+      
+
       // Save Depth Image
       vtkSmartPointer<vtkImageShiftScale> scale = vtkSmartPointer<vtkImageShiftScale>::New();
       scale->SetOutputScalarTypeToUnsignedShort() ;
@@ -546,13 +553,14 @@ for (height = 0; height < .2; height = height + 0.5) {
       scale->SetShift(0);
       scale->SetScale(65535);
       //scale->SetScale(255);
-      cloud_path = full_path.native() + "_depth_" + std::to_string(ii) + ".png";
+      cloud_path = full_path.native() + "_depth_" + std::to_string(index) + ".png";
       vtkSmartPointer<vtkPNGWriter> imageWriter = vtkSmartPointer<vtkPNGWriter>::New();
       imageWriter->SetFileName(cloud_path.c_str());
       imageWriter->SetInputConnection(scale->GetOutputPort());
       imageWriter->Write();
 
-      fs2 << cloud_path << " " << ii << "\n"; //add label insted of ii
+      
+      fs2 << cloud_path << " " << index << "\n"; //add label insted of ii
       
       //stuff on depth conversion
       //http://sjbaker.org/steve/omniv/love_your_z_buffer.html
@@ -562,7 +570,7 @@ for (height = 0; height < .2; height = height + 0.5) {
       //https://www.opengl.org/discussion_boards/showthread.php/154989-How-to-get-the-real-depth-value
  
 
-      // Save r,p,y
+/*      // Save r,p,y
       angles_path = full_path.native() + "_" + std::to_string(ii) + ".txt";
       // Eigen::Matrix<float,3,1> euler = poses[ii].eulerAngles(2,1,0);
       float yaw, pitch, roll;
@@ -571,18 +579,21 @@ for (height = 0; height < .2; height = height + 0.5) {
       // yaw = euler(0,0); pitch = euler(1,0); roll = euler(2,0);
       fs.open(angles_path.c_str());
       fs << roll << " " << pitch << " " << yaw << "\n";
-      fs.close ();
+      fs.close ();*/
     }
-    cout << "Number of views: " << ii << "\n";
-  
+    index = index + 1;
+    cout << "Number of views: " << index << "\n";
+
+
   }
 
 }
 
 }
 
-fs1.close ();
-fs2.close ();
+    fs1.close ();
+    fs2.close ();
+
   return true;
 }
 
