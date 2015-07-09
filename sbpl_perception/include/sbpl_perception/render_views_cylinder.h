@@ -40,63 +40,31 @@
     {
     private:
       std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f> > poses_;
-      std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> generated_views_;
       std::vector<vtkSmartPointer<vtkWindowToImageFilter> > ArrwindowToImageFilter_;
       std::vector<vtkSmartPointer<vtkWindowToImageFilter> > DepthArrwindowToImageFilter_;
-      std::vector<float> entropies_;
+      
       int resolution_;
-      int tesselation_level_;
-      bool use_vertices_;
       float view_angle_;
-      float radius_sphere_;
-      bool compute_entropy_;
+      float radius_circle_;
       bool imgeformat_;
+      float view_height_;
       vtkSmartPointer<vtkPolyData> polydata_;
-      //vtkSmartPointer<vtkTexture> texture_;
       vtkSmartPointer<vtkJPEGReader> jPEGReader_;
       vtkSmartPointer<vtkPNGReader> PNGReader_;
-      bool gen_organized_;
-      boost::function<bool
-      (const Eigen::Vector3f &)> campos_constraints_func_;
 
-      struct camPosConstraintsAllTrue
-      {
-        bool
-        operator() (const Eigen::Vector3f & /*pos*/) const
-        {
-          return true;
-        }
-        ;
-      };
 
     public:
       RenderViewsCylinder ()
       {
         resolution_ = 150;
-        tesselation_level_ = 1;
-        use_vertices_ = true;
         view_angle_ = 57;
-        radius_sphere_ = 1.f;
-        compute_entropy_ = false;
-        gen_organized_ = false;
+        radius_circle_ = 1.f;
         imgeformat_ = true;
-        campos_constraints_func_ = camPosConstraintsAllTrue ();
+        view_height_ = 0.f;
+        
       }
 
-      void
-      setCamPosConstraints (boost::function<bool (const Eigen::Vector3f &)> & bb)
-      {
-        campos_constraints_func_ = bb;
-      }
 
-      /* \brief Indicates wether to generate organized or unorganized data
-       * \param b organized/unorganized
-       */
-      void
-      setGenOrganized (bool b)
-      {
-        gen_organized_ = b;
-      }
 
       /* \brief Sets the size of the render window
        * \param res resolution size
@@ -107,42 +75,27 @@
         resolution_ = res;
       }
 
-      /* \brief Wether to use the vertices or triangle centers of the tesselated sphere
-       * \param use true indicates to use vertices, false triangle centers
-       */
 
-      void
-      setUseVertices (bool use)
-      {
-        use_vertices_ = use;
-      }
 
-      /* \brief Radius of the sphere where the virtual camera will be placed
+      /* \brief Radius of the circle where the virtual camera will be placed
        * \param use true indicates to use vertices, false triangle centers
        */
       void
-      setRadiusSphere (float radius)
+      setRadiusCircle (float radius)
       {
-        radius_sphere_ = radius;
+        radius_circle_ = radius;
       }
 
-      /* \brief Wether to compute the entropies (level of occlusions for each view)
-       * \param compute true to compute entropies, false otherwise
+      /* \brief height of the circle where the virtual camera will be placed
+       * \param use true indicates to use vertices, false triangle centers
        */
       void
-      setComputeEntropies (bool compute)
+      setHeightCircle (float height)
       {
-        compute_entropy_ = compute;
+        view_height_ = height;
       }
 
-      /* \brief How many times the icosahedron should be tesselated. Results in more or less camera positions and generated views.
-       * \param level amount of tesselation
-       */
-      void
-      setTesselationLevel (int level)
-      {
-        tesselation_level_ = level;
-      }
+
 
       /* \brief Sets the view angle of the virtual camera
        * \param angle view angle in degrees
@@ -180,12 +133,7 @@
       {
         PNGReader_ = ImageFile;
       }
-      //add texture
-    /*  addtexturedata (vtkSmartPointer<vtkTexture> &texture)
-      {
-        texture_ = texture;
-      }
-*/
+ 
       /* \brief performs the rendering and stores the generated information
        */
       void
@@ -200,23 +148,6 @@
         poses = poses_;
       }
 
-      /* \brief Get the generated views
-       * \param views generated pointclouds in camera coordinates
-       */
-      void
-      getViews (std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> & views)
-      {
-        views = generated_views_;
-      }
-
-      /* \brief Get the entropies (level of occlusions) for the views
-       * \param entropies level of occlusions
-       */
-      void
-      getEntropies (std::vector<float> & entropies)
-      {
-        entropies = entropies_;
-      }
       /* 
        * \Get pointer to windows that need to be saved
        */
@@ -234,4 +165,4 @@
     };
 
 
-#endif /* RENDER_VIEWS_TESSELATED_SPHERE_H_ */
+#endif 

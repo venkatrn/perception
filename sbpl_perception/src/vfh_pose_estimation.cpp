@@ -412,6 +412,17 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
   //loop over all ply files in the data directry and calculate vfh features
   boost::filesystem::directory_iterator dirItr(dataDir), dirEnd;
 
+    std::ofstream fs1;
+    std::ofstream fs2;
+
+    //text file with image paths
+    boost::filesystem::path RGB_Image_directory_path = dataDir / "RGBtest.txt" ;
+    boost::filesystem::path Depth_Image_directory_path = dataDir / "Depthtest.txt" ;
+
+    fs1.open(RGB_Image_directory_path.c_str());        
+    fs2.open(Depth_Image_directory_path.c_str());  
+    
+
 
   for (dirItr; dirItr != dirEnd; ++dirItr) {
     if (dirItr->path().extension().native().compare(".obj") != 0) {
@@ -427,8 +438,6 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
     render_views.setResolution(227);
     // Horizontal FoV of the virtual camera.
     render_views.setViewAngle(57.0f);
-    
-
     //set texture image format here
     render_views.setPNGImageFormat(true);    
 
@@ -445,7 +454,7 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
     //texture stuff from directory
     boost::filesystem::path base_path = dirItr->path().stem();
     std::string Img_path = base_path.native() + ".png"; //for png
-    //std::string Img_path = base_path.native() + ".png"; // for jpeg
+    //std::string Img_path = base_path.native() + ".jpeg"; // for jpeg
     boost::filesystem::path texture_path = dataDir / Img_path ;
     
     //  png 
@@ -461,19 +470,23 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
     // cad model handle 
     vtkSmartPointer<vtkPolyData> object = mapper->GetInput();
 
+    //Start adding radius and height stuff here !!!
+    render_views.setRadiusCircle(1);
+    render_views.setHeightCircle(0);
+
     // Render
     render_views.addModelFromPolyData(object);
     render_views.generateViews();
     
-    // Object for storing the rendered views.
-    std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> views;
+    
+    
     // Object for storing the poses, as 4x4 transformation matrices.
     std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>> poses;
     // Object for storing the entropies (optional).
     std::vector<float> entropies;
-    //render_views.getViews(views);
+    
     render_views.getPoses(poses);
-    render_views.getEntropies(entropies);
+    
 
     //get RGB Window
     std::vector<vtkSmartPointer<vtkWindowToImageFilter> > Imgwindows;
@@ -487,7 +500,7 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
     cout << "Number of views: " << num_views << endl;
 
     std::ofstream fs;
-    pcl::PCDWriter writer;
+
 
     for (size_t ii = 0; ii < num_views; ++ii) {
       // Write cloud info
@@ -495,7 +508,7 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
       boost::filesystem::path base_path = dirItr->path().stem();
       boost::filesystem::path full_path = output_dir / base_path;
       transform_path = full_path.native() + "_" + std::to_string(ii) + ".eig";
-      cout << "Out path: " << transform_path << endl;
+      //cout << "Out path: " << transform_path << endl;
       fs.open(transform_path.c_str());
       fs << poses[ii] << "\n";
       fs.close ();
@@ -508,8 +521,9 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
       pngwriter->SetInputConnection(Imgwindows[ii]->GetOutputPort());
       pngwriter->Write();
 
+      fs1 << cloud_path << " " << ii << "\n"; //add label insted of ii
       
-      // Save Depth Imge
+      // Save Depth Image
       vtkSmartPointer<vtkImageShiftScale> scale = vtkSmartPointer<vtkImageShiftScale>::New();
       scale->SetOutputScalarTypeToUnsignedShort() ;
       scale->SetInputConnection(DepthImgwindows[ii]->GetOutputPort());
@@ -522,6 +536,8 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
       imageWriter->SetInputConnection(scale->GetOutputPort());
       imageWriter->Write();
 
+      fs2 << cloud_path << ii << "\n"; //add label istead of ii
+      
       //stuff on depth conversion
       //http://sjbaker.org/steve/omniv/love_your_z_buffer.html
       //AWESOME LINK FOR Z UNDERSTANDING IT IS IMPORTANT THAT U UNDERSTAND THE RESOULUTION
@@ -541,8 +557,11 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
       fs << roll << " " << pitch << " " << yaw << "\n";
       fs.close ();
     }
+  
   }
 
+      fs1.close ();
+      fs2.close ();
   return true;
 }
 

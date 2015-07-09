@@ -92,7 +92,7 @@ else
   mapper->GetBounds (bb);
   double ms = (std::max) ((std::fabs) (bb[0] - bb[1]),
                           (std::max) ((std::fabs) (bb[2] - bb[3]), (std::fabs) (bb[4] - bb[5])));
-  double max_side = radius_sphere_ / 2.0;
+  double max_side = radius_circle_ / 2.0;
   double scale_factor = max_side / ms;
   //double scale_factor = 0.001;
   std::cout << "CAD Model Scaled by value: " << scale_factor << endl;
@@ -132,15 +132,15 @@ else
   cam_positions.resize (360);
   for (int i = 0; i < 360; i++)
   {
-    float cirrad = 1;
-    float xcod = cirrad*cos(i*PI/ 180.0);
-    float ycod = cirrad*sin(i*PI/ 180.0);
-    float zcod = 0;
+    
+    float xcod = radius_circle_*cos(i*PI/ 180.0);
+    float ycod = radius_circle_*sin(i*PI/ 180.0);
+    float zcod = view_height_;
    cam_positions[i] = Eigen::Vector3f (xcod,ycod,zcod); 
   }
 
 
-  double camera_radius = radius_sphere_;
+  
   double cam_pos[3];
 
 
@@ -172,11 +172,6 @@ else
     cam_pos[1] = cam_positions[i][1];
     cam_pos[2] = cam_positions[i][2];
 
-
-    for (int k = 0; k < 3; k++)
-    {
-      cam_pos[k] = cam_pos[k] * camera_radius;
-    }
 
     //create temporal virtual camera
     vtkSmartPointer<vtkCamera> cam_tmp = vtkSmartPointer<vtkCamera>::New ();
