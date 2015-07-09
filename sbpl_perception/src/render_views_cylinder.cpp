@@ -94,7 +94,7 @@ else
                           (std::max) ((std::fabs) (bb[2] - bb[3]), (std::fabs) (bb[4] - bb[5])));
   double max_side = radius_circle_ / 2.0;
   double scale_factor = max_side / ms;
-  //double scale_factor = 0.001;
+  //double scale_factor = 1;
   std::cout << "CAD Model Scaled by value: " << scale_factor << endl;
   
   vtkSmartPointer<vtkTransform> trans_scale = vtkSmartPointer<vtkTransform>::New ();

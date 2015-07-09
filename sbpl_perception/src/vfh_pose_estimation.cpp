@@ -414,32 +414,25 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
 
     std::ofstream fs1;
     std::ofstream fs2;
+    std::ofstream fs;
 
-    //text file with image paths
-    boost::filesystem::path RGB_Image_directory_path = dataDir / "RGBtest.txt" ;
-    boost::filesystem::path Depth_Image_directory_path = dataDir / "Depthtest.txt" ;
+  //text file with image paths
+  boost::filesystem::path RGB_Image_directory_path = dataDir / "RGBtest.txt" ;
+  boost::filesystem::path Depth_Image_directory_path = dataDir / "Depthtest.txt" ;
 
-    fs1.open(RGB_Image_directory_path.c_str());        
-    fs2.open(Depth_Image_directory_path.c_str());  
+  fs1.open(RGB_Image_directory_path.c_str());        
+  fs2.open(Depth_Image_directory_path.c_str());  
     
 
 
-  for (dirItr; dirItr != dirEnd; ++dirItr) {
+for (dirItr; dirItr != dirEnd; ++dirItr) {
     if (dirItr->path().extension().native().compare(".obj") != 0) {
       continue;
     }
 
     std::cout << "Generating views for: " << dirItr->path().string() << std::endl;
 
-    // Need to re-initialize this for every model because generated_views is not cleared internally.
-    //pcl::apps::RenderViewsTesselatedSphere render_views;
-    RenderViewsCylinder render_views;
 
-    render_views.setResolution(227);
-    // Horizontal FoV of the virtual camera.
-    render_views.setViewAngle(57.0f);
-    //set texture image format here
-    render_views.setPNGImageFormat(true);    
 
     //this handle has to change to PLYReader for .ply
     vtkSmartPointer<vtkOBJReader> reader = vtkSmartPointer<vtkOBJReader>::New();
@@ -465,14 +458,36 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
 
     IMGReader->SetFileName (texture_path.string().c_str());
     IMGReader->Update();
-    render_views.addModelPNGImage(IMGReader);
+    //render_views.addModelPNGImage(IMGReader);
   
     // cad model handle 
     vtkSmartPointer<vtkPolyData> object = mapper->GetInput();
 
     //Start adding radius and height stuff here !!!
-    render_views.setRadiusCircle(1);
-    render_views.setHeightCircle(0);
+    float height;
+    float radius;
+    size_t ii = 0;
+
+for (height = 0; height < .2; height = height + 0.5) {
+
+    for (radius = 1; radius < 2.1; radius = radius + 1) {
+
+
+    // Need to re-initialize this for every model because generated_views is not cleared internally.
+    //pcl::apps::RenderViewsTesselatedSphere render_views;
+    RenderViewsCylinder render_views;
+
+    render_views.setResolution(227);
+    // Horizontal FoV of the virtual camera.
+    render_views.setViewAngle(57.0f);
+    //set texture image format here
+    render_views.setPNGImageFormat(true);    
+
+    render_views.addModelPNGImage(IMGReader);
+
+    
+    render_views.setRadiusCircle(radius);
+    render_views.setHeightCircle(height);
 
     // Render
     render_views.addModelFromPolyData(object);
@@ -497,12 +512,13 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
     render_views.getDepthWindows(DepthImgwindows);    
 
     size_t num_views = poses.size();
-    cout << "Number of views: " << num_views << endl;
-
-    std::ofstream fs;
+    //cout << "Number of views: " << num_views << endl;
 
 
-    for (size_t ii = 0; ii < num_views; ++ii) {
+    
+
+
+    for (ii; ii < num_views; ++ii) {
       // Write cloud info
       std::string transform_path, cloud_path, angles_path;
       boost::filesystem::path base_path = dirItr->path().stem();
@@ -536,7 +552,7 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
       imageWriter->SetInputConnection(scale->GetOutputPort());
       imageWriter->Write();
 
-      fs2 << cloud_path << ii << "\n"; //add label istead of ii
+      fs2 << cloud_path << " " << ii << "\n"; //add label insted of ii
       
       //stuff on depth conversion
       //http://sjbaker.org/steve/omniv/love_your_z_buffer.html
@@ -557,11 +573,16 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
       fs << roll << " " << pitch << " " << yaw << "\n";
       fs.close ();
     }
+    cout << "Number of views: " << ii << "\n";
   
   }
 
-      fs1.close ();
-      fs2.close ();
+}
+
+}
+
+fs1.close ();
+fs2.close ();
   return true;
 }
 
