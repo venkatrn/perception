@@ -415,24 +415,25 @@ bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem
 
   std::ofstream fs;
   std::ofstream fs1;
-  std::ofstream fs2;
+  //std::ofstream fs2;
 
   //text file with image paths
-  boost::filesystem::path RGB_Image_directory_path = dataDir / "RGBtest.txt" ;
-  boost::filesystem::path Depth_Image_directory_path = dataDir / "Depthtest.txt" ;
+  boost::filesystem::path RGB_Image_directory_path = dataDir / "RGBDtest.txt" ;
+  //boost::filesystem::path Depth_Image_directory_path = dataDir / "Depthtest.txt" ;
 
   fs1.open(RGB_Image_directory_path.c_str());  
-  fs2.open(Depth_Image_directory_path.c_str());  
+  //fs2.open(Depth_Image_directory_path.c_str());  
     
+  
 
 
 for (dirItr; dirItr != dirEnd; ++dirItr) {
     if (dirItr->path().extension().native().compare(".obj") != 0) {
       continue;
     }
-
-    std::cout << "Generating views for: " << dirItr->path().string() << std::endl;
-
+    
+    std::cout << "Generating views for : " << dirItr->path().string() << std::endl;
+    size_t index = 0;
 
 
     //this handle has to change to PLYReader for .ply
@@ -467,11 +468,11 @@ for (dirItr; dirItr != dirEnd; ++dirItr) {
     //Start adding radius and height stuff here !!!
     float height;
     float radius;
-    size_t index = 0;
+    
 
-for (height = 0; height < .2; height = height + 0.1) {
+for (height = 0; height < 0.01; height = height + 0.1) {
 
-    for (radius = 1; radius < 2.1; radius = radius + .2) {
+    for (radius = .35; radius < .50001; radius = radius + .05) {
 
 
     // Need to re-initialize this for every model because generated_views is not cleared internally.
@@ -489,6 +490,7 @@ for (height = 0; height < .2; height = height + 0.1) {
     
     render_views.setRadiusCircle(radius);
     render_views.setHeightCircle(height);
+    render_views.setNumViewsCircle(360);
 
     // Render
     render_views.addModelFromPolyData(object);
@@ -516,6 +518,8 @@ for (height = 0; height < .2; height = height + 0.1) {
     //cout << "Number of views: " << num_views << endl;
 
 
+
+
     
 
 size_t index_prev = index ;
@@ -523,9 +527,11 @@ size_t index_prev = index ;
 
     for (size_t ii = 0; ii < num_views; ++ii) {
 
+      float yaw = float(ii)/float(num_views);
+
       index = ii + index_prev;
       // Write cloud info
-      std::string transform_path, cloud_path, angles_path;
+      std::string transform_path, cloud_path, cloud_path2, angles_path;
       boost::filesystem::path base_path = dirItr->path().stem();
       boost::filesystem::path full_path = output_dir / base_path;
       transform_path = full_path.native() + "_" + std::to_string(index) + ".eig";
@@ -536,15 +542,16 @@ size_t index_prev = index ;
 
 
       //save RGB Image (png)
-      vtkSmartPointer<vtkPNGWriter> pngwriter = vtkSmartPointer<vtkPNGWriter>::New();  
-      cloud_path = full_path.native() + "_" + std::to_string(index) + ".png";
+      vtkSmartPointer<vtkTIFFWriter> pngwriter = vtkSmartPointer<vtkTIFFWriter>::New();  
+      cloud_path = full_path.native() + "_" + std::to_string(index) + ".tif";
       pngwriter->SetFileName(cloud_path.c_str());
       pngwriter->SetInputConnection(Imgwindows[ii]->GetOutputPort());
       pngwriter->Write();
 
       
-      fs1 << cloud_path << " " << index << "\n"; //add label insted of ii
+      //fs1 << cloud_path << " " << index << " " << yaw << "\n"; 
       
+      //cout << *yawValue << endl;
 
       // Save Depth Image
       vtkSmartPointer<vtkImageShiftScale> scale = vtkSmartPointer<vtkImageShiftScale>::New();
@@ -553,14 +560,16 @@ size_t index_prev = index ;
       scale->SetShift(0);
       scale->SetScale(65535);
       //scale->SetScale(255);
-      cloud_path = full_path.native() + "_depth_" + std::to_string(index) + ".png";
+      cloud_path2 = full_path.native() + "_depth_" + std::to_string(index) + ".png";
       vtkSmartPointer<vtkPNGWriter> imageWriter = vtkSmartPointer<vtkPNGWriter>::New();
-      imageWriter->SetFileName(cloud_path.c_str());
+      imageWriter->SetFileName(cloud_path2.c_str());
       imageWriter->SetInputConnection(scale->GetOutputPort());
       imageWriter->Write();
 
       
-      fs2 << cloud_path << " " << index << "\n"; //add label insted of ii
+      fs1 << cloud_path << " " << cloud_path2 << " " << yaw << " " << index << "\n"; 
+
+      
       
       //stuff on depth conversion
       //http://sjbaker.org/steve/omniv/love_your_z_buffer.html
@@ -592,7 +601,7 @@ size_t index_prev = index ;
 }
 
     fs1.close ();
-    fs2.close ();
+    //fs2.close ();
 
   return true;
 }

@@ -93,8 +93,8 @@ else
   double ms = (std::max) ((std::fabs) (bb[0] - bb[1]),
                           (std::max) ((std::fabs) (bb[2] - bb[3]), (std::fabs) (bb[4] - bb[5])));
   double max_side = radius_circle_ / 2.0;
-  double scale_factor = max_side / ms;
-  //double scale_factor = 1;
+  //double scale_factor = max_side / ms;
+  double scale_factor = 1;
   std::cout << "CAD Model Scaled by value: " << scale_factor << endl;
   
   vtkSmartPointer<vtkTransform> trans_scale = vtkSmartPointer<vtkTransform>::New ();
@@ -112,7 +112,7 @@ else
   //////////////////////////////
   // * Compute area of the mesh
   //////////////////////////////
-  vtkSmartPointer<vtkCellArray> cells = mapper->GetInput ()->GetPolys ();
+/*  vtkSmartPointer<vtkCellArray> cells = mapper->GetInput ()->GetPolys ();
   vtkIdType npts = 0, *ptIds = NULL;
 
   double p1[3], p2[3], p3[3], area, totalArea = 0;
@@ -123,25 +123,44 @@ else
     polydata_->GetPoint (ptIds[2], p3);
     area = vtkTriangle::TriangleArea (p1, p2, p3);
     totalArea += area;
-  }
+  }*/
 
   
 
   //my version of camera positions to generate about a cirle
   std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f> > cam_positions;
-  cam_positions.resize (360);
-  for (int i = 0; i < 360; i++)
+  std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f> > light_positions;
+  cam_positions.resize (NumViews_);
+  light_positions.resize (NumViews_);
+  float yaw[NumViews_];
+  float offset;
+  float xcod;
+  float ycod;
+  float zcod;
+  float xcod_light;
+  float ycod_light;
+  float zcod_light;
+  float light_offset = 0;
+  float light_radius = 3;
+  float light_height = .1;
+  for (int i = 0; i < NumViews_; i = i + (360/NumViews_))
   {
-    
-    float xcod = radius_circle_*cos(i*PI/ 180.0);
-    float ycod = radius_circle_*sin(i*PI/ 180.0);
-    float zcod = view_height_;
-   cam_positions[i] = Eigen::Vector3f (xcod,ycod,zcod); 
+    yaw[i] = i*PI/ 180.0;
+    offset = 0; // caliberate this to zero offset the yaw
+    xcod = radius_circle_*cos(yaw[i] + offset);
+    ycod = radius_circle_*sin(yaw[i] + offset);
+    zcod = view_height_;
+    xcod_light = light_radius*cos(yaw[i] + offset + light_offset);
+    ycod_light = light_radius*sin(yaw[i] + offset + light_offset);
+    zcod_light = view_height_ + light_height ;
+    cam_positions[i] = Eigen::Vector3f (xcod,ycod,zcod);  
+    light_positions[i] = Eigen::Vector3f (xcod_light,ycod_light,zcod_light);
   }
 
 
   
   double cam_pos[3];
+  double light_pos[3];
 
 
   //create renderer and window
@@ -152,11 +171,10 @@ else
   renderer->SetBackground (1.0, 1.0, 1.0);
 
   //adding lighting kalyan!
-/*  vtkSmartPointer<vtkLight> light = vtkSmartPointer<vtkLight>::New();
-  light->SetFocalPoint(1.875,0.6125,0);
-  light->SetPosition(0.875,1.6125,1);
-  renderer->AddLight(light);*/
-
+  vtkSmartPointer<vtkLight> light = vtkSmartPointer<vtkLight>::New();
+  light->SetFocalPoint(0,0,0);
+  light->SetIntensity(1);
+  //end of lighting
 
   //set global farplane clipping value for z in camera
   double farplanedist = 5;
@@ -172,14 +190,23 @@ else
     cam_pos[1] = cam_positions[i][1];
     cam_pos[2] = cam_positions[i][2];
 
+    light_pos[0] = light_positions[i][0];
+    light_pos[1] = light_positions[i][1];
+    light_pos[2] = light_positions[i][2];
+    
+
+    light->SetPosition(light_pos);
+    
 
     //create temporal virtual camera
     vtkSmartPointer<vtkCamera> cam_tmp = vtkSmartPointer<vtkCamera>::New ();
     cam_tmp->SetViewAngle (view_angle_);
     cam_tmp->SetClippingRange(0.1, farplanedist);
-    cam_tmp->SetViewUp (perp[0], perp[1], perp[2]);
+    //cam_tmp->SetViewUp (perp[0], perp[1], perp[2]);
+    cam_tmp->SetViewUp (0, 0, 1);
     cam_tmp->SetPosition (cam_pos);
-    cam_tmp->SetFocalPoint (0, 0, 0);
+    cam_tmp->SetFocalPoint (focus_);
+
     cam_tmp->Modified ();
 
 
@@ -187,10 +214,11 @@ else
     vtkSmartPointer<vtkActor> actor_view = vtkSmartPointer<vtkActor>::New ();
     actor_view->SetMapper (mapper);
     actor_view->SetTexture(texture);
+    renderer->AddLight(light);
     renderer->SetActiveCamera (cam_tmp);
     renderer->AddActor (actor_view);
     renderer->Modified ();
-    //renderer->ResetCameraClippingRange ();
+    renderer->ResetCameraClippingRange ();
     render_win->Render ();
 
     //Depth window handles.
@@ -216,7 +244,6 @@ else
 
 
     renderer->RemoveActor (actor_view);
-
     
 
     //create pose, from OBJECT coordinates to CAMERA coordinates!

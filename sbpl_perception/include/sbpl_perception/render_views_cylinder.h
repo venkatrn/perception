@@ -12,6 +12,7 @@
 #include <pcl/common/common.h>
 #include <boost/function.hpp>
 
+
 #include <vtkPolyDataMapper.h>
 #include <vtkActor.h>
 #include <vtkSmartPointer.h>
@@ -27,7 +28,10 @@
 #include <vtkTexture.h>
 #include <vtkImageShiftScale.h>
 #include <vtkBMPWriter.h>
+#include <vtkJPEGWriter.h>
 #include <math.h> 
+#include <vtkImageWriter.h>
+#include <vtkTIFFWriter.h>
 
     /** \brief @b Class to render synthetic views of a 3D mesh using a tesselated sphere
      * NOTE: This class should replace renderViewTesselatedSphere from pcl::visualization.
@@ -42,12 +46,18 @@
       std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f> > poses_;
       std::vector<vtkSmartPointer<vtkWindowToImageFilter> > ArrwindowToImageFilter_;
       std::vector<vtkSmartPointer<vtkWindowToImageFilter> > DepthArrwindowToImageFilter_;
-      
+
+
+      int NumViews_;
       int resolution_;
       float view_angle_;
       float radius_circle_;
       bool imgeformat_;
       float view_height_;
+      double focus_[3];
+      float offset_;
+
+
       vtkSmartPointer<vtkPolyData> polydata_;
       vtkSmartPointer<vtkJPEGReader> jPEGReader_;
       vtkSmartPointer<vtkPNGReader> PNGReader_;
@@ -61,7 +71,12 @@
         radius_circle_ = 1.f;
         imgeformat_ = true;
         view_height_ = 0.f;
-        
+        //focus_.iners = {0,0,0};
+        focus_ [0] = 0;  
+        focus_ [1] = 0;  
+        focus_ [2] = 0; 
+        offset_ = 0; 
+        NumViews_ = 360;
       }
 
 
@@ -75,6 +90,35 @@
         resolution_ = res;
       }
 
+          /* \
+       * \Set Yaw offset
+       */
+      void
+      setNumViewsCircle (int views)
+      {
+        NumViews_ = views;
+      }
+
+      /* \
+       * \Set Yaw offset
+       */
+      void
+      setYawOffset ( float offset)
+      {
+        offset_ = offset;
+      }
+
+
+      /* \
+       * \Set focus of camera
+       */
+      void
+      setFocusPoint ( double focus[3])
+      {
+        focus_[0] = focus[0];
+        focus_[1] = focus[1];
+        focus_[2] = focus[2];
+      }
 
 
       /* \brief Radius of the circle where the virtual camera will be placed
