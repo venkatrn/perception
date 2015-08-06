@@ -403,29 +403,30 @@ bool VFHPoseEstimator::generateTrainingViewsFromModels(boost::filesystem::path
 bool VFHPoseEstimator::generateTrainingViewsFromModelsCylinder(boost::filesystem::path
                                                        &dataDir) {
 
-  boost::filesystem::path output_dir = dataDir / "rendered_views";
+
+
+  //loop over all ply files in the data directry and calculate vfh features
+  boost::filesystem::directory_iterator dirItr(dataDir), dirEnd;
+
+  std::ofstream fs;
+  std::ofstream fs1;
+  std::ofstream fs2;
+
+  //text file with image paths
+  boost::filesystem::path Abs_Image_directory_path = dataDir / "Abs_multiclass" ;
+  boost::filesystem::path Rel_Image_directory_path = dataDir / "Rel_multiclass" ;
+
+  fs1.open(Abs_Image_directory_path.c_str());  
+  fs2.open(Rel_Image_directory_path.c_str());  
+    
+  
+  boost::filesystem::path output_dir = dataDir / "rendered_views_multiclass";
 
   if (!boost::filesystem::is_directory(output_dir)) {
     boost::filesystem::create_directory(output_dir);
   }
 
-  //loop over all ply files in the data directry and calculate vfh features
-  boost::filesystem::directory_iterator dirItr(dataDir), dirEnd;
-
-
-  std::ofstream fs;
-  std::ofstream fs1;
-  //std::ofstream fs2;
-
-  //text file with image paths
-  boost::filesystem::path RGB_Image_directory_path = dataDir / "RGBDtest.txt" ;
-  //boost::filesystem::path Depth_Image_directory_path = dataDir / "Depthtest.txt" ;
-
-  fs1.open(RGB_Image_directory_path.c_str());  
-  //fs2.open(Depth_Image_directory_path.c_str());  
-    
-  
-
+  int objectype = 0;
 
 for (dirItr; dirItr != dirEnd; ++dirItr) {
     if (dirItr->path().extension().native().compare(".obj") != 0) {
@@ -434,7 +435,36 @@ for (dirItr; dirItr != dirEnd; ++dirItr) {
     
     std::cout << "Generating views for : " << dirItr->path().string() << std::endl;
     size_t index = 0;
+    //////////////////////////////////////////////
+  
+  
 
+  boost::filesystem::path base_path = dirItr->path().stem();
+  std::string Abs_name = "Abs_RGBDtest_" + base_path.native() + ".txt"; //for abs path
+  std::string Rel_name = "Rel_RGBDtest_" + base_path.native() + ".txt"; //for rel path
+  std::string ImgDirectory_name = "rendered_views_" + base_path.native(); //for rel path
+  
+  //boost::filesystem::path output_dir = dataDir / ImgDirectory_name;
+
+/*  if (!boost::filesystem::is_directory(output_dir)) {
+    boost::filesystem::create_directory(output_dir);
+  }*/
+
+/*  std::ofstream fs;
+  std::ofstream fs1;
+  std::ofstream fs2;
+
+  //text file with image paths
+  boost::filesystem::path Abs_Image_directory_path = dataDir / Abs_name ;
+  boost::filesystem::path Rel_Image_directory_path = dataDir / Rel_name ;
+
+  fs1.open(Abs_Image_directory_path.c_str());  
+  fs2.open(Rel_Image_directory_path.c_str());  */
+
+
+
+
+    //////////////////////////////////////////////
 
     //this handle has to change to PLYReader for .ply
     vtkSmartPointer<vtkOBJReader> reader = vtkSmartPointer<vtkOBJReader>::New();
@@ -447,7 +477,7 @@ for (dirItr; dirItr != dirEnd; ++dirItr) {
     mapper->Update();
     
     //texture stuff from directory
-    boost::filesystem::path base_path = dirItr->path().stem();
+    //boost::filesystem::path base_path = dirItr->path().stem();
     std::string Img_path = base_path.native() + ".png"; //for png
     //std::string Img_path = base_path.native() + ".jpeg"; // for jpeg
     boost::filesystem::path texture_path = dataDir / Img_path ;
@@ -470,9 +500,9 @@ for (dirItr; dirItr != dirEnd; ++dirItr) {
     float radius;
     
 
-for (height = 0; height < 0.01; height = height + 0.1) {
+for (height = 0; height <= 0.3; height = height + 0.1) {
 
-    for (radius = .35; radius < .50001; radius = radius + .05) {
+    for (radius = .25; radius <= .35; radius = radius + .05) {
 
 
     // Need to re-initialize this for every model because generated_views is not cleared internally.
@@ -531,7 +561,7 @@ size_t index_prev = index ;
 
       index = ii + index_prev;
       // Write cloud info
-      std::string transform_path, cloud_path, cloud_path2, angles_path;
+      std::string transform_path, cloud_path, cloud_path2, angles_path,RGB_img_name,Depth_img_name;
       boost::filesystem::path base_path = dirItr->path().stem();
       boost::filesystem::path full_path = output_dir / base_path;
       transform_path = full_path.native() + "_" + std::to_string(index) + ".eig";
@@ -544,6 +574,7 @@ size_t index_prev = index ;
       //save RGB Image (png)
       vtkSmartPointer<vtkTIFFWriter> pngwriter = vtkSmartPointer<vtkTIFFWriter>::New();  
       cloud_path = full_path.native() + "_" + std::to_string(index) + ".tif";
+      RGB_img_name = base_path.native() + "_" + std::to_string(index) + ".tif";
       pngwriter->SetFileName(cloud_path.c_str());
       pngwriter->SetInputConnection(Imgwindows[ii]->GetOutputPort());
       pngwriter->Write();
@@ -561,15 +592,17 @@ size_t index_prev = index ;
       scale->SetScale(65535);
       //scale->SetScale(255);
       cloud_path2 = full_path.native() + "_depth_" + std::to_string(index) + ".png";
+      Depth_img_name = base_path.native() + "_depth_" + std::to_string(index) + ".png";
       vtkSmartPointer<vtkPNGWriter> imageWriter = vtkSmartPointer<vtkPNGWriter>::New();
+
       imageWriter->SetFileName(cloud_path2.c_str());
       imageWriter->SetInputConnection(scale->GetOutputPort());
       imageWriter->Write();
 
       
-      fs1 << cloud_path << " " << cloud_path2 << " " << yaw << " " << index << "\n"; 
+      fs1 << cloud_path << " " << cloud_path2 << " " << yaw << " " << objectype << " " << index << "\n"; 
 
-      
+      fs2 << RGB_img_name << " " << Depth_img_name << " " << yaw << " "<< objectype << " " << index << "\n";       
       
       //stuff on depth conversion
       //http://sjbaker.org/steve/omniv/love_your_z_buffer.html
@@ -579,16 +612,6 @@ size_t index_prev = index ;
       //https://www.opengl.org/discussion_boards/showthread.php/154989-How-to-get-the-real-depth-value
  
 
-/*      // Save r,p,y
-      angles_path = full_path.native() + "_" + std::to_string(ii) + ".txt";
-      // Eigen::Matrix<float,3,1> euler = poses[ii].eulerAngles(2,1,0);
-      float yaw, pitch, roll;
-      Eigen::Affine3f affine_mat(poses[ii]);
-      pcl::getEulerAngles(affine_mat, roll, pitch, yaw);
-      // yaw = euler(0,0); pitch = euler(1,0); roll = euler(2,0);
-      fs.open(angles_path.c_str());
-      fs << roll << " " << pitch << " " << yaw << "\n";
-      fs.close ();*/
     }
     index = index + 1;
     cout << "Number of views: " << index << "\n";
@@ -597,11 +620,11 @@ size_t index_prev = index ;
   }
 
 }
-
+  objectype = objectype +1;
 }
 
-    fs1.close ();
-    //fs2.close ();
+        fs1.close ();
+    fs2.close ();
 
   return true;
 }

@@ -32,6 +32,7 @@
 #define PI 3.14159265
 
 
+
 void
 RenderViewsCylinder::generateViews() {
   //center object
@@ -126,7 +127,7 @@ else
   }*/
 
   
-
+  //NumViews_ = 720;
   //my version of camera positions to generate about a cirle
   std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f> > cam_positions;
   std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f> > light_positions;
@@ -143,9 +144,9 @@ else
   float light_offset = 0;
   float light_radius = 3;
   float light_height = .1;
-  for (int i = 0; i < NumViews_; i = i + (360/NumViews_))
+  for (int i = 0; i < NumViews_; i = i + 1)
   {
-    yaw[i] = i*PI/ 180.0;
+    yaw[i] = i*2*PI/ NumViews_;
     offset = 0; // caliberate this to zero offset the yaw
     xcod = radius_circle_*cos(yaw[i] + offset);
     ycod = radius_circle_*sin(yaw[i] + offset);
@@ -158,7 +159,6 @@ else
   }
 
 
-  
   double cam_pos[3];
   double light_pos[3];
 
@@ -214,11 +214,11 @@ else
     vtkSmartPointer<vtkActor> actor_view = vtkSmartPointer<vtkActor>::New ();
     actor_view->SetMapper (mapper);
     actor_view->SetTexture(texture);
-    renderer->AddLight(light);
+    //renderer->AddLight(light);
     renderer->SetActiveCamera (cam_tmp);
     renderer->AddActor (actor_view);
     renderer->Modified ();
-    renderer->ResetCameraClippingRange ();
+    //renderer->ResetCameraClippingRange ();
     render_win->Render ();
 
     //Depth window handles.
