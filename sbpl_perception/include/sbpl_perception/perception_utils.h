@@ -74,7 +74,7 @@ namespace perception_utils
 
   void DisplayPlanarRegions(pcl::visualization::PCLVisualizer& viewer, std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>> &regions);
 
-void GetRangeImageFromCloud(PointCloudPtr cloud, pcl::visualization::PCLVisualizer& viewer, pcl::RangeImagePlanar* range_image);
+  void GetRangeImageFromCloud(PointCloudPtr cloud, pcl::visualization::PCLVisualizer& viewer, pcl::RangeImagePlanar* range_image);
 } /** perception_utils **/
 
 #endif /** _SBPL_PERCEPTION_PERCEPTION_UTILS **/

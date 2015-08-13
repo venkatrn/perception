@@ -73,9 +73,6 @@ EnvObjectRecognition::EnvObjectRecognition() :
   env_params_.num_models = 0;
   env_params_.num_objects = 0;
 
-  env_params_.observed_max_range = 20000;
-  env_params_.observed_min_range = 0;
-
   Pose fake_pose(0.0, 0.0, 0.0);
   goal_state_.object_ids.push_back(
     -1); // This state should never be generated during the search
@@ -256,34 +253,6 @@ bool EnvObjectRecognition::StatesEqual(const State &s1, const State &s2) {
     }
 
     if (!(s1.object_poses[ii].Equals(s2.object_poses[idx], symmetric))) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-bool EnvObjectRecognition::StatesEqualOrdered(const State &s1,
-                                              const State &s2) {
-  if (s1.object_ids.size() != s2.object_ids.size()) {
-    return false;
-  }
-
-  for (size_t ii = 0; ii < s1.object_ids.size(); ++ii) {
-
-    if (s2.object_ids[ii] != s1.object_ids[ii]) {
-      return false;
-    }
-
-
-    int model_id = s1.object_ids[ii];
-    bool symmetric = false;
-
-    if (model_id != -1) {
-      symmetric = obj_models_[model_id].symmetric();
-    }
-
-    if (!(s1.object_poses[ii].Equals(s2.object_poses[ii], symmetric))) {
       return false;
     }
   }
@@ -1210,11 +1179,6 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     }
   }
 
-  env_params_.observed_max_range = observed_max_depth;
-  env_params_.observed_max_range = static_cast<unsigned short>(20000);
-  env_params_.observed_min_range = observed_min_depth;
-
-
   *observed_cloud_  = *observed_organized_cloud;
   *observed_organized_cloud_  = *observed_organized_cloud;
   downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
@@ -1283,15 +1247,6 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
       observed_max_depth = observed_depth_image_[ii];
     }
   }
-
-  env_params_.observed_max_range = observed_max_depth;
-  // env_params_.observed_max_range = std::max(static_cast<unsigned short>(15000),
-  //                                           observed_max_depth);
-  // env_params_.observed_max_range = static_cast<unsigned short>(double(observed_max_depth + observed_min_depth)/2.0);
-
-  env_params_.observed_max_range = static_cast<unsigned short>(20000);
-  env_params_.observed_min_range = observed_min_depth;
-
 
   kinect_simulator_->rl_->getOrganizedPointCloud (observed_organized_cloud_,
                                                   true,

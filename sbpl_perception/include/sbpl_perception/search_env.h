@@ -61,8 +61,6 @@ struct EnvParams {
   int goal_state_id, start_state_id;
   int num_objects; // This is the number of objects on the table
   int num_models; // This is the number of models available (can be more or less than number of objects on table
-  unsigned short observed_max_range; // Max range in the observed point cloud
-  unsigned short observed_min_range; // Min range in the observed point cloud
 };
 
 struct Pose {
@@ -178,11 +176,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   }
 
   bool StatesEqual(const State &s1,
-                   const State
-                   &s2); // Two states are equal if they have the same set of objects in the same poses
-  bool StatesEqualOrdered(const State &s1,
-                          const State
-                          &s2); // Two states are 'ordered' equal if they have the same set of objects in the same poses, and placed in the same sequential order
+                   const State &s2); // Two states are equal if they have the same set of objects in the same poses
 
   /**@brief State to State ID mapping**/
   int StateToStateID(State &s);
