@@ -5,6 +5,10 @@
 
 #include <cmath>
 
+namespace {
+constexpr double kFloatingPointTolerance = 1e-5;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // ContPose
 ///////////////////////////////////////////////////////////////////////////////
@@ -20,7 +24,21 @@ ContPose::ContPose(const DiscPose &disc_pose) {
   yaw_ = globals::DiscYawToContYaw(disc_pose.yaw());
 };
 
+bool ContPose::operator==(const ContPose &other) const {
+  return fabs(x_ - other.x()) < kFloatingPointTolerance &&
+         fabs(y_ - other.y()) < kFloatingPointTolerance &&
+         fabs(yaw_ - other.yaw()) < kFloatingPointTolerance;
+}
 
+bool ContPose::operator!=(const ContPose &other) const {
+  return !(*this == other);
+}
+
+std::ostream &operator<< (std::ostream &stream, const ContPose &cont_pose) {
+  stream << "(" << cont_pose.x() << ", " << cont_pose.y() << ", " <<
+         cont_pose.yaw() << ")";
+  return stream;
+}
 ///////////////////////////////////////////////////////////////////////////////
 // DiscPose
 ///////////////////////////////////////////////////////////////////////////////
@@ -51,11 +69,17 @@ bool DiscPose::EqualsPosition(const DiscPose &other) const {
          y_ == other.y();
 }
 
+std::ostream &operator<< (std::ostream &stream, const DiscPose &disc_pose) {
+  stream << "(" << disc_pose.x() << ", " << disc_pose.y() << ", " <<
+         disc_pose.yaw() << ")";
+  return stream;
+}
 ///////////////////////////////////////////////////////////////////////////////
 // ObjectState
 ///////////////////////////////////////////////////////////////////////////////
 
-ObjectState::ObjectState() : id_(-1), symmetric_(false), cont_pose_(0.0, 0.0, 0.0), disc_pose_(0, 0, 0) {}
+ObjectState::ObjectState() : id_(-1), symmetric_(false), cont_pose_(0.0, 0.0,
+                                                                      0.0), disc_pose_(0, 0, 0) {}
 
 ObjectState::ObjectState(int id, bool symmetric,
                          const ContPose &cont_pose) : id_(id), symmetric_(symmetric),
@@ -85,7 +109,18 @@ bool ObjectState::operator==(const ObjectState &other) const {
   return true;
 }
 
+std::ostream &operator<< (std::ostream &stream,
+                          const ObjectState &object_state) {
+  stream << "Object ID: " << object_state.id() << std::endl
+         << '\t' << "Symmetric: " << std::boolalpha << object_state.symmetric() <<
+         std::endl
+         << '\t' << "Disc Pose: " << object_state.disc_pose() << std::endl
+         << '\t' << "Cont Pose: " << object_state.cont_pose();
+  return stream;
+}
+
 bool ObjectState::operator!=(const ObjectState &other) const {
   return !(*this == other);
 }
+
 

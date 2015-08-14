@@ -17,3 +17,7 @@ bugs.txt
 *.h5
 *.idx
 *.tbz
+
+*.json
+*ycm_extra_conf*
+tags

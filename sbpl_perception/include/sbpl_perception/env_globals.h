@@ -6,12 +6,12 @@
 #include <cmath>
 
 namespace globals {
-static double x_res = 0.0;
-static double y_res = 0.0;
-static int theta_res = 0.0;
-static int num_thetas = 0;
-static double x_origin = 0.0;
-static double y_origin = 0.0;
+double x_res = 0.0;
+double y_res = 0.0;
+double theta_res = 0;
+int num_thetas = 0;
+double x_origin = 0.0;
+double y_origin = 0.0;
 
 inline int NormalizeDiscreteTheta(int theta) {
   assert(num_thetas != 0);

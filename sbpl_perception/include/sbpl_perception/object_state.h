@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 class ContPose;
 class DiscPose;
 class ObjectState;
@@ -19,6 +21,9 @@ class ContPose {
   double yaw() const {
     return yaw_;
   }
+
+  bool operator==(const ContPose &other) const;
+  bool operator!=(const ContPose &other) const;
 
  private:
   double x_;
@@ -74,3 +79,6 @@ class ObjectState {
   DiscPose disc_pose_;
 };
 
+std::ostream& operator<< (std::ostream& stream, const DiscPose& disc_pose);
+std::ostream& operator<< (std::ostream& stream, const ContPose& cont_pose);
+std::ostream& operator<< (std::ostream& stream, const ObjectState& object_state);

@@ -8,8 +8,10 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
 #set(ROS_BUILD_TYPE RelWithDebInfo)
-set(ROS_BUILD_TYPE Debug)
+# set(ROS_BUILD_TYPE Debug)
+set(ROS_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS "-std=c++0x")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
 
 
@@ -84,3 +86,6 @@ target_link_libraries(vfh_generate_views libvtkCommon.so libvtkFiltering.so libv
 # target_link_libraries(search_env ${PROJECT_NAME})
 # target_link_libraries(search_env libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
 #   libvtkGraphics.so)
+
+rosbuild_add_gtest(tests/states_test tests/states_test.cpp)
+target_link_libraries(tests/states_test ${PROJECT_NAME})
