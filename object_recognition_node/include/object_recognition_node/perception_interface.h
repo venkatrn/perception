@@ -1,12 +1,10 @@
+#pragma once
 /**
  * @file perception_interface.h
  * @brief Interface for sbpl perception
  * @author Venkatraman Narayanan
  * Carnegie Mellon University, 2014
  */
-
-#ifndef _SBPL_PERCEPTION_PERCEPTION_INTERFACE_H_
-#define _SBPL_PERCEPTION_PERCEPTION_INTERFACE_H_
 
 #include <sbpl_perception/search_env.h>
 
@@ -15,7 +13,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_listener.h>
 
-#include <sbpl_perception/pcl_typedefs.h>
+#include <perception_utils/pcl_typedefs.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/range_image_visualizer.h>
@@ -69,5 +67,3 @@ class PerceptionInterface
 
     bool IsPointInWorkspace(PointT p);
 };
-
-#endif /** _SBPL_PERCEPTION_PERCEPTION_INTERFACE **/

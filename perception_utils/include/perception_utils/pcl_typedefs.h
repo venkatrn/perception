@@ -1,12 +1,10 @@
-#ifndef _LTM_PERCEPTION_PCL_TYPEDEFS_H
-#define _LTM_PERCEPTION_PCL_TYPEDEFS_H
+#pragma once
 
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/search/kdtree.h>
 
 /*  Define some custom types to make the rest of our code easier to read */
-
 // Define "PointCloud" to be a pcl::PointCloud of pcl::PointXYZRGB points
 //typedef pcl::PointXYZ PointT;
 typedef pcl::PointXYZRGB PointT;
@@ -43,4 +41,3 @@ typedef pcl::PointCloud<GlobalDescriptorT>::ConstPtr GlobalDescriptorsConstPtr;
 typedef pcl::search::KdTree<PointT> KdTree;
 typedef pcl::search::KdTree<PointT>::Ptr KdTreePtr;
 
-#endif /** _LTM_PERCEPTION_PCL_TYPEDEFS **/

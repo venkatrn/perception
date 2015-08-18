@@ -1,3 +1,5 @@
+#pragma once
+
 /**
  * @file search_env.h
  * @brief Object recognition search environment
@@ -5,16 +7,14 @@
  * Carnegie Mellon University, 2015
  */
 
-#ifndef _SBPL_PERCEPTION_SEARCH_ENV_H_
-#define _SBPL_PERCEPTION_SEARCH_ENV_H_
-
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/object_model.h>
-#include <sbpl_perception/pcl_typedefs.h>
-#include <sbpl_perception/vfh_pose_estimation.h>
+
+#include <perception_utils/pcl_typedefs.h>
+#include <perception_utils/vfh/vfh_pose_estimator.h>
 
 #include <sbpl_utils/hash_manager/hash_manager.h>
 
@@ -68,8 +68,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   ~EnvObjectRecognition();
   void LoadObjFiles(const std::vector<std::string> &model_files,
                     const std::vector<bool> model_symmetric);
-  void SetScene();
-  void WriteSimOutput(std::string fname_root);
   void PrintState(int state_id, std::string fname);
   void PrintState(GraphState s, std::string fname);
   void PrintImage(std::string fname,
@@ -81,11 +79,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   const float *GetDepthImage(GraphState s, std::vector<unsigned short> *depth_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
-
-  void GenerateHalo(
-    std::vector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>
-    &poses, Eigen::Vector3d focus_center, double halo_r, double halo_dz,
-    int n_poses);
 
   /** Methods to set the observed depth image**/
   void SetObservation(std::vector<int> object_ids,
@@ -126,10 +119,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   int GetStartStateID() {
     return env_params_.start_state_id;  // Goal state has unique id
   }
-
-  bool StatesEqual(const GraphState &s1,
-                   const GraphState &s2); // Two states are equal if they have the same set of objects in the same poses
-
 
   void GetSuccs(int source_state_id, std::vector<int> *succ_ids,
                 std::vector<int> *costs);
@@ -172,7 +161,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
   // of the last added object is adjusted using ICP and the computed state properties.
-  int GetTrueCost(const GraphState source_state, const GraphState child_state,
+  int GetTrueCost(const GraphState &source_state, const GraphState &child_state, const std::vector<unsigned short> &source_depth_image,
                   int parent_id, int child_id, GraphState *adjusted_child_state,
                   StateProperties *state_properties);
 
@@ -230,7 +219,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   sbpl_utils::HashManager<GraphState> hash_manager_;
 
   /**@brief Mapping from State to State ID**/
-  std::unordered_map<int, int> HeuristicMap;
+  std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
   std::unordered_map<int, std::vector<int>> succ_cache;
   std::unordered_map<int, std::vector<int>> cost_cache;
   std::unordered_map<int, unsigned short> minz_map_;
@@ -258,22 +247,3 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<double> sorted_greedy_icp_scores_;
 
 };
-
-#endif /** _SBPL_PERCEPTION_SEARCH_ENV_H **/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -6,9 +6,8 @@
  * Carnegie Mellon University, 2014
  */
 
-#include <sbpl_perception/perception_interface.h>
-#include <sbpl_perception/perception_utils.h>
-//#include <ltm_msgs/PolygonArrayStamped.h>
+#include <object_recognition_node/perception_interface.h>
+#include <perception_utils/perception_utils.h>
 
 #include <pcl/conversions.h>
 #include <pcl/filters/filter.h>

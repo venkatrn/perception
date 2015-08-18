@@ -6,8 +6,7 @@
  */
 
 #include <sbpl_perception/search_env.h>
-#include <sbpl_perception/perception_interface.h>
-#include <sbpl/headers.h>
+#include <object_recognition_node/perception_interface.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>

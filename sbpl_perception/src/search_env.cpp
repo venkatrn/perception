@@ -7,7 +7,7 @@
 
 #include <sbpl_perception/search_env.h>
 
-#include <sbpl_perception/perception_utils.h>
+#include <perception_utils/perception_utils.h>
 #include <sbpl_perception/discretization_manager.h>
 
 #include <ros/ros.h>
@@ -184,24 +184,12 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id, ContPose p) {
   vector<int> indices;
   vector<float> sqr_dists;
   PointT point;
-  // Eigen::Vector3d vec;
-  // vec << p.x, p.y, env_params_.table_height;
-  // Eigen::Vector3d camera_vec;
-  // camera_vec = env_params_.camera_pose.rotation() * vec + env_params_.camera_pose.translation();
-  // point.x = camera_vec[0];
-  // point.y = camera_vec[1];
-  // point.z = camera_vec[2];
-  // printf("P: %f %f %f\n", point.x, point.y, point.z);
 
   point.x = p.x();
   point.y = p.y();
   // point.z = env_params_.table_height;
   point.z = obj_models_[model_id].max_z() / 2.0 + env_params_.table_height;
 
-  // int num_neighbors_found = knn->radiusSearch(point, env_params_.res / 2,
-  //                                             indices,
-  //                                             sqr_dists, 1); //0.2
-  // double obj_rad = 0.15; //0.15
   double search_rad = obj_models_[model_id].GetCircumscribedRadius() + env_params_.res / 2.0;
   int num_neighbors_found = knn->radiusSearch(point, search_rad,
                                               indices,
@@ -213,7 +201,6 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id, ContPose p) {
 
   // TODO: revisit this and accomodate for collision model
   double rad_1, rad_2;
-  // rad_1 = obj_models_[model_id].GetCircumscribedRadius();
   rad_1 = obj_models_[model_id].GetInscribedRadius();
 
   for (size_t ii = 0; ii < s.NumObjects(); ++ii) {
@@ -221,12 +208,6 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id, ContPose p) {
     int obj_id = object_state.id();
     ContPose obj_pose = object_state.cont_pose();
 
-    // if (fabs(p.x - obj_pose.x) < obj_rad &&
-    //     fabs(p.y - obj_pose.y) < obj_rad) {
-    //   return false;
-    // }
-
-    // rad_2 = obj_models_[obj_id].GetCircumscribedRadius();
     rad_2 = obj_models_[obj_id].GetInscribedRadius();
 
     if ((p.x() - obj_pose.x()) * (p.x() - obj_pose.x()) + (p.y() - obj_pose.y()) *
@@ -244,7 +225,6 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   costs->clear();
 
   if (source_state_id == env_params_.goal_state_id) {
-    HeuristicMap[source_state_id] = static_cast<int>(0.0);
     return;
   }
 
@@ -274,7 +254,6 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     int succ_id = hash_manager_.GetStateID(goal_state_);
     succ_ids->push_back(succ_id);
     costs->push_back(0);
-    HeuristicMap[succ_id] = static_cast<int>(0.0);
     return;
   }
 
@@ -310,7 +289,6 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
           candidate_succ_ids.push_back(succ_id);
           candidate_succs.push_back(s);
-          HeuristicMap[succ_id] = static_cast<int>(0.0);
 
           // If symmetric object, don't iterate over all thetas
           if (obj_models_[ii].symmetric()) {
@@ -321,11 +299,14 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     }
   }
 
+  vector<unsigned short> source_depth_image;
+  const float *depth_buffer = GetDepthImage(source_state, &source_depth_image);
+
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     GraphState adjusted_child_state;
     StateProperties child_properties;
-    int cost = GetTrueCost(source_state, candidate_succs[ii], source_state_id,
+    int cost = GetTrueCost(source_state, candidate_succs[ii], source_depth_image, source_state_id,
                            candidate_succ_ids[ii],
                            &adjusted_child_state, &child_properties);
 
@@ -379,26 +360,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
 
 
 int EnvObjectRecognition::GetGoalHeuristic(int state_id) {
-
-  if (state_id == env_params_.goal_state_id) {
-    return 0;
-  }
-
-  if (state_id == env_params_.start_state_id) {
-    return 0;
-  }
-
-  auto it = HeuristicMap.find(state_id);
-
-  if (it == HeuristicMap.end()) {
-    ROS_ERROR("State %d was not found in heuristic map", state_id);
-    return 0;
-  }
-
-  int depth_heur;
-  GraphState s = hash_manager_.GetState(state_id);
-  depth_heur = (env_params_.num_objects - s.NumObjects());
-  return depth_heur;
+  return 0;
 }
 
 int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
@@ -417,7 +379,6 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   case 0:
     return 0;
 
-  // return depth_first_heur;
   case 1:
     return depth_first_heur;
 
@@ -429,8 +390,8 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   }
 }
 
-int EnvObjectRecognition::GetTrueCost(const GraphState source_state,
-                                      const GraphState child_state, int parent_id, int child_id,
+int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
+                                      const GraphState &child_state, const vector<unsigned short> &source_depth_image, int parent_id, int child_id,
                                       GraphState *adjusted_child_state, StateProperties *child_properties) {
 
   assert(child_state.NumObjects() > 0);
@@ -439,8 +400,6 @@ int EnvObjectRecognition::GetTrueCost(const GraphState source_state,
   child_properties->last_max_depth = 20000;
   child_properties->last_min_depth = 0;
 
-  vector<unsigned short> source_depth_image;
-  const float *depth_buffer = GetDepthImage(source_state, &source_depth_image);
   const int num_pixels = env_params_.img_width * env_params_.img_height;
 
   const auto &last_object = child_state.object_states().back();
@@ -566,7 +525,6 @@ int EnvObjectRecognition::GetTrueCost(const GraphState source_state,
   //   writer.writeBinary (ss1.str()  , *cloud_in);
   //   writer.writeBinary (ss2.str()  , *cloud_out);
   // }
-
 
   return total_cost;
 }
@@ -705,7 +663,6 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     vector<float> sqr_dists;
     PointT point;
 
-
     int u = ii / env_params_.img_width;
     int v = ii % env_params_.img_width;
     // point = observed_organized_cloud_->at(v, u);
@@ -717,7 +674,6 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     point.x = point_eig[0];
     point.y = point_eig[1];
     point.z = point_eig[2];
-
 
     const double kSensorResolution = 0.01 / 2;
     const double kSensorResolutionSqr = kSensorResolution * kSensorResolution;
@@ -944,57 +900,6 @@ void EnvObjectRecognition::PreprocessModel(const pcl::PolygonMesh::Ptr mesh_in,
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
   return;
-}
-
-void EnvObjectRecognition::SetScene() {
-  if (scene_ == NULL) {
-    ROS_ERROR("Scene is not set");
-  }
-
-  for (int ii = 0; ii < env_params_.num_models; ++ii) {
-    ObjectModel obj_model = obj_models_[ii];
-    pcl::PolygonMesh::Ptr cloud (new pcl::PolygonMesh (
-                                   obj_model.mesh()));
-
-    PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
-                                                           GL_POLYGON, cloud));
-    scene_->add (model);
-  }
-}
-
-
-// A 'halo' camera - a circular ring of poses all pointing at a center point
-// @param: focus_center: the center points
-// @param: halo_r: radius of the ring
-// @param: halo_dz: elevation of the camera above/below focus_center's z value
-// @param: n_poses: number of generated poses
-void EnvObjectRecognition::GenerateHalo(
-  std::vector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>
-  &poses, Eigen::Vector3d focus_center, double halo_r, double halo_dz,
-  int n_poses) {
-
-  for (double t = 0; t < (2 * M_PI); t = t + (2 * M_PI) / ((double) n_poses) ) {
-    double x = halo_r * cos(t);
-    double y = halo_r * sin(t);
-    double z = halo_dz;
-    double pitch = atan2( halo_dz, halo_r);
-    double yaw = atan2(-y, -x);
-
-    Eigen::Isometry3d pose;
-    pose.setIdentity();
-    Eigen::Matrix3d m;
-    m = AngleAxisd(yaw, Eigen::Vector3d::UnitZ())
-        * AngleAxisd(pitch, Eigen::Vector3d::UnitY())
-        * AngleAxisd(0, Eigen::Vector3d::UnitZ());
-
-    pose *= m;
-    Vector3d v(x, y, z);
-    v += focus_center;
-    pose.translation() = v;
-    poses.push_back(pose);
-  }
-
-  return ;
 }
 
 void EnvObjectRecognition::SetCameraPose(Eigen::Isometry3d camera_pose) {
@@ -1279,59 +1184,6 @@ double EnvObjectRecognition::ComputeScore(const PointCloudPtr cloud) {
   */
 
   return score;
-}
-
-void EnvObjectRecognition::WriteSimOutput(string fname_root) {
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc_out (new
-                                                 pcl::PointCloud<pcl::PointXYZRGB>);
-  bool write_cloud = true;
-  bool demo_other_stuff = true;
-
-  if (write_cloud) {
-    // Read Color Buffer from the GPU before creating PointCloud:
-    // By default the buffers are not read back from the GPU
-    kinect_simulator_->rl_->getColorBuffer ();
-    kinect_simulator_->rl_->getDepthBuffer ();
-    // Add noise directly to the CPU depth buffer
-    kinect_simulator_->rl_->addNoise ();
-
-    // Optional argument to save point cloud in global frame:
-    // Save camera relative:
-    //kinect_simulator_->rl_->getPointCloud(pc_out);
-    // Save in global frame - applying the camera frame:
-    //kinect_simulator_->rl_->getPointCloud(pc_out,true,kinect_simulator_->camera_->getPose());
-    // Save in local frame
-    kinect_simulator_->rl_->getPointCloud (pc_out, false,
-                                           kinect_simulator_->camera_->getPose ());
-    // TODO: what to do when there are more than one simulated view?
-
-    if (pc_out->points.size() > 0) {
-      //std::cout << pc_out->points.size() << " points written to file\n";
-
-      pcl::PCDWriter writer;
-      //writer.write ( string (fname_root + ".pcd"), *pc_out,	false);  /// ASCII
-      writer.writeBinary (  string (fname_root + ".pcd")  , *pc_out);
-      //cout << "finished writing file\n";
-    } else {
-      std::cout << pc_out->points.size() << " points in cloud, not written\n";
-    }
-  }
-
-  if (demo_other_stuff && write_cloud) {
-    //kinect_simulator_->write_score_image (kinect_simulator_->rl_->getScoreBuffer (),
-    //   		   string (fname_root + "_score.png") );
-    kinect_simulator_->write_rgb_image (kinect_simulator_->rl_->getColorBuffer (),
-                                        string (fname_root + "_rgb.png") );
-    kinect_simulator_->write_depth_image (
-      kinect_simulator_->rl_->getDepthBuffer (),
-      string (fname_root + "_depth.png") );
-    //kinect_simulator_->write_depth_image_uint (kinect_simulator_->rl_->getDepthBuffer (),
-    //                                string (fname_root + "_depth_uint.png") );
-
-    // Demo interacton with RangeImage:
-    pcl::RangeImagePlanar rangeImage;
-    kinect_simulator_->rl_->getRangeImagePlanar (rangeImage);
-  }
 }
 
 int EnvObjectRecognition::GetICPHeuristic(GraphState s) {

@@ -1,7 +1,7 @@
 #include <boost/filesystem.hpp>
 #include <pcl/console/parse.h>
 #include <iostream>
-#include <sbpl_perception/vfh_pose_estimation.h>
+#include <perception_utils/vfh/vfh_pose_estimator.h>
 
 /** \brief load object view points from input directory, generate
     \param -d the directory containing point clouds and corresponding angle data files 

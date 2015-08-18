@@ -6,7 +6,7 @@
  */
 
 #include <sbpl_perception/search_env.h>
-#include <sbpl_perception/perception_utils.h>
+#include <perception_utils/perception_utils.h>
 #include <sbpl/headers.h>
 
 #include <ros/ros.h>

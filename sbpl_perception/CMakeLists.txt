@@ -42,47 +42,24 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 #common commands for building c++ executables and libraries
 rosbuild_add_library(${PROJECT_NAME}
-  src/vfh_pose_estimation.cpp
   src/discretization_manager.cpp
   src/graph_state.cpp
   src/object_state.cpp
   src/object_model.cpp
-  src/perception_interface.cpp
-  src/perception_utils.cpp
   src/search_env.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
 #rosbuild_add_boost_directories()
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 
-rosbuild_add_executable(object_recognition_node src/object_recognition_node.cpp)
-target_link_libraries(object_recognition_node ${PROJECT_NAME})
-target_link_libraries(object_recognition_node libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
+# rosbuild_add_executable(experiments src/experiments/experiments.cpp)
+# target_link_libraries(experiments ${PROJECT_NAME})
+# target_link_libraries(experiments libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+#   libvtkGraphics.so)
 
 rosbuild_add_executable(sim_test src/experiments/sim_test.cpp)
 target_link_libraries(sim_test ${PROJECT_NAME})
 target_link_libraries(sim_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
-
-rosbuild_add_executable(experiments src/experiments/experiments.cpp)
-target_link_libraries(experiments ${PROJECT_NAME})
-target_link_libraries(experiments libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
-
-# rosbuild_add_executable(vfh_train src/vfh_train.cpp)
-# target_link_libraries(vfh_train ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
-# target_link_libraries(vfh_train libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-#   libvtkGraphics.so)
-#
-# rosbuild_add_executable(vfh_test src/vfh_test.cpp)
-# target_link_libraries(vfh_test ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
-# target_link_libraries(vfh_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-#   libvtkGraphics.so)
-#
-# rosbuild_add_executable(vfh_generate_views src/vfh_generate_views.cpp)
-# target_link_libraries(vfh_generate_views ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
-# target_link_libraries(vfh_generate_views libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-#   libvtkGraphics.so)
 
 rosbuild_add_gtest(tests/states_test tests/states_test.cpp)
 target_link_libraries(tests/states_test ${PROJECT_NAME})

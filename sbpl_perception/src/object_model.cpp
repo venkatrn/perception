@@ -6,8 +6,9 @@
  */
 
 #include <sbpl_perception/object_model.h>
-#include <sbpl_perception/pcl_typedefs.h>
-#include <sbpl_perception/pcl_conversions.h>
+
+#include <perception_utils/pcl_typedefs.h>
+#include <perception_utils/pcl_conversions.h>
 
 #include <pcl/common/common.h>
 

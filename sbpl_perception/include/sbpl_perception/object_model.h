@@ -1,12 +1,11 @@
+#pragma once
+
 /**
  * @file object_model.h
  * @brief Object model
  * @author Venkatraman Narayanan
  * Carnegie Mellon University, 2015
  */
-
-#ifndef _SBPL_PERCEPTION_OBJECT_MODEL_H_
-#define _SBPL_PERCEPTION_OBJECT_MODEL_H_
 
 #include <pcl/PolygonMesh.h>
 
@@ -48,5 +47,3 @@ class ObjectModel {
   double max_x_, max_y_, max_z_;
   void SetObjectProperties();
 };
-
-#endif /** _SBPL_PERCEPTION_OBJECT_MODEL_H_ **/

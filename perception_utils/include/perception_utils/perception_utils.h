@@ -1,3 +1,5 @@
+#pragma once
+
 /**
  * @file perception_utils.h
  * @brief Various perception utilities
@@ -5,15 +7,11 @@
  * Carnegie Mellon University, 2014
  */
 
-#ifndef _SBPL_PERCEPTION_PERCEPTION_UTILS_H_
-#define _SBPL_PERCEPTION_PERCEPTION_UTILS_H_
-
-#include <sbpl_perception/pcl_typedefs.h>
+#include <perception_utils/pcl_typedefs.h>
 #include <pcl/ModelCoefficients.h>
-#include <pcl/visualization/pcl_visualizer.h>
-#include <pcl/segmentation/organized_multi_plane_segmentation.h>
 #include <pcl/range_image/range_image_planar.h>
-
+#include <pcl/segmentation/organized_multi_plane_segmentation.h>
+#include <pcl/visualization/pcl_visualizer.h>
 
 namespace perception_utils
 {
@@ -76,5 +74,3 @@ namespace perception_utils
 
   void GetRangeImageFromCloud(PointCloudPtr cloud, pcl::visualization::PCLVisualizer& viewer, pcl::RangeImagePlanar* range_image);
 } /** perception_utils **/
-
-#endif /** _SBPL_PERCEPTION_PERCEPTION_UTILS **/

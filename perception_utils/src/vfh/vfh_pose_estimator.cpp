@@ -1,6 +1,7 @@
-#include <sbpl_perception/vfh_pose_estimation.h>
-#include <sbpl_perception/pcl_typedefs.h>
-#include <sbpl_perception/perception_utils.h>
+#include <perception_utils/vfh/vfh_pose_estimator.h>
+
+#include <perception_utils/perception_utils.h>
+#include <perception_utils/pcl_typedefs.h>
 
 #include <pcl/io/vtk_lib_io.h>
 #include <vtkPolyDataMapper.h>

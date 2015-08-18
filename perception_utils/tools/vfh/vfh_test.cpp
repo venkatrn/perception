@@ -4,7 +4,7 @@
 #include <pcl/console/print.h>
 #include <boost/filesystem.hpp>
 #include <iostream>
-#include <sbpl_perception/vfh_pose_estimation.h>
+#include <perception_utils/vfh/vfh_pose_estimator.h>
 
 /** \brief Returns closest poses of of objects in training data to the query object
     \param -q the path to the input point cloud

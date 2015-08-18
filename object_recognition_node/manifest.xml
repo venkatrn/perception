@@ -1,0 +1,18 @@
+<package>
+  <description brief="object_recognition_node">
+
+     object_recognition_node
+
+  </description>
+  <author>Venkatraman Narayanan</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/object_recognition_node</url>
+  
+  <depend package="sensor_msgs"/>
+  <depend package="perception_utils"/>
+  <depend package="sbpl_perception"/>
+
+</package>
+
+
