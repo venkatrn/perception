@@ -83,9 +83,9 @@ int main(int argc, char **argv) {
   uniform_real_distribution<double> theta_distribution (0, 2 * M_PI);
 
   vector<int> model_ids;
-  vector<Pose> poses;
+  vector<ContPose> poses;
 
-  // Pose p(0.1,0,M_PI/3);
+  // ContPose p(0.1,0,M_PI/3);
 
   int num_objects = model_files.size();
   int ii = 0;
@@ -94,8 +94,8 @@ int main(int argc, char **argv) {
   //   double x = x_distribution(generator);
   //   double y = y_distribution(generator);
   //   double theta = theta_distribution(generator);
-  //   ROS_INFO("Object %d: Pose: %f %f %f", ii, x, y, theta);
-  //   Pose p(x, y, theta);
+  //   ROS_INFO("Object %d: ContPose: %f %f %f", ii, x, y, theta);
+  //   ContPose p(x, y, theta);
   //
   //   // Disallow collisions
   //   bool skip = false;
@@ -120,20 +120,20 @@ int main(int argc, char **argv) {
   //   ii++;
   // }
 
-  // Pose p1( -0.000985, 0.015127, 1.703033);
-  // Pose p2(-0.176384, 0.063400, 1.641349);
-  // Pose p3(-0.338834, -0.292034, 5.908484);
+  // ContPose p1( -0.000985, 0.015127, 1.703033);
+  // ContPose p2(-0.176384, 0.063400, 1.641349);
+  // ContPose p3(-0.338834, -0.292034, 5.908484);
   // poses.push_back(p1); poses.push_back(p2); poses.push_back(p3);
   // model_ids.push_back(0); model_ids.push_back(1); model_ids.push_back(2);
 
   // Occlusion example
 
-  Pose p1(0.296691, 0.110056, 1.369107);
-  Pose p2( 0.209879, -0.171593, 0.210538);
-  Pose p3( 0.414808, -0.174167, 3.746371);
-  // Pose p1(0.296691, 0.110056, 1.869107);
-  // Pose p2( 0.209879, -0.171593, 1.910538);
-  // Pose p3( 0.414808, -0.174167, 3.746371);
+  ContPose p1(0.296691, 0.110056, 1.369107);
+  ContPose p2( 0.209879, -0.171593, 0.210538);
+  ContPose p3( 0.414808, -0.174167, 3.746371);
+  // ContPose p1(0.296691, 0.110056, 1.869107);
+  // ContPose p2( 0.209879, -0.171593, 1.910538);
+  // ContPose p3( 0.414808, -0.174167, 3.746371);
 
   poses.push_back(p1);
   poses.push_back(p2);
@@ -148,17 +148,17 @@ int main(int argc, char **argv) {
   //  -0.134038 -0.246560 4.138588
 
   // Challenging
-  // Pose p1( 0.509746, 0.039520, 0.298403);
-  // Pose p2( 0.550498, -0.348341, 5.665042);
-  // Pose p3( 0.355350, -0.002500, 5.472355);
-  // Pose p4( 0.139923, -0.028259, 3.270873);
-  // Pose p5( -0.137201, -0.057090, 5.188886);
+  // ContPose p1( 0.509746, 0.039520, 0.298403);
+  // ContPose p2( 0.550498, -0.348341, 5.665042);
+  // ContPose p3( 0.355350, -0.002500, 5.472355);
+  // ContPose p4( 0.139923, -0.028259, 3.270873);
+  // ContPose p5( -0.137201, -0.057090, 5.188886);
   // poses.push_back(p1); poses.push_back(p2); poses.push_back(p3); poses.push_back(p4); poses.push_back(p5);
   // model_ids.push_back(0); model_ids.push_back(1); model_ids.push_back(2);model_ids.push_back(3); model_ids.push_back(4);
 
 
-  // Pose p1(0.328387, -0.289632, 0.718626);
-  // Pose p2(0.152180, -0.200678, 3.317210);
+  // ContPose p1(0.328387, -0.289632, 0.718626);
+  // ContPose p2(0.152180, -0.200678, 3.317210);
   //  poses.push_back(p1); poses.push_back(p2);
   // model_ids.push_back(0); model_ids.push_back(1);
 
@@ -215,7 +215,7 @@ int main(int argc, char **argv) {
   replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
   replan_params.planner_type = mha_planner::PlannerType::SMHA;
   replan_params.mha_type =
-    mha_planner::MHAType::PLUS; // PLUS
+    mha_planner::MHAType::FOCAL;
 
   // ReplanParams params(600.0);
   // params.max_time = 600.0;

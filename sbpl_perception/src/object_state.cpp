@@ -1,5 +1,6 @@
-#include <sbpl_perception/env_globals.h>
 #include <sbpl_perception/object_state.h>
+
+#include <sbpl_perception/discretization_manager.h>
 
 #include <angles/angles.h>
 
@@ -19,9 +20,9 @@ ContPose::ContPose(double x, double y, double yaw) : x_(x), y_(y),
   yaw_(angles::normalize_angle_positive(yaw)) {};
 
 ContPose::ContPose(const DiscPose &disc_pose) {
-  x_ = globals::DiscXToContX(disc_pose.x());
-  y_ = globals::DiscYToContY(disc_pose.y());
-  yaw_ = globals::DiscYawToContYaw(disc_pose.yaw());
+  x_ = DiscretizationManager::DiscXToContX(disc_pose.x());
+  y_ = DiscretizationManager::DiscYToContY(disc_pose.y());
+  yaw_ = DiscretizationManager::DiscYawToContYaw(disc_pose.yaw());
 };
 
 bool ContPose::operator==(const ContPose &other) const {
@@ -46,12 +47,12 @@ std::ostream &operator<< (std::ostream &stream, const ContPose &cont_pose) {
 DiscPose::DiscPose() : x_(0), y_(0), yaw_(0) {}
 
 DiscPose::DiscPose(int x, int y, int yaw) : x_(x), y_(y),
-  yaw_(globals::NormalizeDiscreteTheta(yaw)) {};
+  yaw_(DiscretizationManager::NormalizeDiscreteTheta(yaw)) {};
 
 DiscPose::DiscPose(const ContPose &cont_pose) {
-  x_ = globals::ContXToDiscX(cont_pose.x());
-  y_ = globals::ContYToDiscY(cont_pose.y());
-  yaw_ = globals::ContYawToDiscYaw(cont_pose.yaw());
+  x_ = DiscretizationManager::ContXToDiscX(cont_pose.x());
+  y_ = DiscretizationManager::ContYToDiscY(cont_pose.y());
+  yaw_ = DiscretizationManager::ContYawToDiscYaw(cont_pose.yaw());
 };
 
 bool DiscPose::operator==(const DiscPose &other) const {
@@ -109,6 +110,10 @@ bool ObjectState::operator==(const ObjectState &other) const {
   return true;
 }
 
+bool ObjectState::operator!=(const ObjectState &other) const {
+  return !(*this == other);
+}
+
 std::ostream &operator<< (std::ostream &stream,
                           const ObjectState &object_state) {
   stream << "Object ID: " << object_state.id() << std::endl
@@ -118,9 +123,4 @@ std::ostream &operator<< (std::ostream &stream,
          << '\t' << "Cont Pose: " << object_state.cont_pose();
   return stream;
 }
-
-bool ObjectState::operator!=(const ObjectState &other) const {
-  return !(*this == other);
-}
-
 

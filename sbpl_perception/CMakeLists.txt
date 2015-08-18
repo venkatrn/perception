@@ -7,9 +7,9 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #  Release        : w/o debug symbols, w/ optimization
 #  RelWithDebInfo : w/ debug symbols, w/ optimization
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
-#set(ROS_BUILD_TYPE RelWithDebInfo)
-# set(ROS_BUILD_TYPE Debug)
-set(ROS_BUILD_TYPE Release)
+# set(ROS_BUILD_TYPE RelWithDebInfo)
+set(ROS_BUILD_TYPE Debug)
+# set(ROS_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS "-std=c++0x")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
@@ -43,6 +43,7 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #common commands for building c++ executables and libraries
 rosbuild_add_library(${PROJECT_NAME}
   src/vfh_pose_estimation.cpp
+  src/discretization_manager.cpp
   src/graph_state.cpp
   src/object_state.cpp
   src/object_model.cpp
@@ -68,24 +69,23 @@ target_link_libraries(experiments ${PROJECT_NAME})
 target_link_libraries(experiments libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
 
-rosbuild_add_executable(vfh_train src/vfh_train.cpp)
-target_link_libraries(vfh_train ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
-target_link_libraries(vfh_train libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
-
-rosbuild_add_executable(vfh_test src/vfh_test.cpp)
-target_link_libraries(vfh_test ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
-target_link_libraries(vfh_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
-
-rosbuild_add_executable(vfh_generate_views src/vfh_generate_views.cpp)
-target_link_libraries(vfh_generate_views ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
-target_link_libraries(vfh_generate_views libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
-# rosbuild_add_executable(search_env src/search_env.cpp)
-# target_link_libraries(search_env ${PROJECT_NAME})
-# target_link_libraries(search_env libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+# rosbuild_add_executable(vfh_train src/vfh_train.cpp)
+# target_link_libraries(vfh_train ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
+# target_link_libraries(vfh_train libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+#   libvtkGraphics.so)
+#
+# rosbuild_add_executable(vfh_test src/vfh_test.cpp)
+# target_link_libraries(vfh_test ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
+# target_link_libraries(vfh_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+#   libvtkGraphics.so)
+#
+# rosbuild_add_executable(vfh_generate_views src/vfh_generate_views.cpp)
+# target_link_libraries(vfh_generate_views ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
+# target_link_libraries(vfh_generate_views libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
 #   libvtkGraphics.so)
 
 rosbuild_add_gtest(tests/states_test tests/states_test.cpp)
 target_link_libraries(tests/states_test ${PROJECT_NAME})
+
+rosbuild_add_gtest(tests/hash_manager_test tests/hash_manager_test.cpp)
+target_link_libraries(tests/hash_manager_test ${PROJECT_NAME})

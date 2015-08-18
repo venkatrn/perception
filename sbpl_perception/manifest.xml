@@ -16,6 +16,7 @@
   <depend package="pcl_ros"/>
   <depend package="kinect_sim"/>
   <depend package="sbpl"/>
+  <depend package="sbpl_utils"/>
   <depend package="cv_bridge"/>
   <!-- <depend package="opencv2"/> -->
 

@@ -11,13 +11,6 @@ class GraphState {
   bool operator==(const GraphState &other) const;
   bool operator!=(const GraphState &other) const;
 
-  int id() const {
-    return id_;
-  };
-  int &id() {
-    return id_;
-  }
-
   const std::vector<ObjectState> &object_states() const {
     return object_states_;
   }
@@ -25,13 +18,14 @@ class GraphState {
     return object_states_;
   }
 
-  int NumObjects() const {
+  size_t NumObjects() const {
     return object_states_.size();
   }
   void AppendObject(const ObjectState &object_state);
 
+  size_t GetHash() const;
+
  private:
-  int id_;
   std::vector<ObjectState> object_states_;
 };
 

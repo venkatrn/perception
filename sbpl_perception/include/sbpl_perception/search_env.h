@@ -11,9 +11,12 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 
+#include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/object_model.h>
 #include <sbpl_perception/pcl_typedefs.h>
 #include <sbpl_perception/vfh_pose_estimation.h>
+
+#include <sbpl_utils/hash_manager/hash_manager.h>
 
 #include <kinect_sim/simulation_io.hpp>
 #include <kinect_sim/scene.h>
@@ -42,16 +45,6 @@
 #include <Eigen/Dense>
 #include <unordered_map>
 
-inline double WrapAngle(double x) {
-  x = fmod(x, 360);
-
-  if (x < 0) {
-    x += 360;
-  }
-
-  return x;
-}
-
 struct EnvParams {
   double table_height;
   Eigen::Isometry3d camera_pose;
@@ -61,47 +54,6 @@ struct EnvParams {
   int goal_state_id, start_state_id;
   int num_objects; // This is the number of objects on the table
   int num_models; // This is the number of models available (can be more or less than number of objects on table
-};
-
-struct Pose {
-  double x;
-  double y;
-  double theta;
-  Pose() {
-    x = 0.0;
-    y = 0.0;
-    theta = 0.0;
-  }
-  Pose(double x_val, double y_val, double theta_val) {
-    x = x_val;
-    y = y_val;
-    theta = theta_val;
-  }
-  bool Equals(const Pose &p, bool symmetric) const {
-    if (fabs(x - p.x) < 0.02 && fabs(y - p.y) < 0.02 &&
-        (symmetric || fabs(WrapAngle(theta) - WrapAngle(p.theta)) < 0.1)) {  //M_PI/18
-      return true;
-    }
-
-    return false;
-  }
-};
-
-struct DiscPose {
-  int x;
-  int y;
-  int theta;
-  DiscPose(int x_val, int y_val, int theta_val) {
-    x = x_val;
-    y = y_val;
-    theta = theta_val;
-  }
-};
-
-struct State {
-  std::vector<int> object_ids;
-  std::vector<DiscPose> disc_object_poses;
-  std::vector<Pose> object_poses;
 };
 
 struct StateProperties {
@@ -119,14 +71,14 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetScene();
   void WriteSimOutput(std::string fname_root);
   void PrintState(int state_id, std::string fname);
-  void PrintState(State s, std::string fname);
+  void PrintState(GraphState s, std::string fname);
   void PrintImage(std::string fname,
                   const std::vector<unsigned short> &depth_image);
   void TransformPolyMesh(const pcl::PolygonMesh::Ptr mesh_in,
                          pcl::PolygonMesh::Ptr mesh_out, Eigen::Matrix4f transform);
   void PreprocessModel(const pcl::PolygonMesh::Ptr mesh_in,
                        pcl::PolygonMesh::Ptr mesh_out);
-  const float *GetDepthImage(State s, std::vector<unsigned short> *depth_image);
+  const float *GetDepthImage(GraphState s, std::vector<unsigned short> *depth_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
 
@@ -137,7 +89,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   /** Methods to set the observed depth image**/
   void SetObservation(std::vector<int> object_ids,
-                      std::vector<Pose> poses);
+                      std::vector<ContPose> poses);
   void SetObservation(int num_objects,
                       const std::vector<unsigned short> observed_depth_image,
                       const PointCloudPtr observed_organized_cloud);
@@ -150,24 +102,24 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   double ComputeScore(const PointCloudPtr cloud);
 
-  double GetICPAdjustedPose(const PointCloudPtr cloud_in, const Pose &pose_in,
-                            PointCloudPtr cloud_out, Pose *pose_out);
+  double GetICPAdjustedPose(const PointCloudPtr cloud_in, const ContPose &pose_in,
+                            PointCloudPtr cloud_out, ContPose *pose_out);
 
   // Greedy ICP planner
-  State ComputeGreedyICPPoses();
-  State ComputeVFHPoses();
+  GraphState ComputeGreedyICPPoses();
+  GraphState ComputeVFHPoses();
 
   // Heuristics
-  int GetICPHeuristic(State s);
-  int GetVFHHeuristic(State s);
+  int GetICPHeuristic(GraphState s);
+  int GetVFHHeuristic(GraphState s);
   VFHPoseEstimator vfh_pose_estimator_;
-  std::vector<Pose> vfh_poses_;
+  std::vector<ContPose> vfh_poses_;
   std::vector<int> vfh_ids_;
   
 
-  void GetSuccs(State source_state, std::vector<State> *succs,
+  void GetSuccs(GraphState source_state, std::vector<GraphState> *succs,
                 std::vector<int> *costs);
-  bool IsGoalState(State state);
+  bool IsGoalState(GraphState state);
   int GetGoalStateID() {
     return env_params_.goal_state_id;  // Goal state has unique id
   }
@@ -175,14 +127,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
     return env_params_.start_state_id;  // Goal state has unique id
   }
 
-  bool StatesEqual(const State &s1,
-                   const State &s2); // Two states are equal if they have the same set of objects in the same poses
-
-  /**@brief State to State ID mapping**/
-  int StateToStateID(State &s);
-  /**@brief State ID to State mapping**/
-  State StateIDToState(int state_id);
-
+  bool StatesEqual(const GraphState &s1,
+                   const GraphState &s2); // Two states are equal if they have the same set of objects in the same poses
 
 
   void GetSuccs(int source_state_id, std::vector<int> *succ_ids,
@@ -221,13 +167,13 @@ class EnvObjectRecognition : public EnvironmentMHA {
   int GetGoalHeuristic(int state_id);
   int GetGoalHeuristic(int q_id, int state_id); // For MHA*
   int SizeofCreatedEnv() {
-    return static_cast<int>(StateMap.size());
+    return static_cast<int>(hash_manager_.Size());
   }
 
   // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
   // of the last added object is adjusted using ICP and the computed state properties.
-  int GetTrueCost(const State source_state, const State child_state,
-                  int parent_id, int child_id, State *adjusted_child_state,
+  int GetTrueCost(const GraphState source_state, const GraphState child_state,
+                  int parent_id, int child_id, GraphState *adjusted_child_state,
                   StateProperties *state_properties);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
@@ -243,7 +189,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                   std::vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
                   unsigned short *max_succ_depth);
 
-  bool IsValidPose(State s, int model_id, Pose p);
+  bool IsValidPose(GraphState s, int model_id, ContPose p);
 
 
   void SetDebugOptions(bool image_debug);
@@ -279,8 +225,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
   pcl::simulation::Scene::Ptr scene_;
 
   EnvParams env_params_;
+
+  /**@brief The hash manager**/
+  sbpl_utils::HashManager<GraphState> hash_manager_;
+
   /**@brief Mapping from State to State ID**/
-  std::unordered_map<int, State> StateMap;
   std::unordered_map<int, int> HeuristicMap;
   std::unordered_map<int, std::vector<int>> succ_cache;
   std::unordered_map<int, std::vector<int>> cost_cache;
@@ -298,7 +247,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                 observed_organized_cloud_;
   pcl::RangeImagePlanar empty_range_image_;
 
-  State start_state_, goal_state_;
+  GraphState start_state_, goal_state_;
 
   bool image_debug_;
 
