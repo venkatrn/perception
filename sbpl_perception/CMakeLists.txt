@@ -35,12 +35,21 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
+find_package(MPI REQUIRED)
+find_package(OpenMP REQUIRED)
+include(CMakeForceCompiler)
+CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
+# set(CMAKE_CXX_COMPILE_FLAGS ${CMAKE_CXX_COMPILE_FLAGS} ${MPI_COMPILE_FLAGS} ${OpenMP_CXX_FLAGS})
+# set(CMAKE_CXX_LINK_FLAGS ${CMAKE_CXX_LINK_FLAGS} ${MPI_LINK_FLAGS})
+include_directories(MPI_INCLUDE_PATH)
+
 #uncomment if you have defined messages
 #rosbuild_genmsg()
 #uncomment if you have defined services
 #rosbuild_gensrv()
 
 #common commands for building c++ executables and libraries
+rosbuild_add_boost_directories()
 rosbuild_add_library(${PROJECT_NAME}
   src/discretization_manager.cpp
   src/graph_state.cpp
@@ -48,8 +57,8 @@ rosbuild_add_library(${PROJECT_NAME}
   src/object_model.cpp
   src/search_env.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
-#rosbuild_add_boost_directories()
 #rosbuild_link_boost(${PROJECT_NAME} thread)
+rosbuild_link_boost(${PROJECT_NAME} mpi serialization)
 
 # rosbuild_add_executable(experiments src/experiments/experiments.cpp)
 # target_link_libraries(experiments ${PROJECT_NAME})
@@ -60,6 +69,11 @@ rosbuild_add_executable(sim_test src/experiments/sim_test.cpp)
 target_link_libraries(sim_test ${PROJECT_NAME})
 target_link_libraries(sim_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
+rosbuild_add_openmp_flags(sim_test)
+
+rosbuild_add_executable(mpi_test src/experiments/search_mpi_test.cpp)
+rosbuild_link_boost(mpi_test mpi serialization)
+target_link_libraries(mpi_test ${PROJECT_NAME})
 
 rosbuild_add_gtest(tests/states_test tests/states_test.cpp)
 target_link_libraries(tests/states_test ${PROJECT_NAME})

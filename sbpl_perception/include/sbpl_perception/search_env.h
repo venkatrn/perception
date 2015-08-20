@@ -56,11 +56,6 @@ struct EnvParams {
   int num_models; // This is the number of models available (can be more or less than number of objects on table
 };
 
-struct StateProperties {
-  unsigned short last_min_depth;
-  unsigned short last_max_depth;
-};
-
 // class EnvObjectRecognition : public DiscreteSpaceInformation {
 class EnvObjectRecognition : public EnvironmentMHA {
  public:
@@ -163,7 +158,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // of the last added object is adjusted using ICP and the computed state properties.
   int GetTrueCost(const GraphState &source_state, const GraphState &child_state, const std::vector<unsigned short> &source_depth_image,
                   int parent_id, int child_id, GraphState *adjusted_child_state,
-                  StateProperties *state_properties);
+                  GraphStateProperties *state_properties);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr

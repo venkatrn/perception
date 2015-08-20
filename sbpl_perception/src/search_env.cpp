@@ -306,7 +306,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     GraphState adjusted_child_state;
-    StateProperties child_properties;
+    GraphStateProperties child_properties;
     int cost = GetTrueCost(source_state, candidate_succs[ii], source_depth_image, source_state_id,
                            candidate_succ_ids[ii],
                            &adjusted_child_state, &child_properties);
@@ -393,7 +393,7 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
 
 int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
                                       const GraphState &child_state, const vector<unsigned short> &source_depth_image, int parent_id, int child_id,
-                                      GraphState *adjusted_child_state, StateProperties *child_properties) {
+                                      GraphState *adjusted_child_state, GraphStateProperties *child_properties) {
 
   assert(child_state.NumObjects() > 0);
 
