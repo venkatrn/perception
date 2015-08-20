@@ -302,6 +302,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   vector<unsigned short> source_depth_image;
   const float *depth_buffer = GetDepthImage(source_state, &source_depth_image);
 
+  candidate_costs.resize(candidate_succ_ids.size());
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     GraphState adjusted_child_state;
@@ -324,7 +325,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       cost = -1;
     }
 
-    candidate_costs.push_back(cost);
+    candidate_costs[ii] = cost;
   }
 
   //--------------------------------------//
