@@ -12,6 +12,7 @@
 
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/object_model.h>
+#include <sbpl_perception/mpi_utils.h>
 
 #include <perception_utils/pcl_typedefs.h>
 #include <perception_utils/vfh/vfh_pose_estimator.h>
@@ -43,6 +44,10 @@
 #include <sbpl/headers.h>
 
 #include <Eigen/Dense>
+#include <boost/mpi.hpp>
+
+#include <memory>
+#include <string>
 #include <unordered_map>
 
 struct EnvParams {
@@ -59,7 +64,7 @@ struct EnvParams {
 // class EnvObjectRecognition : public DiscreteSpaceInformation {
 class EnvObjectRecognition : public EnvironmentMHA {
  public:
-  EnvObjectRecognition();
+  EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator> &comm);
   ~EnvObjectRecognition();
   void LoadObjFiles(const std::vector<std::string> &model_files,
                     const std::vector<bool> model_symmetric);
@@ -154,6 +159,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
     return static_cast<int>(hash_manager_.Size());
   }
 
+  // Compute costs of successor states in parallel using MPI. This method must
+  // be called by all processors.
+  void ComputeCostsInParallel(const std::vector<CostComputationInput> &input,
+                              std::vector<CostComputationOutput> *output);
+
   // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
   // of the last added object is adjusted using ICP and the computed state properties.
   int GetTrueCost(const GraphState &source_state, const GraphState &child_state, const std::vector<unsigned short> &source_depth_image,
@@ -209,6 +219,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   pcl::simulation::Scene::Ptr scene_;
 
   EnvParams env_params_;
+
+  // The MPI communicator.
+  std::shared_ptr<boost::mpi::communicator> mpi_comm_;
 
   /**@brief The hash manager**/
   sbpl_utils::HashManager<GraphState> hash_manager_;

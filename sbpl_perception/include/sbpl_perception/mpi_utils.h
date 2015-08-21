@@ -16,7 +16,7 @@ struct CostComputationInput {
   int source_id;
   int child_id;
 
-  std::vector<unsigned int> source_depth_image;  
+  std::vector<unsigned short> source_depth_image;  
 };
 
 struct CostComputationOutput {

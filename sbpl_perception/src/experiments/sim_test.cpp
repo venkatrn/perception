@@ -23,26 +23,43 @@ using namespace std;
 const string kPCDFilename =  ros::package::getPath("sbpl_perception") +
                              "/data/pointclouds/test14.pcd";
 
+// Process ID of the master processor. This does all the planning work, and the
+// slaves simply aid in computing successor costs in parallel.
+const int kMasterRank = 0;
+
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "sim_test");
-  ros::NodeHandle nh;
-  ros::NodeHandle private_nh("~");
+  boost::mpi::environment env(argc, argv);
+  std::shared_ptr<boost::mpi::communicator> world(new boost::mpi::communicator());
 
-  vector<string> model_files, empty_model_files;
-  vector<bool> symmetries, empty_symmetries;
+  vector<string> model_files;
+  vector<bool> symmetries;
   bool image_debug;
-  private_nh.param("model_files", model_files, empty_model_files);
-  private_nh.param("model_symmetries", symmetries, empty_symmetries);
-  private_nh.param("image_debug", image_debug, false);
-  printf("There are %d model files\n", model_files.size());
 
-  unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition());
+  if (world->rank() == kMasterRank) {
+    ros::init(argc, argv, "sim_test");
+    ros::NodeHandle nh;
+    ros::NodeHandle private_nh("~");
+    vector<string> empty_model_files;
+    vector<bool> empty_symmetries;
+    private_nh.param("model_files", model_files, empty_model_files);
+    private_nh.param("model_symmetries", symmetries, empty_symmetries);
+    private_nh.param("image_debug", image_debug, false);
+    printf("There are %d model files\n", model_files.size());
+  }
+
+  // All processes should wait until master has loaded params.
+  world->barrier();
+
+  broadcast(*world, model_files, kMasterRank);
+  broadcast(*world, symmetries, kMasterRank);
+  broadcast(*world, image_debug, kMasterRank);
+
+  unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition(world));
 
   // Set model files
   env_obj->LoadObjFiles(model_files, symmetries);
   // Set debug options
   env_obj->SetDebugOptions(image_debug);
-
 
   // Setup camera
   double roll = 0.0;
@@ -74,7 +91,6 @@ int main(int argc, char **argv) {
   const double table_height = min_z;
   env_obj->SetBounds(min_x, max_x, min_y, max_y);
   env_obj->SetTableHeight(table_height);
-
 
   unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
   default_random_engine generator (seed);
@@ -180,9 +196,14 @@ int main(int argc, char **argv) {
 
 
   //-------------------------------------------------------------------//
+  //
+  
+  // Wait until all processes are ready for the planning phase.
+  world->barrier();
 
   // Plan
   
+  if (world->rank() == kMasterRank) {
 
   // unique_ptr<SBPLPlanner> planner(new LazyARAPlanner(env_obj, true));
   unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
@@ -241,5 +262,12 @@ int main(int argc, char **argv) {
   assert(solution_state_ids.size() > 1);
   env_obj->PrintState(solution_state_ids[solution_state_ids.size() - 2],
                       string("/tmp/goal_state.png"));
+  } else {
+    while (1) {
+      vector<CostComputationInput> input;
+      vector<CostComputationOutput> output;
+      env_obj->ComputeCostsInParallel(input, &output);
+    }
+  }
   return 0;
 }

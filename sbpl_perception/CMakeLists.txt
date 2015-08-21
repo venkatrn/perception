@@ -69,7 +69,8 @@ rosbuild_add_executable(sim_test src/experiments/sim_test.cpp)
 target_link_libraries(sim_test ${PROJECT_NAME})
 target_link_libraries(sim_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
-rosbuild_add_openmp_flags(sim_test)
+rosbuild_link_boost(sim_test mpi serialization)
+# rosbuild_add_openmp_flags(sim_test)
 
 rosbuild_add_executable(mpi_test src/experiments/search_mpi_test.cpp)
 rosbuild_link_boost(mpi_test mpi serialization)

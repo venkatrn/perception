@@ -45,8 +45,10 @@ const double kSensorResolutionSqr = kSensorResolution * kSensorResolution;
 
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
+const int kMasterRank = 0;
 
-EnvObjectRecognition::EnvObjectRecognition() :
+EnvObjectRecognition::EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator> &comm) :
+  mpi_comm_(comm),
   image_debug_(false) {
 
   // OpenGL requires argc and argv
@@ -303,29 +305,45 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   const float *depth_buffer = GetDepthImage(source_state, &source_depth_image);
 
   candidate_costs.resize(candidate_succ_ids.size());
+
+  // Prepare the cost computation input vector.
+  vector<CostComputationInput> cost_computation_input(candidate_succ_ids.size());
+  for (size_t ii = 0; ii < cost_computation_input.size(); ++ii) {
+    auto &input_unit = cost_computation_input[ii];
+    input_unit.source_state = source_state;
+    input_unit.child_state = candidate_succs[ii];
+    input_unit.source_id = source_state_id;
+    input_unit.child_id = candidate_succ_ids[ii];
+    input_unit.source_depth_image = source_depth_image;
+  }
+  vector<CostComputationOutput> cost_computation_output;
+  ComputeCostsInParallel(cost_computation_input, &cost_computation_output);
+
+
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
-    GraphState adjusted_child_state;
-    GraphStateProperties child_properties;
-    int cost = GetTrueCost(source_state, candidate_succs[ii], source_depth_image, source_state_id,
-                           candidate_succ_ids[ii],
-                           &adjusted_child_state, &child_properties);
+    const auto& output_unit = cost_computation_output[ii];
 
-    minz_map_[candidate_succ_ids[ii]] = child_properties.last_min_depth;
-    maxz_map_[candidate_succ_ids[ii]] = child_properties.last_max_depth;
+    minz_map_[candidate_succ_ids[ii]] = output_unit.state_properties.last_min_depth;
+    maxz_map_[candidate_succ_ids[ii]] = output_unit.state_properties.last_max_depth;
 
     // If GraphState did not change, just update continuous coordinates.
-    if (cost != -1 && adjusted_child_state == candidate_succs[ii]) {
-      hash_manager_.UpdateState(adjusted_child_state);
+    if (output_unit.cost != -1 && output_unit.adjusted_state == candidate_succs[ii]) {
+      hash_manager_.UpdateState(output_unit.adjusted_state);
     }
     // If GraphState changed, prune it only if such a state already exists.
     // (DAG)
     // TODO: Do this in a cleaner way.
-    if (cost != -1 && adjusted_child_state != candidate_succs[ii] && hash_manager_.Exists(adjusted_child_state)) {
-      cost = -1;
+    bool invalid_state = false;
+    if (output_unit.cost != -1 && output_unit.adjusted_state != candidate_succs[ii] && hash_manager_.Exists(output_unit.adjusted_state)) {
+      invalid_state = true;
     }
 
-    candidate_costs[ii] = cost;
+    if (invalid_state) {
+      candidate_costs[ii] = -1;
+    } else {
+      candidate_costs[ii] = output_unit.cost;
+    }
   }
 
   //--------------------------------------//
@@ -352,6 +370,59 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 }
 
 
+void EnvObjectRecognition::ComputeCostsInParallel(const std::vector<CostComputationInput> &input,
+                              std::vector<CostComputationOutput> *output) {
+  int count = 0;
+  int original_count = 0;
+  auto appended_input = input;
+  const int num_processors = static_cast<int>(mpi_comm_->size());
+
+  if (mpi_comm_->rank() == kMasterRank) {
+    original_count = count = input.size();
+
+    if (count % num_processors != 0) {
+      count += num_processors - count % num_processors;
+      CostComputationInput dummy_input;
+      dummy_input.source_id = -1;
+      appended_input.resize(count, dummy_input);
+    }
+
+    assert(output != nullptr);
+    output->clear();
+    output->resize(count);
+  }
+
+  broadcast(*mpi_comm_, count, kMasterRank);
+  if (count == 0) {
+    return;
+  }
+
+  int recvcount = count / num_processors;
+
+  std::vector<CostComputationInput> input_partition(recvcount);
+  std::vector<CostComputationOutput> output_partition(recvcount);
+  boost::mpi::scatter(*mpi_comm_, appended_input, &input_partition[0], recvcount, kMasterRank);
+
+  for (int ii = 0; ii < recvcount; ++ii) {
+    const auto &input_unit = input_partition[ii];
+    auto &output_unit = output_partition[ii];
+
+    // If this is a dummy input, skip computation.
+    if (input_unit.source_id == -1) {
+      output_unit.cost = -1;
+      continue;
+    }
+
+    output_unit.cost = GetTrueCost(input_unit.source_state, input_unit.child_state, input_unit.source_depth_image,
+        input_unit.source_id, input_unit.child_id, &output_unit.adjusted_state, &output_unit.state_properties);
+  }
+
+  boost::mpi::gather(*mpi_comm_, &output_partition[0], recvcount, *output, kMasterRank);
+
+  if (mpi_comm_->rank() == kMasterRank) {
+    output->resize(original_count);
+  }
+}
 
 void EnvObjectRecognition::GetLazySuccs(int source_state_id,
                                         vector<int> *succ_ids, vector<int> *costs,
@@ -964,12 +1035,14 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   knn.reset(new pcl::search::KdTree<PointT>(true));
   knn->setInputCloud(observed_cloud_);
 
-  std::stringstream ss;
-  ss.precision(20);
-  ss << kDebugDir + "obs_cloud" << ".pcd";
-  pcl::PCDWriter writer;
-  writer.writeBinary (ss.str()  , *observed_cloud_);
-  PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
+  if (mpi_comm_->rank() == kMasterRank) { 
+    std::stringstream ss;
+    ss.precision(20);
+    ss << kDebugDir + "obs_cloud" << ".pcd";
+    pcl::PCDWriter writer;
+    writer.writeBinary (ss.str()  , *observed_cloud_);
+    PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
+  }
 }
 
 void EnvObjectRecognition::SetObservation(int num_objects,
@@ -1038,12 +1111,14 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
   knn.reset(new pcl::search::KdTree<PointT>(true));
   knn->setInputCloud(observed_cloud_);
 
-  std::stringstream ss;
-  ss.precision(20);
-  ss << kDebugDir + "obs_cloud" << ".pcd";
-  pcl::PCDWriter writer;
-  writer.writeBinary (ss.str()  , *observed_cloud_);
-  PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
+  if (mpi_comm_->rank() == kMasterRank) {
+    std::stringstream ss;
+    ss.precision(20);
+    ss << kDebugDir + "obs_cloud" << ".pcd";
+    pcl::PCDWriter writer;
+    writer.writeBinary (ss.str()  , *observed_cloud_);
+    PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
+  }
 }
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
@@ -1403,11 +1478,13 @@ GraphState EnvObjectRecognition::ComputeVFHPoses() {
 
 
 
+  if (mpi_comm_->rank() == kMasterRank) {
     pcl::PCDWriter writer;
     stringstream ss;
     ss.precision(20);
     ss << kDebugDir + "cluster_" << ii << ".pcd";
     writer.writeBinary (ss.str()  , *cloud);
+  }
 
     float roll, pitch, yaw;
     vfh_pose_estimator_.getPose(cloud, roll, pitch, yaw, true);
