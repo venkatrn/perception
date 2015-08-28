@@ -165,15 +165,19 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
   // of the last added object is adjusted using ICP and the computed state properties.
   int GetTrueCost(const GraphState &source_state, const GraphState &child_state, const std::vector<unsigned short> &source_depth_image,
-                  int parent_id, int child_id, GraphState *adjusted_child_state,
+                  int parent_id, int child_id, 
+                  const std::vector<int> &parent_counted_pixels, std::vector<int> *child_counted_pixels,
+                  GraphState *adjusted_child_state,
                   StateProperties *state_properties);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr
                     partial_rendered_cloud);
   // Cost for points in observed cloud that can be computed based on the rendered cloud.
-  int GetSourceCost(const PointCloudPtr full_rendered_cloud, const int parent_id,
-                    const int child_id);
+  int GetSourceCost(const PointCloudPtr full_rendered_cloud, const ObjectState &last_object, const bool last_level,
+                    const std::vector<int> &parent_counted_pixels,
+                    std::vector<int> *child_counted_pixels);
+
   // Returns true if parent is occluded by successor. Additionally returns min and max depth for newly rendered pixels
   // when occlusion-free.
   bool IsOccluded(const std::vector<unsigned short> &parent_depth_image,

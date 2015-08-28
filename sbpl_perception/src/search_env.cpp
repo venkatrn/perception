@@ -65,7 +65,7 @@ EnvObjectRecognition::EnvObjectRecognition() :
   // env_params_.res = 0.05;
   // env_params_.theta_res = M_PI / 10; //8
 
-  env_params_.res = 0.1; //0.2
+  env_params_.res = 0.2; //0.2
   const int num_thetas = 16;
   env_params_.theta_res = 2 * M_PI / static_cast<double>(num_thetas); //8
   // TODO: Refactor.
@@ -316,9 +316,12 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     GraphState adjusted_child_state;
     StateProperties child_properties;
+    auto &parent_counted_pixels = counted_pixels_map_[source_state_id];
+    auto &child_counted_pixels = counted_pixels_map_[candidate_succ_ids[ii]];
     int cost = GetTrueCost(source_state, candidate_succs[ii], source_depth_image,
                            source_state_id,
                            candidate_succ_ids[ii],
+                           parent_counted_pixels, &child_counted_pixels,
                            &adjusted_child_state, &child_properties);
 
     minz_map_[candidate_succ_ids[ii]] = child_properties.last_min_depth;
@@ -406,6 +409,7 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
 int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
                                       const GraphState &child_state,
                                       const vector<unsigned short> &source_depth_image, int parent_id, int child_id,
+                                      const vector<int> &parent_counted_pixels, vector<int> *child_counted_pixels,
                                       GraphState *adjusted_child_state, StateProperties *child_properties) {
 
   assert(child_state.NumObjects() > 0);
@@ -519,8 +523,10 @@ int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
 
 
   // Compute costs
+  const bool last_level = child_state.NumObjects() == env_params_.num_objects;
   int target_cost = 0, source_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
+  source_cost = GetSourceCost(succ_cloud, child_state.object_states().back(), last_level, parent_counted_pixels, child_counted_pixels);
   total_cost = source_cost + target_cost;
 
   if (image_debug_) {
@@ -627,8 +633,9 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   return target_cost;
 }
 
-int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
-                                        full_rendered_cloud, const int parent_id, const int child_id) {
+int EnvObjectRecognition::GetSourceCost(const PointCloudPtr full_rendered_cloud, const ObjectState &last_object, const bool last_level,
+                                        const std::vector<int> &parent_counted_pixels,
+                                        std::vector<int> *child_counted_pixels) {
 
   const int num_pixels = env_params_.img_width * env_params_.img_height;
 
@@ -637,9 +644,6 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   knn_reverse.reset(new pcl::search::KdTree<PointT>(true));
   knn_reverse->setInputCloud(full_rendered_cloud);
 
-  GraphState child_state = hash_manager_.GetState(child_id);
-  assert(child_state.NumObjects() != 0);
-  const auto last_object = child_state.object_states().back();
   ContPose last_obj_pose = last_object.cont_pose();
   int last_obj_id = last_object.id();
   PointT obj_center;
@@ -650,9 +654,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   double nn_score = 0.0;
 
   // TODO: Move this to a better place
-  if (counted_pixels_map_[parent_id].size() != 0) {
-    counted_pixels_map_[child_id] = counted_pixels_map_[parent_id];
-  }
+  child_counted_pixels->clear();
+  *child_counted_pixels = parent_counted_pixels;
 
   for (int ii = 0; ii < num_pixels; ++ii) {
 
@@ -662,11 +665,10 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     }
 
     // Skip if already accounted for
-    vector<int> counted_pixels = counted_pixels_map_[child_id];
-    auto it = find(counted_pixels.begin(),
-                   counted_pixels.end(), ii);
+    auto it = find(parent_counted_pixels.begin(),
+                   parent_counted_pixels.end(), ii);
 
-    if (it != counted_pixels.end()) {
+    if (it != parent_counted_pixels.end()) {
       continue;
     }
 
@@ -710,33 +712,21 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     float dist = pcl::euclideanDistance(obj_center, projected_point);
 
     // bool point_in_collision = dist <= obj_models_[last_obj_id].inscribed_rad();
-    bool point_in_collision = dist <= 3.0 *
-                              obj_models_[last_obj_id].GetCircumscribedRadius();
+    bool point_in_collision = dist <= obj_models_[last_obj_id].GetCircumscribedRadius();
+    // bool point_in_collision = dist <= 3.0 *
+    //                           obj_models_[last_obj_id].GetCircumscribedRadius();
     // bool point_in_collision = num_neighbors_found >= kCollisionPointsThresh;
-
-
-    bool too_far_in_front = false;
-
-    const unsigned short min_succ_depth = minz_map_[child_id];
-
-    if (observed_depth_image_[ii] < min_succ_depth) {
-      too_far_in_front = true;
-    }
-
 
     // Skip if not in collision (i.e, might be explained by a future object) or
     // if its not too far in front
-    if (point_unexplained) {
-      if (point_in_collision || too_far_in_front) {
+    if (point_in_collision || last_level) {
+      child_counted_pixels->push_back(ii);
+      if (point_unexplained) {
         nn_score += 1.0 ; //TODO: Do something principled
-        counted_pixels_map_[child_id].push_back(ii);
       }
-    } else {
-      counted_pixels_map_[child_id].push_back(ii);
     }
   }
 
-  // int icp_cost = static_cast<int>(kICPCostMultiplier * nn_score);
   int source_cost = static_cast<int>(nn_score);
   return source_cost;
 }
