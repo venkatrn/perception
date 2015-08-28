@@ -43,3 +43,8 @@ rosbuild_add_executable(vfh_generate_views tools/vfh/vfh_generate_views.cpp)
 target_link_libraries(vfh_generate_views ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
 target_link_libraries(vfh_generate_views libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
+
+rosbuild_add_executable(align_pcd_to_world tools/align_pcd_to_world.cpp)
+target_link_libraries(align_pcd_to_world ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
+target_link_libraries(align_pcd_to_world libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  libvtkGraphics.so)

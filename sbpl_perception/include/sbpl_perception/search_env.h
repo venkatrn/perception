@@ -80,6 +80,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
 
+  // Initialize environment from config file.
+  void Initialize(const std::string &config_file);
+
   /** Methods to set the observed depth image**/
   void SetObservation(std::vector<int> object_ids,
                       std::vector<ContPose> poses);

@@ -60,10 +60,10 @@ rosbuild_add_library(${PROJECT_NAME}
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 rosbuild_link_boost(${PROJECT_NAME} mpi serialization)
 
-# rosbuild_add_executable(experiments src/experiments/experiments.cpp)
-# target_link_libraries(experiments ${PROJECT_NAME})
-# target_link_libraries(experiments libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-#   libvtkGraphics.so)
+rosbuild_add_executable(experiments src/experiments/experiments.cpp)
+target_link_libraries(experiments ${PROJECT_NAME})
+target_link_libraries(experiments libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  libvtkGraphics.so)
 
 rosbuild_add_executable(sim_test src/experiments/sim_test.cpp)
 target_link_libraries(sim_test ${PROJECT_NAME})
