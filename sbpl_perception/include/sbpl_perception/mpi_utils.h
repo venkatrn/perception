@@ -17,12 +17,14 @@ struct CostComputationInput {
   int child_id;
 
   std::vector<unsigned short> source_depth_image;  
+  std::vector<int> source_counted_pixels;
 };
 
 struct CostComputationOutput {
   int cost;
   GraphState adjusted_state;
   GraphStateProperties state_properties;
+  std::vector<int> child_counted_pixels;
 };
 
 namespace boost {
