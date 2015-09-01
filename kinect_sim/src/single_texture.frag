@@ -1,4 +1,6 @@
-#version 330
+#version 130
+#extension GL_ARB_explicit_attrib_location : enable
+#extension GL_ARB_explicit_uniform_location : enable
 
 uniform sampler2D Texture0;
 

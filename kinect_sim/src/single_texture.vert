@@ -1,4 +1,6 @@
-#version 330
+#version 130
+#extension GL_ARB_explicit_attrib_location : enable
+#extension GL_ARB_explicit_uniform_location : enable
 
 uniform mat4 MVP;
 
@@ -11,4 +13,4 @@ void main()
 {
   TexCoord0 = TexCoord;
   gl_Position = MVP * vec4(Position, 1.0);
-};
+}
