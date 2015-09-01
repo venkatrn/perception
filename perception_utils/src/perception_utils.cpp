@@ -28,7 +28,9 @@
 #include <pcl/filters/radius_outlier_removal.h>
 
 #include <pcl/segmentation/organized_multi_plane_segmentation.h>
+#include <pcl/segmentation/organized_connected_component_segmentation.h>
 #include <pcl/segmentation/euclidean_plane_coefficient_comparator.h>
+#include <pcl/segmentation/euclidean_cluster_comparator.h>
 #include <pcl/features/integral_image_normal.h>
 // Range Images
 #include <pcl/range_image/range_image_planar.h>
@@ -38,7 +40,7 @@
 #include <boost/thread/thread.hpp>
 
 // Euclidean cluster extraction params
-const int kMaxClusterSize = 10000; //20000
+const int kMaxClusterSize = 100000; //10000
 const int kMinClusterSize = 100; //100
 const double kClusterTolerance = 0.03; //0.2
 
@@ -69,7 +71,9 @@ const double kOutlierStdDev = 1.0;
 
 using namespace std;
 
-void perception_utils::DisplayPlanarRegions (
+namespace perception_utils {
+
+void DisplayPlanarRegions (
   pcl::visualization::PCLVisualizer &viewer,
   std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
   &regions) {
@@ -109,7 +113,7 @@ void perception_utils::DisplayPlanarRegions (
 }
 
 
-void perception_utils::OrganizedSegmentation(PointCloudPtr cloud,
+void OrganizedSegmentation(PointCloudPtr cloud,
                                              std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
                                              *regions) {
   PointCloudPtr cloud_temp (new PointCloud);
@@ -158,7 +162,7 @@ void perception_utils::OrganizedSegmentation(PointCloudPtr cloud,
   // printf("MPS+Refine took:%f\n", double(mps_end - mps_start));
 }
 
-pcl::ModelCoefficients::Ptr perception_utils::GetPlaneCoefficients(
+pcl::ModelCoefficients::Ptr GetPlaneCoefficients(
   PointCloudPtr cloud) {
   PointCloudPtr cloud_temp (new PointCloud);
   cloud_temp = cloud;
@@ -204,7 +208,7 @@ pcl::ModelCoefficients::Ptr perception_utils::GetPlaneCoefficients(
   return coefficients;
 }
 
-pcl::ModelCoefficients::Ptr perception_utils::GetPlaneCoefficients(
+pcl::ModelCoefficients::Ptr GetPlaneCoefficients(
   PointCloudPtr cloud, PointCloudPtr plane_points) {
   PointCloudPtr cloud_temp (new PointCloud);
   cloud_temp = cloud;
@@ -232,7 +236,7 @@ pcl::ModelCoefficients::Ptr perception_utils::GetPlaneCoefficients(
   return coefficients;
 }
 
-pcl::ModelCoefficients::Ptr perception_utils::GetLineCoefficients(
+pcl::ModelCoefficients::Ptr GetLineCoefficients(
   PointCloudPtr cloud, PointCloudPtr line_points) {
   PointCloudPtr cloud_temp (new PointCloud);
   cloud_temp = cloud;
@@ -259,7 +263,7 @@ pcl::ModelCoefficients::Ptr perception_utils::GetLineCoefficients(
   return coefficients;
 }
 
-bool perception_utils::GetRectanglePoints(PointCloudPtr cloud,
+bool GetRectanglePoints(PointCloudPtr cloud,
                                           PointCloudPtr rectangle_points, vector<Eigen::Vector3f> *axes) {
   PointCloudPtr cloud_temp (new PointCloud);
   cloud_temp = cloud;
@@ -329,7 +333,7 @@ bool perception_utils::GetRectanglePoints(PointCloudPtr cloud,
 }
 
 /*
-void perception_utils::GetEdges(PointCloudPtr cloud)
+void GetEdges(PointCloudPtr cloud)
 {
   pcl::OrganizedEdgeBase <PointT, pcl::Label> edgedetector;
   pcl::PointCloud <pcl::Label> label;
@@ -350,7 +354,7 @@ void perception_utils::GetEdges(PointCloudPtr cloud)
 }
 */
 
-PointCloudPtr perception_utils::RemoveGroundPlane(PointCloudPtr cloud,
+PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
                                                   pcl::ModelCoefficients::Ptr coefficients) {
   PointCloudPtr ground_removed_pcd (new PointCloud);
 
@@ -383,18 +387,28 @@ PointCloudPtr perception_utils::RemoveGroundPlane(PointCloudPtr cloud,
   return ground_removed_pcd;
 }
 
-void perception_utils::DoEuclideanClustering(PointCloudPtr cloud,
-                                             vector<PointCloudPtr> *cluster_clouds) {
+void DoEuclideanClustering(PointCloudPtr cloud,
+                                             vector<PointCloudPtr> *cluster_clouds,
+                                             vector<pcl::PointIndices> *cluster_indices) {
   PointCloudPtr cluster_pcd (new PointCloud);
   cluster_clouds->clear();
 
   // Creating the KdTree object for the search method of the extraction
   // pcl::KdTreeFLANN<PointT>::Ptr tree (new pcl::KdTreeFLANN<PointT>);
   // tree->setInputCloud(cloud);
-  pcl::search::KdTree<PointT>::Ptr tree(new pcl::search::KdTree<PointT>);
+  // pcl::search::KdTree<PointT>::Ptr tree(new pcl::search::KdTree<PointT>);
+  pcl::search::OrganizedNeighbor<PointT>::Ptr tree(new pcl::search::OrganizedNeighbor<PointT>(true, 1e-4));
   tree->setInputCloud(cloud);
 
-  vector<pcl::PointIndices> cluster_indices;
+  // Ignore NaN data.
+  pcl::PointIndicesPtr point_indices(new pcl::PointIndices);
+  for (size_t ii = 0; ii < cloud->points.size(); ++ii) {
+    const auto &point = cloud->points[ii];
+    if (std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z)) {
+      point_indices->indices.push_back(static_cast<int>(ii));
+    }
+  }
+
   pcl::EuclideanClusterExtraction<PointT> ec;
   ec.setClusterTolerance(kClusterTolerance); // 2cm
   ec.setMinClusterSize(kMinClusterSize); //100
@@ -402,13 +416,13 @@ void perception_utils::DoEuclideanClustering(PointCloudPtr cloud,
   ec.setSearchMethod(tree);
   //ec.setSearchMethod(KdTreePtr(new KdTree()));
   ec.setInputCloud(cloud);
-  ec.extract(cluster_indices);
+  ec.setIndices(point_indices);
+  ec.extract(*cluster_indices);
 
-  int j = 0;
-  printf("Number of euclidean clusters: %d\n", cluster_indices.size());
+  printf("Number of euclidean clusters: %zu\n", cluster_indices->size());
 
-  for (vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
-       it != cluster_indices.end(); ++it) {
+  for (vector<pcl::PointIndices>::const_iterator it = cluster_indices->begin();
+       it != cluster_indices->end(); ++it) {
     PointCloudPtr cloud_cluster (new PointCloud);
 
     for (vector<int>::const_iterator pit = it->indices.begin ();
@@ -423,32 +437,57 @@ void perception_utils::DoEuclideanClustering(PointCloudPtr cloud,
     cloud_cluster->sensor_orientation_ = cloud->sensor_orientation_;
     //printf("Size: %d\n",(int)cloud_cluster->points.size ());
 
-
-    // Publish the cluster marker
-    bool valid_cluster = perception_utils::EvaluateCluster(cloud_cluster);
-
-    if (valid_cluster) {
-      /*
-         float r = 1, g = 0, b = 0;
-         std::string ns = "base_link";
-         publishClusterMarker(cloud_cluster,ns,1,r,g,b);
-
-      // Publish the data
-      sensor_msgs::PointCloud2 output_cloud;
-      pcl::toROSMsg(*cloud_cluster,output_cloud);
-      output_cloud.header.frame_id = "openni_depth_optical_frame";
-      pub_cluster.publish (output_cloud);
-      */
-      cluster_clouds->push_back(cloud_cluster);
-    }
-
-    j++;
+    cluster_clouds->push_back(cloud_cluster);
   }
-
-  //return cluster_pcd;
 }
 
-PointCloudPtr perception_utils::DownsamplePointCloud(PointCloudPtr cloud) {
+void DoEuclideanClusteringOrganized(PointCloudPtr cloud,
+                                    std::vector<PointCloudPtr> *cluster_clouds,
+                                    std::vector<pcl::PointIndices> *cluster_indices) {
+
+  cluster_clouds->clear();
+  cluster_indices->clear();
+
+  // We don't have any plane labels, so pretend that all points have a label 0
+  // and make sure to not exclude it in the comparator.
+  pcl::PointCloud<pcl::Label>::Ptr labels (new pcl::PointCloud<pcl::Label>);
+  labels->resize(cloud->size());
+  pcl::Label dummy_label;
+  dummy_label.label = 0;
+  labels->points.resize(cloud->size(), dummy_label);
+  vector<bool> exclude_labels(1, false);
+
+  pcl::EuclideanClusterComparator<PointT, pcl::Normal, pcl::Label>::Ptr
+  euclidean_cluster_comparator;
+  euclidean_cluster_comparator =
+    pcl::EuclideanClusterComparator<PointT, pcl::Normal, pcl::Label>::Ptr (
+      new pcl::EuclideanClusterComparator<PointT, pcl::Normal, pcl::Label> ());
+  euclidean_cluster_comparator->setInputCloud (cloud);
+  euclidean_cluster_comparator->setLabels (labels);
+  euclidean_cluster_comparator->setExcludeLabels (exclude_labels);
+  euclidean_cluster_comparator->setDistanceThreshold (kClusterTolerance, false);
+
+  pcl::OrganizedConnectedComponentSegmentation<PointT,pcl::Label> euclidean_segmentation (euclidean_cluster_comparator);
+
+  pcl::PointCloud<pcl::Label> euclidean_labels;
+  std::vector<pcl::PointIndices> euclidean_label_indices;
+  euclidean_segmentation.setInputCloud (cloud);
+  euclidean_segmentation.segment (euclidean_labels, euclidean_label_indices);
+
+  for (size_t i = 0; i < euclidean_label_indices.size (); i++) {
+    if (euclidean_label_indices[i].indices.size () > kMinClusterSize) {
+      PointCloudPtr cluster(new PointCloud);
+      pcl::copyPointCloud (*cloud, euclidean_label_indices[i].indices, *cluster);
+      cluster_clouds->push_back (cluster);
+      cluster_indices->push_back(euclidean_label_indices[i]);
+    }
+  }
+
+  printf ("Got %d euclidean clusters!\n", cluster_clouds->size());
+}
+
+
+PointCloudPtr DownsamplePointCloud(PointCloudPtr cloud) {
   // Perform the actual filtering
   PointCloudPtr downsampled_cloud(new PointCloud);
   pcl::VoxelGrid<PointT> sor;
@@ -458,7 +497,7 @@ PointCloudPtr perception_utils::DownsamplePointCloud(PointCloudPtr cloud) {
   return downsampled_cloud;
 }
 
-PointCloudPtr perception_utils::DownsamplePointCloud(PointCloudPtr cloud,
+PointCloudPtr DownsamplePointCloud(PointCloudPtr cloud,
                                                      double voxel_size) {
   // Perform the actual filtering
   PointCloudPtr downsampled_cloud(new PointCloud);
@@ -469,7 +508,7 @@ PointCloudPtr perception_utils::DownsamplePointCloud(PointCloudPtr cloud,
   return downsampled_cloud;
 }
 
-void perception_utils::GetPolygonVertices(PointCloudPtr cloud,
+void GetPolygonVertices(PointCloudPtr cloud,
                                           std::vector<PointT> *poly_vertices) {
   PointCloudPtr convex_hull(new PointCloud);
   vector<pcl::Vertices> polygons;
@@ -492,7 +531,7 @@ void perception_utils::GetPolygonVertices(PointCloudPtr cloud,
   }
 }
 
-void perception_utils::GetRectangleCorners(PointCloudPtr cloud,
+void GetRectangleCorners(PointCloudPtr cloud,
                                            std::vector<PointT> *corners, const vector<Eigen::Vector3f> &axes) {
   corners->clear();
   // compute principal direction
@@ -585,7 +624,7 @@ void perception_utils::GetRectangleCorners(PointCloudPtr cloud,
   return;
 }
 
-void perception_utils::DrawRectangle(pcl::visualization::PCLVisualizer &viewer,
+void DrawRectangle(pcl::visualization::PCLVisualizer &viewer,
                                      const vector<PointT> &corners, string rect_id) {
   assert(corners.size() == 4);
   PointT p1, p2, p3, p4, p_mid, p_top;
@@ -617,7 +656,7 @@ void perception_utils::DrawRectangle(pcl::visualization::PCLVisualizer &viewer,
     pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, s4_id);
 }
 
-void perception_utils::DrawOrientedBoundingBox(
+void DrawOrientedBoundingBox(
   pcl::visualization::PCLVisualizer &viewer, PointCloudPtr cloud,
   string box_id) {
   // compute principal direction
@@ -659,7 +698,7 @@ void perception_utils::DrawOrientedBoundingBox(
   viewer.addCube(tfinal, qfinal, length, width, height, box_id);
 }
 
-void perception_utils::DrawAxisAlignedBoundingBox(
+void DrawAxisAlignedBoundingBox(
   pcl::visualization::PCLVisualizer &viewer, PointCloudPtr cloud,
   string box_id) {
   // compute principal direction
@@ -670,7 +709,7 @@ void perception_utils::DrawAxisAlignedBoundingBox(
                  box_id);
 }
 
-PointCloudPtr perception_utils::ProjectOntoPlane(const
+PointCloudPtr ProjectOntoPlane(const
                                                  pcl::ModelCoefficients::Ptr &coefficients,
                                                  PointCloudPtr cloud) {
   PointCloudPtr projected_cloud(new PointCloud);
@@ -682,7 +721,7 @@ PointCloudPtr perception_utils::ProjectOntoPlane(const
   return projected_cloud;
 }
 
-PointCloudPtr perception_utils::RemoveOutliers(PointCloudPtr cloud) {
+PointCloudPtr RemoveOutliers(PointCloudPtr cloud) {
   PointCloudPtr filtered_cloud(new PointCloud);
   pcl::StatisticalOutlierRemoval<PointT> sor;
   sor.setKeepOrganized (true);
@@ -693,7 +732,7 @@ PointCloudPtr perception_utils::RemoveOutliers(PointCloudPtr cloud) {
   return filtered_cloud;
 }
 
-PointCloudPtr perception_utils::RemoveRadiusOutliers(PointCloudPtr cloud,
+PointCloudPtr RemoveRadiusOutliers(PointCloudPtr cloud,
                                                      double radius, int min_neighbors) {
   PointCloudPtr filtered_cloud(new PointCloud);
   pcl::RadiusOutlierRemoval<PointT> ror;
@@ -706,7 +745,7 @@ PointCloudPtr perception_utils::RemoveRadiusOutliers(PointCloudPtr cloud,
   return filtered_cloud;
 }
 
-PointCloudPtr perception_utils::PassthroughFilter(PointCloudPtr cloud) {
+PointCloudPtr PassthroughFilter(PointCloudPtr cloud) {
   PointCloudPtr filtered_cloud(new PointCloud);
   pcl::IndicesPtr retained_indices = boost::shared_ptr<vector<int>>
                                      (new vector<int>);
@@ -728,7 +767,7 @@ PointCloudPtr perception_utils::PassthroughFilter(PointCloudPtr cloud) {
   return filtered_cloud;
 }
 
-bool perception_utils::EvaluateRectangle(std::vector<PointT> &corners) {
+bool EvaluateRectangle(std::vector<PointT> &corners) {
   assert(corners.size() == 4);
   float max_x = -1000.0, max_y = -1000.0, max_z = -1000.0;
   float min_x = 1000.0, min_y = 1000.0, min_z = 1000.0;
@@ -760,7 +799,7 @@ bool perception_utils::EvaluateRectangle(std::vector<PointT> &corners) {
   return true;
 }
 
-bool perception_utils::EvaluateCluster(PointCloudPtr cloud_cluster) {
+bool EvaluateCluster(PointCloudPtr cloud_cluster) {
   return true;
   Eigen::Vector4f centroid;
   pcl::compute3DCentroid(*cloud_cluster, centroid);
@@ -796,7 +835,7 @@ bool perception_utils::EvaluateCluster(PointCloudPtr cloud_cluster) {
 
   return true;
 }
-void perception_utils::GetRangeImageFromCloud(PointCloudPtr cloud,
+void GetRangeImageFromCloud(PointCloudPtr cloud,
                                               pcl::visualization::PCLVisualizer &viewer,
                                               pcl::RangeImagePlanar *range_image) {
   // Image size. Both Kinect and Xtion work at 640x480.
@@ -829,3 +868,4 @@ void perception_utils::GetRangeImageFromCloud(PointCloudPtr cloud,
                                                  sensorPose, pcl::RangeImage::CAMERA_FRAME,
                                                  noiseLevel, minimumRange);
 }
+}  // namespace perception_utils

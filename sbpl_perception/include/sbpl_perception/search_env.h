@@ -196,6 +196,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   bool IsValidPose(GraphState s, int model_id, ContPose p);
 
+  void LabelEuclideanClusters();
 
   void SetDebugOptions(bool image_debug);
 
@@ -265,5 +266,5 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   std::vector<int> sorted_greedy_icp_ids_;
   std::vector<double> sorted_greedy_icp_scores_;
-
+  std::vector<int> cluster_labels_;
 };

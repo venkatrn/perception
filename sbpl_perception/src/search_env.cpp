@@ -41,8 +41,10 @@ using namespace Eigen;
 
 const int kICPCostMultiplier = 1000000;
 // const double kSensorResolution = 0.01 / 2;//0.01
-const double kSensorResolution = 0.003;//0.01
+const double kSensorResolution = 0.003;
 const double kSensorResolutionSqr = kSensorResolution * kSensorResolution;
+const double kCollisionRadThresh = 0.05;
+const int kCollisionPointsThresh = 5;
 
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
@@ -199,7 +201,8 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   point.x = p.x();
   point.y = p.y();
   // point.z = env_params_.table_height;
-  point.z = obj_models_[model_id].max_z() / 2.0 + env_params_.table_height;
+  point.z = (obj_models_[model_id].max_z()  - obj_models_[model_id].min_z()) /
+            2.0 + env_params_.table_height;
 
   double search_rad = obj_models_[model_id].GetCircumscribedRadius() +
                       env_params_.res / 2.0;
@@ -229,6 +232,42 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   }
 
   return true;
+}
+
+void EnvObjectRecognition::LabelEuclideanClusters() {
+  std::vector<PointCloudPtr> cluster_clouds;
+  std::vector<pcl::PointIndices> cluster_indices;
+  perception_utils::DoEuclideanClustering(observed_organized_cloud_,
+                                          &cluster_clouds, &cluster_indices);
+  cluster_labels_.resize(observed_organized_cloud_->size(), 0);
+
+  for (size_t ii = 0; ii < cluster_indices.size(); ++ii) {
+    const auto &cluster = cluster_indices[ii];
+    printf("PCD Dims: %d %d\n", observed_organized_cloud_->width, observed_organized_cloud_->height);
+
+    for (const auto &index : cluster.indices) {
+      int u = index % env_params_.img_width;
+      int v = index / env_params_.img_width;
+      int image_index = v * env_params_.img_width + u;
+      cluster_labels_[image_index] = static_cast<int>(ii + 1);
+    }
+  }
+
+  static cv::Mat image;
+  image.create(env_params_.img_height, env_params_.img_width, CV_8UC1);
+
+  for (int ii = 0; ii < env_params_.img_height; ++ii) {
+    for (int jj = 0; jj < env_params_.img_width; ++jj) {
+      int index = ii * env_params_.img_width + jj;
+      image.at<uchar>(ii, jj) = static_cast<uchar>(cluster_labels_[index]);
+    }
+  }
+  cv::normalize(image, image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+
+  static cv::Mat c_image;
+  cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
+  string fname = kDebugDir + "cluster_labels.png";
+  cv::imwrite(fname.c_str(), c_image);
 }
 
 void EnvObjectRecognition::GetSuccs(int source_state_id,
@@ -789,6 +828,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   child_counted_pixels->clear();
   *child_counted_pixels = parent_counted_pixels;
 
+  int collision_label = -1;
   for (int ii = 0; ii < num_pixels; ++ii) {
 
     // Skip if empty pixel
@@ -804,33 +844,22 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       continue;
     }
 
-    // Skip if out-of-slice
-    // const double depth_inflation = 0.1;
-    // if (observed_depth_image_[ii] < source_max_depth
-    //      || observed_depth_image_[ii] >= max_succ_depth + depth_inflation) {
-    //   continue;
-    // }
-
     vector<int> indices;
     vector<float> sqr_dists;
     PointT point;
 
-    int u = ii / env_params_.img_width;
-    int v = ii % env_params_.img_width;
+    int u = ii % env_params_.img_width;
+    int v = ii / env_params_.img_width;
     // point = observed_organized_cloud_->at(v, u);
 
     Eigen::Vector3f point_eig;
-    kinect_simulator_->rl_->getGlobalPoint(v, u,
+    kinect_simulator_->rl_->getGlobalPoint(u, v,
                                            static_cast<float>(observed_depth_image_[ii]) / 1000.0, cam_to_world_,
                                            point_eig);
     point.x = point_eig[0];
     point.y = point_eig[1];
     point.z = point_eig[2];
 
-    const double kSensorResolution = 0.01 / 2;
-    const double kSensorResolutionSqr = kSensorResolution * kSensorResolution;
-    const double kCollisionRadThresh = 0.05;
-    const int kCollisionPointsThresh = 5;
     int num_neighbors_found = knn_reverse->radiusSearch(point, kCollisionRadThresh,
                                                         indices,
                                                         sqr_dists, kCollisionPointsThresh);
@@ -845,13 +874,19 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
     // bool point_in_collision = dist <= obj_models_[last_obj_id].inscribed_rad();
     bool point_in_collision = dist <=
-                              obj_models_[last_obj_id].GetCircumscribedRadius();
-    // bool point_in_collision = dist <= 3.0 *
+                              obj_models_[last_obj_id].GetInscribedRadius();
+    // bool point_in_collision = dist <= 2.0 *
     //                           obj_models_[last_obj_id].GetCircumscribedRadius();
     // bool point_in_collision = num_neighbors_found >= kCollisionPointsThresh;
 
     // Skip if not in collision (i.e, might be explained by a future object) or
     // if its not too far in front
+    
+    if (point_in_collision) {
+      collision_label = cluster_labels_[ii];
+    }
+    point_in_collision = point_in_collision || (cluster_labels_[ii] == collision_label);
+
     if (point_in_collision || last_level) {
       child_counted_pixels->push_back(ii);
 
@@ -888,7 +923,8 @@ void EnvObjectRecognition::PrintState(GraphState s, string fname) {
 void EnvObjectRecognition::PrintImage(string fname,
                                       const vector<unsigned short> &depth_image) {
   assert(depth_image.size() != 0);
-  cv::Mat image(env_params_.img_height, env_params_.img_width, CV_8UC1);
+  static cv::Mat image;
+  image.create(env_params_.img_height, env_params_.img_width, CV_8UC1);
   unsigned short max_depth = 0, min_depth = 20000;
 
   for (int ii = 0; ii < env_params_.img_height; ++ii) {
@@ -949,7 +985,7 @@ void EnvObjectRecognition::PrintImage(string fname,
     }
   }
 
-  cv::Mat c_image;
+  static cv::Mat c_image;
   cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
   cv::imwrite(fname.c_str(), c_image);
   //http://docs.opencv.org/modules/contrib/doc/facerec/colormaps.html
@@ -1074,7 +1110,7 @@ void EnvObjectRecognition::PrecomputeHeuristics() {
 
 void EnvObjectRecognition::SetObservation(int num_objects,
                                           const vector<unsigned short> observed_depth_image,
-                                          const PointCloudPtr observed_organized_cloud) {
+                                          const PointCloudPtr observed_cloud) {
   observed_depth_image_.clear();
   observed_depth_image_ = observed_depth_image;
   env_params_.num_objects = num_objects;
@@ -1095,10 +1131,10 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     }
   }
 
-  *observed_cloud_  = *observed_organized_cloud;
-  *observed_organized_cloud_  = *observed_organized_cloud;
-  downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
+  *observed_cloud_  = *observed_cloud;
 
+  vector<int> nan_indices;
+  downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
 
   empty_range_image_.setDepthImage(&observed_depth_image_[0],
                                    env_params_.img_width, env_params_.img_height, 321.06398107f, 242.97676897f,
@@ -1106,6 +1142,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   knn.reset(new pcl::search::KdTree<PointT>(true));
   knn->setInputCloud(observed_cloud_);
+  LabelEuclideanClusters();
 
   if (mpi_comm_->rank() == kMasterRank) {
     std::stringstream ss;
@@ -1128,6 +1165,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   }
 
   env_params_.num_objects = num_objects;
+  LabelEuclideanClusters();
 }
 
 void EnvObjectRecognition::SetObservation(vector<int> object_ids,
@@ -1175,6 +1213,13 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
                                          env_params_.camera_pose); //GLOBAL
   downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
 
+  if (mpi_comm_->rank() == kMasterRank) {
+    std::stringstream ss;
+    ss.precision(20);
+    ss << kDebugDir + "obs_organized_cloud" << ".pcd";
+    pcl::PCDWriter writer;
+    writer.writeBinary (ss.str()  , *observed_organized_cloud_);
+  }
 
   empty_range_image_.setDepthImage(&observed_depth_image_[0],
                                    env_params_.img_width, env_params_.img_height, 321.06398107f, 242.97676897f,
@@ -1183,6 +1228,7 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
   // knn.reset(new pcl::search::OrganizedNeighbor<PointT>(true, 1e-4));
   knn.reset(new pcl::search::KdTree<PointT>(true));
   knn->setInputCloud(observed_cloud_);
+  LabelEuclideanClusters();
 
   if (mpi_comm_->rank() == kMasterRank) {
     std::stringstream ss;
@@ -1291,7 +1337,6 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
   if (pcl::io::loadPCDFile<PointT>(pcd_file_path.c_str(), *cloud_in) != 0) {
     return;
   }
-
   const int num_pixels = 480 * 640;
   const int height = 480;
   const int width = 640;
@@ -1320,8 +1365,17 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
     }
   }
 
-  SetObservation(num_models, depth_image, cloud_in);
+  *observed_organized_cloud_ = *depth_img_cloud;
+  if (mpi_comm_->rank() == kMasterRank) {
+    std::stringstream ss;
+    ss.precision(20);
+    ss << kDebugDir + "obs_organized_cloud" << ".pcd";
+    pcl::PCDWriter writer;
+    writer.writeBinary (ss.str()  , *observed_organized_cloud_);
+  }
 
+
+  SetObservation(num_models, depth_image, cloud_in);
 }
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
@@ -1660,7 +1714,8 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
 
 GraphState EnvObjectRecognition::ComputeVFHPoses() {
   vector<PointCloudPtr> cluster_clouds;
-  DoEuclideanClustering(observed_cloud_, &cluster_clouds);
+  vector<pcl::PointIndices> cluster_indices;
+  DoEuclideanClustering(observed_cloud_, &cluster_clouds, &cluster_indices);
   const size_t num_clusters = cluster_clouds.size();
 
   for (size_t ii = 0; ii < num_clusters; ++ii) {
@@ -1704,6 +1759,7 @@ GraphState EnvObjectRecognition::ComputeVFHPoses() {
 void EnvObjectRecognition::SetDebugOptions(bool image_debug) {
   image_debug_ = image_debug;
 }
+
 
 
 

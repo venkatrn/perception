@@ -147,9 +147,6 @@ int main(int argc, char **argv) {
   ContPose p1(0.296691, 0.110056, 1.369107);
   ContPose p2( 0.209879, -0.171593, 0.210538);
   ContPose p3( 0.414808, -0.174167, 3.746371);
-  // ContPose p1(0.296691, 0.110056, 1.869107);
-  // ContPose p2( 0.209879, -0.171593, 1.910538);
-  // ContPose p3( 0.414808, -0.174167, 3.746371);
 
   poses.push_back(p1);
   poses.push_back(p2);

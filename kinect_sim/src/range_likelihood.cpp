@@ -964,9 +964,10 @@ pcl::simulation::RangeLikelihood::getOrganizedPointCloud (
     for (int x = 0; x < col_width_ ; ++x) { // camera_width_
       // Find XYZ from normalized 0->1 mapped disparity
       int idx = y * camera_width_ + x;
-      float d = depth_buffer_[y * camera_width_ + x] ;
+      int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
+      float d = depth_buffer_[i_in] ;
 
-      if (d < 1.2) { // only add points with depth buffer less than max (20m) range
+      if (d < 1.0) { // only add points with depth buffer less than max (20m) range
         float z = zf * zn / ((zf - zn) * (d - zf / (zf - zn)));
 
         // TODO: add mode to ignore points with no return i.e. depth_buffer_ ==1
@@ -987,6 +988,14 @@ pcl::simulation::RangeLikelihood::getOrganizedPointCloud (
         pc->points[idx].r = color_buffer[rgb_idx * 3]; // red
       } else {
         //std::numeric_limits<float>::quiet_NaN()
+        pc->points[idx].z = std::numeric_limits<float>::quiet_NaN();
+        pc->points[idx].y = std::numeric_limits<float>::quiet_NaN();
+        pc->points[idx].x = std::numeric_limits<float>::quiet_NaN();
+
+        int rgb_idx = y * col_width_ + x; //camera_width_
+        pc->points[idx].b = 0; // blue
+        pc->points[idx].g = 0; // green
+        pc->points[idx].r = 0; // red
       }
     }
   }
