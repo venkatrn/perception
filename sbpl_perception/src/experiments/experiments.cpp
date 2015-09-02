@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
   pcl::PointCloud<PointT>::Ptr cloud_out(new PointCloud);
 
   unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition(world));
-  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 1, true));
+  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
 
   env_obj->Initialize(config_file);
   env_obj->SetDebugOptions(image_debug);
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
     replan_params.return_first_solution =
       true; // Setting this to true also means planner will ignore max time limit.
     replan_params.repair_time = -1;
-    replan_params.inflation_eps = 1.2; // 10.0
+    replan_params.inflation_eps = 10; // 10.0
     replan_params.anchor_eps = 1;
     replan_params.use_anchor = true;
     replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN;
@@ -109,7 +109,9 @@ int main(int argc, char **argv) {
     }
 
     assert(solution_state_ids.size() > 1);
-    env_obj->PrintState(solution_state_ids[solution_state_ids.size() - 2],
+    int goal_state_id = env_obj->GetBestSuccessorID(solution_state_ids[solution_state_ids.size() - 2]);
+    printf("Goal state ID is %d\n", goal_state_id);
+    env_obj->PrintState(goal_state_id,
                         string("/tmp/goal_state.png"));
   } else {
     while (1) {

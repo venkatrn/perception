@@ -1335,6 +1335,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
 
   // Read the input PCD file from disk.
   if (pcl::io::loadPCDFile<PointT>(pcd_file_path.c_str(), *cloud_in) != 0) {
+    cerr << "Could not find input PCD file!" << endl;
     return;
   }
   const int num_pixels = 480 * 640;
