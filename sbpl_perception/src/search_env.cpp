@@ -39,16 +39,27 @@ using namespace perception_utils;
 using namespace pcl::simulation;
 using namespace Eigen;
 
-const int kICPCostMultiplier = 1000000;
+namespace {
+constexpr int kICPCostMultiplier = 1000000;
 // const double kSensorResolution = 0.01 / 2;//0.01
-const double kSensorResolution = 0.003;
-const double kSensorResolutionSqr = kSensorResolution * kSensorResolution;
-const double kCollisionRadThresh = 0.05;
-const int kCollisionPointsThresh = 5;
+constexpr double kSensorResolution = 0.003;
+constexpr double kSensorResolutionSqr = kSensorResolution * kSensorResolution;
+
+// Number of points that should be near the (x,y,table height) of the object
+// for that state to be considered as valid.
+constexpr int kMinimumNeighborPointsForValidPose = 50;
+
+
+// Whether should use depth-dependent cost penalty. If true, cost is
+// indicator(pixel explained) * range_in_meters(pixel). Otherwise, cost is
+// indicator(pixel explained).
+constexpr bool kUseDepthSensitiveCost = false;
 
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
-const int kMasterRank = 0;
+constexpr int kMasterRank = 0;
+}
+
 
 EnvObjectRecognition::EnvObjectRecognition(const
                                            std::shared_ptr<boost::mpi::communicator> &comm) :
@@ -153,7 +164,7 @@ void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
   env_params_.num_models = static_cast<int>(model_files_.size());
 
   for (size_t ii = 0; ii < model_files.size(); ++ii) {
-    ROS_INFO("Object %zu: Symmetry %d", ii, static_cast<int>(model_symmetric[ii]));
+    printf("Object %zu: Symmetry %d\n", ii, static_cast<int>(model_symmetric[ii]));
   }
 
   obj_models_.clear();
@@ -179,14 +190,14 @@ void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
     ObjectModel obj_model(*mesh_out, model_symmetric[ii]);
     obj_models_.push_back(obj_model);
 
-    ROS_INFO("Read %s with %d polygons and %d triangles", model_files_[ii].c_str(),
+    printf("Read %s with %d polygons and %d triangles\n", model_files_[ii].c_str(),
              static_cast<int>(mesh.polygons.size()),
              static_cast<int>(mesh.cloud.data.size()));
-    ROS_INFO("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f",
+    printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f\n",
              obj_model.min_x(),
              obj_model.max_x(), obj_model.min_y(), obj_model.max_y(), obj_model.min_z(),
              obj_model.max_z(), obj_model.GetCircumscribedRadius());
-    ROS_INFO("\n");
+    printf("\n");
 
   }
 }
@@ -208,9 +219,9 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                       env_params_.res / 2.0;
   int num_neighbors_found = knn->radiusSearch(point, search_rad,
                                               indices,
-                                              sqr_dists, 1); //0.2
+                                              sqr_dists, kMinimumNeighborPointsForValidPose); //0.2
 
-  if (num_neighbors_found == 0) {
+  if (num_neighbors_found < kMinimumNeighborPointsForValidPose) {
     return false;
   }
 
@@ -243,7 +254,8 @@ void EnvObjectRecognition::LabelEuclideanClusters() {
 
   for (size_t ii = 0; ii < cluster_indices.size(); ++ii) {
     const auto &cluster = cluster_indices[ii];
-    printf("PCD Dims: %d %d\n", observed_organized_cloud_->width, observed_organized_cloud_->height);
+    printf("PCD Dims: %d %d\n", observed_organized_cloud_->width,
+           observed_organized_cloud_->height);
 
     for (const auto &index : cluster.indices) {
       int u = index % env_params_.img_width;
@@ -262,6 +274,7 @@ void EnvObjectRecognition::LabelEuclideanClusters() {
       image.at<uchar>(ii, jj) = static_cast<uchar>(cluster_labels_[index]);
     }
   }
+
   cv::normalize(image, image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
 
   static cv::Mat c_image;
@@ -297,7 +310,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     return;
   }
 
-  ROS_INFO("Expanding state: %d with %zu objects",
+  printf("Expanding state: %d with %zu objects\n",
            source_state_id,
            source_state.NumObjects());
   string fname = kDebugDir + "expansion_" + to_string(source_state_id) + ".png";
@@ -343,9 +356,6 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
           s.AppendObject(new_object);
           int succ_id = hash_manager_.GetStateIDForceful(s);
 
-          // TODO: simple check to ensure we don't add duplicate children
-
-          candidate_succ_ids.push_back(succ_id);
           candidate_succs.push_back(s);
 
           // If symmetric object, don't iterate over all thetas
@@ -356,6 +366,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       }
     }
   }
+  // We don't need IDs for the candidate succs at all.
+  candidate_succ_ids.resize(candidate_succs.size(), 0);
 
   vector<unsigned short> source_depth_image;
   const float *depth_buffer = GetDepthImage(source_state, &source_depth_image);
@@ -383,33 +395,21 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
 
-    // If GraphState did not change, just update continuous coordinates.
-    if (output_unit.cost != -1 &&
-        output_unit.adjusted_state == candidate_succs[ii]) {
-      hash_manager_.UpdateState(output_unit.adjusted_state);
-    }
+    bool invalid_state = output_unit.cost == -1;
 
-    // If GraphState changed, prune it only if such a state already exists and
-    // has better g-value.
-    // (DAG)
-    // TODO: Do this in a cleaner way.
-    bool invalid_state = false;
-
-    if (output_unit.cost != -1 &&
-        output_unit.adjusted_state != candidate_succs[ii] &&
-        hash_manager_.Exists(output_unit.adjusted_state)) {
-      // Get the ID of the existing state.
-      int existing_state_id = hash_manager_.GetStateID(output_unit.adjusted_state);
-
-      // If this successor leads to a worse g-value, skip it.
-      if (g_value_map_.find(existing_state_id) != g_value_map_.end() &&
-          g_value_map_[existing_state_id] <= g_value_map_[source_state_id] +
+    if (output_unit.cost != -1) {
+      // Get the ID of the existing state, or create a new one if it doesn't
+      // exist.
+      int modified_state_id = hash_manager_.GetStateIDForceful(output_unit.adjusted_state);
+      // If this successor exists and leads to a worse g-value, skip it.
+      if (g_value_map_.find(modified_state_id) != g_value_map_.end() &&
+          g_value_map_[modified_state_id] <= g_value_map_[source_state_id] +
           output_unit.cost) {
         invalid_state = true;
         // Otherwise, return the ID of the existing state and update its
         // continuous coordinates.
       } else {
-        candidate_succ_ids[ii] = existing_state_id;
+        candidate_succ_ids[ii] = modified_state_id;
         hash_manager_.UpdateState(output_unit.adjusted_state);
       }
     }
@@ -417,22 +417,22 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     if (invalid_state) {
       candidate_costs[ii] = -1;
     } else {
+      assert(output_unit.depth_image.size() != 0);
       candidate_costs[ii] = output_unit.cost;
+      minz_map_[candidate_succ_ids[ii]] =
+        output_unit.state_properties.last_min_depth;
+      maxz_map_[candidate_succ_ids[ii]] =
+        output_unit.state_properties.last_max_depth;
+      counted_pixels_map_[candidate_succ_ids[ii]] = output_unit.child_counted_pixels;
+      g_value_map_[candidate_succ_ids[ii]] = g_value_map_[source_state_id] +
+                                             output_unit.cost;
     }
-
-    minz_map_[candidate_succ_ids[ii]] =
-      output_unit.state_properties.last_min_depth;
-    maxz_map_[candidate_succ_ids[ii]] =
-      output_unit.state_properties.last_max_depth;
-    counted_pixels_map_[candidate_succ_ids[ii]] = output_unit.child_counted_pixels;
-    g_value_map_[candidate_succ_ids[ii]] = g_value_map_[source_state_id] +
-                                           output_unit.cost;
-
   }
 
   //--------------------------------------//
 
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
+    const auto &output_unit = cost_computation_output[ii];
     if (candidate_costs[ii] == -1) {
       continue;  // Invalid successor
     }
@@ -445,6 +445,18 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
     succ_cache[source_state_id].push_back(candidate_succ_ids[ii]);
     costs->push_back(candidate_costs[ii]);
+
+    if (image_debug_) {
+      std::stringstream ss;
+      ss.precision(20);
+      ss << kDebugDir + "succ_" << candidate_succ_ids[ii] << ".png";
+      PrintImage(ss.str(), output_unit.depth_image);
+      printf("State %d,       %d      %d      %d      %d\n", candidate_succ_ids[ii],
+               output_unit.state_properties.target_cost,
+               output_unit.state_properties.source_cost,
+               output_unit.cost,
+               g_value_map_[candidate_succ_ids[ii]]);
+    }
   }
 
   // cache succs and costs
@@ -455,8 +467,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   for (int ii = 0; ii < succ_ids->size(); ++ii) {
     printf("%d  ,  %d\n", (*succ_ids)[ii], (*costs)[ii]);
   }
-
   printf("\n");
+
 
   // ROS_INFO("Expanding state: %d with %d objects and %d successors",
   //          source_state_id,
@@ -524,9 +536,9 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
 
     output_unit.cost = GetTrueCost(input_unit.source_state, input_unit.child_state,
                                    input_unit.source_depth_image,
-                                   input_unit.source_id, input_unit.child_id, input_unit.source_counted_pixels,
+                                   input_unit.source_counted_pixels,
                                    &output_unit.child_counted_pixels, &output_unit.adjusted_state,
-                                   &output_unit.state_properties);
+                                   &output_unit.state_properties, &output_unit.depth_image);
   }
 
   boost::mpi::gather(*mpi_comm_, &output_partition[0], recvcount, *output,
@@ -577,9 +589,10 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
 
 int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
                                       const GraphState &child_state,
-                                      const vector<unsigned short> &source_depth_image, int parent_id, int child_id,
+                                      const vector<unsigned short> &source_depth_image,
                                       const vector<int> &parent_counted_pixels, vector<int> *child_counted_pixels,
-                                      GraphState *adjusted_child_state, GraphStateProperties *child_properties) {
+                                      GraphState *adjusted_child_state, GraphStateProperties *child_properties,
+                                      vector<unsigned short> *final_depth_image) {
 
   assert(child_state.NumObjects() > 0);
 
@@ -666,17 +679,12 @@ int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
   child_properties->last_min_depth = succ_min_depth;
   child_properties->last_max_depth = succ_max_depth;
 
-
-
   // Must use re-rendered adjusted partial cloud for cost
   for (int y = 0; y <  env_params_.img_height; ++y) {
     for (int x = 0; x < env_params_.img_width; ++x) {
       int i = y * env_params_.img_width + x ; // depth image index
       int i_in = (env_params_.img_height - 1 - y) * env_params_.img_width + x
                  ; // flip up down (buffer index)
-
-      // auto it = find(new_pixel_indices.begin(), new_pixel_indices.end(), i);
-      // if (it == new_pixel_indices.end()) continue; //Skip source pixels
 
       if (depth_image[i] != 20000 && source_depth_image[i] == 20000) {
         new_pixel_buffer[i_in] = succ_depth_buffer[i_in];
@@ -690,34 +698,31 @@ int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
                                                    true,
                                                    env_params_.camera_pose);
 
-
   // Compute costs
   const bool last_level = child_state.NumObjects() == env_params_.num_objects;
   int target_cost = 0, source_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
-  source_cost = GetSourceCost(succ_cloud, child_state.object_states().back(),
+  source_cost = GetSourceCost(succ_cloud, adjusted_child_state->object_states().back(),
                               last_level, parent_counted_pixels, child_counted_pixels);
   total_cost = source_cost + target_cost;
 
-  if (image_debug_) {
-    std::stringstream ss;
-    ss.precision(20);
-    ss << kDebugDir + "succ_" << child_id << ".png";
-    PrintImage(ss.str(), depth_image);
-    ROS_INFO("State %d,       %d      %d      %d", child_id,
-             target_cost,
-             source_cost, total_cost);
-  }
+  final_depth_image->clear();
+  *final_depth_image = depth_image;
+
+  child_properties->target_cost = target_cost;
+  child_properties->source_cost = source_cost;
 
   // if (image_debug_) {
-  //   std::stringstream ss1, ss2;
+  //   std::stringstream ss1, ss2, ss3;
   //   ss1.precision(20);
   //   ss2.precision(20);
   //   ss1 << kDebugDir + "cloud_" << child_id << ".pcd";
   //   ss2 << kDebugDir + "cloud_aligned_" << child_id << ".pcd";
+  //   ss3 << kDebugDir + "cloud_succ_" << child_id << ".pcd";
   //   pcl::PCDWriter writer;
   //   writer.writeBinary (ss1.str()  , *cloud_in);
   //   writer.writeBinary (ss2.str()  , *cloud_out);
+  //   writer.writeBinary (ss3.str()  , *succ_cloud);
   // }
 
   return total_cost;
@@ -788,15 +793,27 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
     int num_neighbors_found = knn->radiusSearch(point, kSensorResolution,
                                                 indices,
                                                 sqr_dists, 1);
+    const bool point_unexplained = num_neighbors_found == 0;
 
-    if (num_neighbors_found == 0) {
-      // nn_score += kSensorResolutionSqr ;
-      // nn_score += kSensorResolutionSqr * 100 ; //TODO: Do something principled
-      nn_score += 1.0;
+
+    double cost = 0;
+    if (point_unexplained) {
+      if (kUseDepthSensitiveCost) {
+        auto camera_origin = env_params_.camera_pose.translation();
+        PointT camera_origin_point;
+        camera_origin_point.x = camera_origin[0];
+        camera_origin_point.y = camera_origin[1];
+        camera_origin_point.z = camera_origin[2];
+        double range = pcl::euclideanDistance(camera_origin_point, point);
+        cost = range;
+      } else {
+        cost = 1.0;
+      }
     } else {
-      // nn_score += sqr_dists[0];
-      nn_score += 0.0;
+      // cost += sqr_dists[0];
+      cost = 0.0;
     }
+    nn_score += cost;
   }
 
   int target_cost = static_cast<int>(nn_score);
@@ -829,75 +846,129 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   *child_counted_pixels = parent_counted_pixels;
 
   int collision_label = -1;
-  for (int ii = 0; ii < num_pixels; ++ii) {
+  int num_passes = 1;
 
-    // Skip if empty pixel
-    if (observed_depth_image_[ii] == 20000) {
-      continue;
-    }
+  const bool kUseClusterCollision = false;
+  if (kUseClusterCollision) {
+    num_passes = 2;
+  }
 
-    // Skip if already accounted for
-    auto it = find(parent_counted_pixels.begin(),
-                   parent_counted_pixels.end(), ii);
+  for (int jj = 0; jj < num_passes; ++jj) {
+    for (int ii = 0; ii < num_pixels; ++ii) {
 
-    if (it != parent_counted_pixels.end()) {
-      continue;
-    }
+      // Skip if empty pixel
+      if (observed_depth_image_[ii] == 20000) {
+        continue;
+      }
 
-    vector<int> indices;
-    vector<float> sqr_dists;
-    PointT point;
+      // Skip if already accounted for
+      auto it = find(child_counted_pixels->begin(),
+                     child_counted_pixels->end(), ii);
 
-    int u = ii % env_params_.img_width;
-    int v = ii / env_params_.img_width;
-    // point = observed_organized_cloud_->at(v, u);
+      if (it != child_counted_pixels->end()) {
+        continue;
+      }
 
-    Eigen::Vector3f point_eig;
-    kinect_simulator_->rl_->getGlobalPoint(u, v,
-                                           static_cast<float>(observed_depth_image_[ii]) / 1000.0, cam_to_world_,
-                                           point_eig);
-    point.x = point_eig[0];
-    point.y = point_eig[1];
-    point.z = point_eig[2];
+      vector<int> indices;
+      vector<float> sqr_dists;
+      PointT point;
 
-    int num_neighbors_found = knn_reverse->radiusSearch(point, kCollisionRadThresh,
-                                                        indices,
-                                                        sqr_dists, kCollisionPointsThresh);
-    bool point_unexplained = (num_neighbors_found == 0 ||
-                              static_cast<double>(sqr_dists[0]) > kSensorResolutionSqr);
+      int u = ii % env_params_.img_width;
+      int v = ii / env_params_.img_width;
+      v = env_params_.img_height - 1 - v;
+      // point = observed_organized_cloud_->at(v, u);
 
-    PointT projected_point;
-    projected_point.x = point.x;
-    projected_point.y = point.y;
-    projected_point.z = env_params_.table_height;
-    float dist = pcl::euclideanDistance(obj_center, projected_point);
+      Eigen::Vector3f point_eig;
+      kinect_simulator_->rl_->getGlobalPoint(u, v,
+                                             static_cast<float>(observed_depth_image_[ii]) / 1000.0, cam_to_world_,
+                                             point_eig);
+      point.x = point_eig[0];
+      point.y = point_eig[1];
+      point.z = point_eig[2];
 
-    // bool point_in_collision = dist <= obj_models_[last_obj_id].inscribed_rad();
-    bool point_in_collision = dist <=
-                              obj_models_[last_obj_id].GetInscribedRadius();
-    // bool point_in_collision = dist <= 2.0 *
-    //                           obj_models_[last_obj_id].GetCircumscribedRadius();
-    // bool point_in_collision = num_neighbors_found >= kCollisionPointsThresh;
+      int num_neighbors_found = knn_reverse->radiusSearch(point, kSensorResolution,
+                                                          indices,
+                                                          sqr_dists, 1);
+      bool point_unexplained = num_neighbors_found == 0;
 
-    // Skip if not in collision (i.e, might be explained by a future object) or
-    // if its not too far in front
-    
-    if (point_in_collision) {
-      collision_label = cluster_labels_[ii];
-    }
-    point_in_collision = point_in_collision || (cluster_labels_[ii] == collision_label);
+      PointT projected_point;
+      projected_point.x = point.x;
+      projected_point.y = point.y;
+      projected_point.z = env_params_.table_height;
+      float dist = pcl::euclideanDistance(obj_center, projected_point);
 
-    if (point_in_collision || last_level) {
-      child_counted_pixels->push_back(ii);
+      // bool point_in_collision = dist <= obj_models_[last_obj_id].inscribed_rad();
+      // bool point_in_collision = dist <=
+      //                           obj_models_[last_obj_id].GetInscribedRadius();
+      bool point_in_collision = dist <= 1.0 *
+                                obj_models_[last_obj_id].GetCircumscribedRadius();
 
-      if (point_unexplained) {
-        nn_score += 1.0 ; //TODO: Do something principled
+
+      if (kUseClusterCollision) {
+        if (point_in_collision && cluster_labels_[ii] != -1) {
+          collision_label = cluster_labels_[ii];
+        }
+        point_in_collision = point_in_collision ||
+                             (cluster_labels_[ii] == collision_label);
+      }
+
+      if (point_in_collision || last_level) {
+        child_counted_pixels->push_back(ii);
+
+        if (point_unexplained) {
+          if (kUseDepthSensitiveCost) {
+            nn_score += observed_depth_image_[ii] / 1000.0;
+          } else {
+            nn_score += 1.0;
+          }
+        }
       }
     }
   }
 
   int source_cost = static_cast<int>(nn_score);
   return source_cost;
+}
+
+void EnvObjectRecognition::TestConversion() {
+    const int num_pixels = env_params_.img_width * env_params_.img_height;
+    PointCloudPtr cloud(new PointCloud);
+
+    for (int ii = 0; ii < num_pixels; ++ii) {
+      // Skip if empty pixel
+      if (observed_depth_image_[ii] == 20000) {
+        continue;
+      }
+
+      vector<int> indices;
+      vector<float> sqr_dists;
+      PointT point;
+
+      // int u = env_params_.img_width - ii % env_params_.img_width;
+      int u = ii % env_params_.img_width;
+      int v = ii / env_params_.img_width;
+      v = env_params_.img_height - 1 - v;
+       // int idx = y * camera_width_ + x;
+       //         int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
+      // point = observed_organized_cloud_->at(v, u);
+
+      Eigen::Vector3f point_eig;
+      kinect_simulator_->rl_->getGlobalPoint(u, v,
+                                             static_cast<float>(observed_depth_image_[ii]) / 1000.0, cam_to_world_,
+                                             point_eig);
+      point.x = point_eig[0];
+      point.y = point_eig[1];
+      point.z = point_eig[2];
+      cloud->points.push_back(point);
+    }
+    cloud->width = 1;
+    cloud->height = cloud->points.size();
+    cloud->is_dense = false;
+    std::stringstream ss;
+    ss.precision(20);
+    ss << kDebugDir + "test_cloud" << ".pcd";
+    pcl::PCDWriter writer;
+    writer.writeBinary (ss.str(), *cloud);
 }
 
 void EnvObjectRecognition::PrintState(int state_id, string fname) {
@@ -963,7 +1034,7 @@ void EnvObjectRecognition::PrintImage(string fname,
   //   }
   // }
   //
-  // ROS_INFO("Observed Image: Min z: %d, Max z: %d", min_depth, max_depth);
+  //  ROS_INFO("Observed Image: Min z: %d, Max z: %d", min_depth, max_depth);
 
   // max_depth = 12000;
   // min_depth = 5000;
@@ -1103,9 +1174,9 @@ void EnvObjectRecognition::SetBounds(double x_min, double x_max, double y_min,
 
 
 void EnvObjectRecognition::PrecomputeHeuristics() {
-  ROS_INFO("Precomputing heuristics.........");
+  printf("Precomputing heuristics.........\n");
   GraphState greedy_state = ComputeGreedyICPPoses();
-  ROS_INFO("Finished precomputing heuristics");
+  printf("Finished precomputing heuristics\n");
 }
 
 void EnvObjectRecognition::SetObservation(int num_objects,
@@ -1338,6 +1409,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
     cerr << "Could not find input PCD file!" << endl;
     return;
   }
+
   const int num_pixels = 480 * 640;
   const int height = 480;
   const int width = 640;
@@ -1367,6 +1439,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
   }
 
   *observed_organized_cloud_ = *depth_img_cloud;
+
   if (mpi_comm_->rank() == kMasterRank) {
     std::stringstream ss;
     ss.precision(20);
@@ -1679,10 +1752,10 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
   });
 
   for (int ii = 0; ii < env_params_.num_models; ++ii) {
-    ROS_INFO("ICP Score for Object %d: %f", ii, icp_scores[ii]);
+    printf("ICP Score for Object %d: %f\n", ii, icp_scores[ii]);
   }
 
-  ROS_INFO("Sorted scores:");
+  printf("Sorted scores:\n");
 
   for (int ii = 0; ii < env_params_.num_models; ++ii) {
     printf("%f ", icp_scores[sorted_indices[ii]]);
@@ -1760,6 +1833,7 @@ GraphState EnvObjectRecognition::ComputeVFHPoses() {
 void EnvObjectRecognition::SetDebugOptions(bool image_debug) {
   image_debug_ = image_debug;
 }
+
 
 
 

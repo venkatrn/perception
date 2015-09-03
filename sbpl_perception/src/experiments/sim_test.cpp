@@ -29,7 +29,8 @@ const int kMasterRank = 0;
 
 int main(int argc, char **argv) {
   boost::mpi::environment env(argc, argv);
-  std::shared_ptr<boost::mpi::communicator> world(new boost::mpi::communicator());
+  std::shared_ptr<boost::mpi::communicator> world(new
+                                                  boost::mpi::communicator());
 
   vector<string> model_files;
   vector<bool> symmetries;
@@ -92,49 +93,61 @@ int main(int argc, char **argv) {
   env_obj->SetBounds(min_x, max_x, min_y, max_y);
   env_obj->SetTableHeight(table_height);
 
-  unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-  default_random_engine generator (seed);
-  uniform_real_distribution<double> x_distribution (min_x, max_x);
-  uniform_real_distribution<double> y_distribution (min_y, max_y);
-  uniform_real_distribution<double> theta_distribution (0, 2 * M_PI);
-
   vector<int> model_ids;
   vector<ContPose> poses;
+  if (world->rank() == kMasterRank) {
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    printf("Random seed: %d\n", seed);
 
-  // ContPose p(0.1,0,M_PI/3);
+    // Good seeds.
+    // 5 objects stacked one behind another
+    // 1754182800
+    // 5 objects, separated
+    // -1912274402
 
-  int num_objects = model_files.size();
-  int ii = 0;
+    default_random_engine generator (seed);
+    uniform_real_distribution<double> x_distribution (min_x, max_x);
+    uniform_real_distribution<double> y_distribution (min_y, max_y);
+    uniform_real_distribution<double> theta_distribution (0, 2 * M_PI);
 
-  // while (poses.size() < num_objects) {
-  //   double x = x_distribution(generator);
-  //   double y = y_distribution(generator);
-  //   double theta = theta_distribution(generator);
-  //   ROS_INFO("Object %d: ContPose: %f %f %f", ii, x, y, theta);
-  //   ContPose p(x, y, theta);
-  //
-  //   // Disallow collisions
-  //   bool skip = false;
-  //   double obj_rad = 0.15;
-  //
-  //   for (int jj = 0; jj < poses.size(); ++jj) {
-  //     // if (fabs(poses[jj].x - p.x) < 0.15 || fabs(poses[jj].y - p.y) < 0.15) {
-  //     if ((poses[jj].x - p.x) * (poses[jj].x - p.x) + (poses[jj].y - p.y) *
-  //         (poses[jj].y - p.y) < obj_rad * obj_rad) {
-  //       skip = true;
-  //       break;
-  //     }
-  //   }
-  //
-  //   if (skip) {
-  //     continue;
-  //   }
-  //
-  //
-  //   model_ids.push_back(ii);
-  //   poses.push_back(p);
-  //   ii++;
-  // }
+
+    // ContPose p(0.1,0,M_PI/3);
+
+    int num_objects = model_files.size();
+    int ii = 0;
+
+    while (poses.size() < num_objects) {
+      double x = x_distribution(generator);
+      double y = y_distribution(generator);
+      double theta = theta_distribution(generator);
+      ROS_INFO("Object %d: ContPose: %f %f %f", ii, x, y, theta);
+      ContPose p(x, y, theta);
+
+      // Disallow collisions
+      bool skip = false;
+      double obj_rad = 0.15;
+
+      for (int jj = 0; jj < poses.size(); ++jj) {
+        // if (fabs(poses[jj].x - p.x) < 0.15 || fabs(poses[jj].y - p.y) < 0.15) {
+        if ((poses[jj].x() - p.x()) * (poses[jj].x() - p.x()) +
+            (poses[jj].y() - p.y()) *
+            (poses[jj].y() - p.y()) < obj_rad * obj_rad) {
+          skip = true;
+          break;
+        }
+      }
+
+      if (skip) {
+        continue;
+      }
+
+      model_ids.push_back(ii);
+      poses.push_back(p);
+      ii++;
+    }
+  }
+  broadcast(*world, model_ids, kMasterRank);
+  broadcast(*world, poses, kMasterRank);
 
   // ContPose p1( -0.000985, 0.015127, 1.703033);
   // ContPose p2(-0.176384, 0.063400, 1.641349);
@@ -144,16 +157,16 @@ int main(int argc, char **argv) {
 
   // Occlusion example
 
-  ContPose p1(0.296691, 0.110056, 1.369107);
-  ContPose p2( 0.209879, -0.171593, 0.210538);
-  ContPose p3( 0.414808, -0.174167, 3.746371);
-
-  poses.push_back(p1);
-  poses.push_back(p2);
-  poses.push_back(p3);
-  model_ids.push_back(0);
-  model_ids.push_back(1);
-  model_ids.push_back(2);
+  // ContPose p1(0.296691, 0.110056, 1.369107);
+  // ContPose p2( 0.209879, -0.171593, 0.210538);
+  // ContPose p3( 0.414808, -0.174167, 3.746371);
+  //
+  // poses.push_back(p1);
+  // poses.push_back(p2);
+  // poses.push_back(p3);
+  // model_ids.push_back(0);
+  // model_ids.push_back(1);
+  // model_ids.push_back(2);
 
   // Min z test
   //  0.013908 0.367176 3.825993
@@ -181,12 +194,12 @@ int main(int argc, char **argv) {
   // env_obj->PrecomputeHeuristics();
 
 
-  
+
   //-------------------------------------------------------------------//
   // // Greedy ICP Planner
   // State greedy_state = env_obj->ComputeGreedyICPPoses();
   // return 0;
-  
+
   // VFH Estimator
   // State vfh_state = env_obj->ComputeVFHPoses();
   // return 0;
@@ -194,73 +207,76 @@ int main(int argc, char **argv) {
 
   //-------------------------------------------------------------------//
   //
-  
+
   // Wait until all processes are ready for the planning phase.
   world->barrier();
 
   // Plan
-  
+
   if (world->rank() == kMasterRank) {
+    env_obj->TestConversion();
 
-  // unique_ptr<SBPLPlanner> planner(new LazyARAPlanner(env_obj, true));
-  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
+    // unique_ptr<SBPLPlanner> planner(new LazyARAPlanner(env_obj, true));
+    unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
 
-  int goal_id = env_obj->GetGoalStateID();
-  int start_id = env_obj->GetStartStateID();
+    int goal_id = env_obj->GetGoalStateID();
+    int start_id = env_obj->GetStartStateID();
 
-  if (planner->set_start(start_id) == 0) {
-    ROS_ERROR("ERROR: failed to set start state");
-    throw std::runtime_error("failed to set start state");
-  }
+    if (planner->set_start(start_id) == 0) {
+      ROS_ERROR("ERROR: failed to set start state");
+      throw std::runtime_error("failed to set start state");
+    }
 
-  if (planner->set_goal(goal_id) == 0) {
-    ROS_ERROR("ERROR: failed to set goal state");
-    throw std::runtime_error("failed to set goal state");
-  }
+    if (planner->set_goal(goal_id) == 0) {
+      ROS_ERROR("ERROR: failed to set goal state");
+      throw std::runtime_error("failed to set goal state");
+    }
 
 
-  MHAReplanParams replan_params(60.0);
-  replan_params.max_time = 60.0;
-  replan_params.initial_eps = 1.0;
-  replan_params.final_eps = 1.0;
-  replan_params.dec_eps = 0.2;
-  replan_params.return_first_solution =
-    true; // Setting this to true also means planner will ignore max time limit.
-  replan_params.repair_time = -1;
-  replan_params.inflation_eps = 10; //10000000.0
-  replan_params.anchor_eps = 1.0;
-  replan_params.use_anchor = true;
-  replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
-  replan_params.planner_type = mha_planner::PlannerType::SMHA;
-  replan_params.mha_type =
-    mha_planner::MHAType::FOCAL;
+    MHAReplanParams replan_params(60.0);
+    replan_params.max_time = 60.0;
+    replan_params.initial_eps = 1.0;
+    replan_params.final_eps = 1.0;
+    replan_params.dec_eps = 0.2;
+    replan_params.return_first_solution =
+      true; // Setting this to true also means planner will ignore max time limit.
+    replan_params.repair_time = -1;
+    replan_params.inflation_eps = 10; //10000000.0
+    replan_params.anchor_eps = 1.0;
+    replan_params.use_anchor = true;
+    replan_params.meta_search_type =
+      mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
+    replan_params.planner_type = mha_planner::PlannerType::SMHA;
+    replan_params.mha_type =
+      mha_planner::MHAType::FOCAL;
 
-  // ReplanParams params(600.0);
-  // params.max_time = 600.0;
-  // params.initial_eps = 100000.0;
-  // params.final_eps = 2.0;
-  // params.dec_eps = 1000;
-  // params.return_first_solution = true ;
-  // params.repair_time = -1;
+    // ReplanParams params(600.0);
+    // params.max_time = 600.0;
+    // params.initial_eps = 100000.0;
+    // params.final_eps = 2.0;
+    // params.dec_eps = 1000;
+    // params.return_first_solution = true ;
+    // params.repair_time = -1;
 
-  vector<int> solution_state_ids;
-  int sol_cost;
+    vector<int> solution_state_ids;
+    int sol_cost;
 
-  ROS_INFO("Begin planning");
-  bool plan_success = planner->replan(&solution_state_ids,
-                                      static_cast<MHAReplanParams>(replan_params), &sol_cost);
-  ROS_INFO("Done planning");
-  ROS_INFO("Size of solution: %d", solution_state_ids.size());
+    ROS_INFO("Begin planning");
+    bool plan_success = planner->replan(&solution_state_ids,
+                                        static_cast<MHAReplanParams>(replan_params), &sol_cost);
+    ROS_INFO("Done planning");
+    ROS_INFO("Size of solution: %d", solution_state_ids.size());
 
-  for (int ii = 0; ii < solution_state_ids.size(); ++ii) {
-    printf("%d: %d\n", ii, solution_state_ids[ii]);
-  }
+    for (int ii = 0; ii < solution_state_ids.size(); ++ii) {
+      printf("%d: %d\n", ii, solution_state_ids[ii]);
+    }
 
-  assert(solution_state_ids.size() > 1);
-  int goal_state_id = env_obj->GetBestSuccessorID(solution_state_ids[solution_state_ids.size() - 2]);
-  printf("Goal state ID is %d\n", goal_state_id);
-  env_obj->PrintState(goal_state_id,
-                      string("/tmp/goal_state.png"));
+    assert(solution_state_ids.size() > 1);
+    int goal_state_id = env_obj->GetBestSuccessorID(
+                          solution_state_ids[solution_state_ids.size() - 2]);
+    printf("Goal state ID is %d\n", goal_state_id);
+    env_obj->PrintState(goal_state_id,
+                        string("/tmp/goal_state.png"));
   } else {
     while (1) {
       vector<CostComputationInput> input;
@@ -268,5 +284,8 @@ int main(int argc, char **argv) {
       env_obj->ComputeCostsInParallel(input, &output);
     }
   }
+
   return 0;
 }
+
+

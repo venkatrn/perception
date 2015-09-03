@@ -39,9 +39,13 @@ std::ostream &operator<< (std::ostream &stream, const GraphState &graph_state);
 struct GraphStateProperties {
   unsigned short last_min_depth;
   unsigned short last_max_depth;
+  int target_cost;
+  int source_cost;
   template <typename Ar> void serialize(Ar &ar, const unsigned int) {
     ar &last_min_depth;
     ar &last_max_depth;
+    ar &target_cost;
+    ar &source_cost;
   }
 };
 

@@ -126,19 +126,20 @@ void GetDepthImageFromPointCloud(PointCloudPtr cloud,
 
 
   // Remove points below table surface
-  // Eigen::Vector4f table_centroid;
-  // compute3DCentroid(*table_points, table_centroid);
-  // table_height = table_centroid[2] + 0.002; //Hack
-  PointT table_min_pt, table_max_pt;
-  getMinMax3D(*table_points, table_min_pt, table_max_pt);
-  table_height = table_max_pt.z;
-  printf("Table height: %f", table_height);
+  Eigen::Vector4f table_centroid;
+  compute3DCentroid(*table_points, table_centroid);
+  table_height = table_centroid[2]; //Hack
+  // PointT table_min_pt, table_max_pt;
+  // getMinMax3D(*table_points, table_min_pt, table_max_pt);
+  // table_height = table_max_pt.z;
+  // printf("Table height: %f", table_height);
 
   pass.setKeepOrganized (true);
   pass.setInputCloud (trans_cloud);
   pass.setFilterFieldName ("z");
+  const double kMaxObjectHeight = 1.0;
   pass.setFilterLimits (table_height,
-                        table_height + 1.0); //TODO: do something principled
+                        table_height + kMaxObjectHeight); //TODO: do something principled
   //pass.setFilterLimitsNegative (true);
   pass.filter(*trans_cloud);
 

@@ -173,11 +173,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
   // of the last added object is adjusted using ICP and the computed state properties.
-  int GetTrueCost(const GraphState &source_state, const GraphState &child_state, const std::vector<unsigned short> &source_depth_image,
-                  int parent_id, int child_id, 
+  int GetTrueCost(const GraphState &source_state, const GraphState &child_state,
+                  const std::vector<unsigned short> &source_depth_image,
                   const std::vector<int> &parent_counted_pixels, std::vector<int> *child_counted_pixels,
                   GraphState *adjusted_child_state,
-                  GraphStateProperties *state_properties);
+                  GraphStateProperties *state_properties,
+                  std::vector<unsigned short> *final_depth_image);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr
@@ -222,6 +223,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetAllPreds(CMDPSTATE *state) {};
   void PrintState(int stateID, bool bVerbose, FILE *fOut = NULL) {};
   void PrintEnv_Config(FILE *fOut) {};
+  void TestConversion();
 
 
  private:

@@ -25,6 +25,7 @@ struct CostComputationOutput {
   GraphState adjusted_state;
   GraphStateProperties state_properties;
   std::vector<int> child_counted_pixels;
+  std::vector<unsigned short> depth_image;
 };
 
 namespace boost {
@@ -46,6 +47,8 @@ void serialize(Archive &ar, CostComputationOutput &output,
     ar &output.cost;
     ar &output.adjusted_state;
     ar &output.state_properties;
+    ar &output.child_counted_pixels;
+    ar &output.depth_image;
 }
 
 } // namespace serialization
