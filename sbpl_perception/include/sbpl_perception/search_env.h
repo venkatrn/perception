@@ -72,10 +72,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintState(GraphState s, std::string fname);
   void PrintImage(std::string fname,
                   const std::vector<unsigned short> &depth_image);
-  void TransformPolyMesh(const pcl::PolygonMesh::Ptr mesh_in,
-                         pcl::PolygonMesh::Ptr mesh_out, Eigen::Matrix4f transform);
-  void PreprocessModel(const pcl::PolygonMesh::Ptr mesh_in,
-                       pcl::PolygonMesh::Ptr mesh_out);
   const float *GetDepthImage(GraphState s, std::vector<unsigned short> *depth_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
@@ -225,11 +221,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintEnv_Config(FILE *fOut) {};
   void TestConversion();
 
-
  private:
 
   std::vector<ObjectModel> obj_models_;
-  std::vector<std::string> model_files_;
   pcl::simulation::Scene::Ptr scene_;
 
   EnvParams env_params_;

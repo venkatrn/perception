@@ -55,14 +55,15 @@ rosbuild_add_library(${PROJECT_NAME}
   src/graph_state.cpp
   src/object_state.cpp
   src/object_model.cpp
-  src/search_env.cpp)
+  src/search_env.cpp
+  src/config_parser.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 rosbuild_link_boost(${PROJECT_NAME} mpi serialization)
 
-rosbuild_add_executable(experiments src/experiments/experiments.cpp)
-target_link_libraries(experiments ${PROJECT_NAME})
-target_link_libraries(experiments libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+rosbuild_add_executable(real_test src/experiments/experiments.cpp)
+target_link_libraries(real_test ${PROJECT_NAME})
+target_link_libraries(real_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
 
 rosbuild_add_executable(sim_test src/experiments/sim_test.cpp)
@@ -75,6 +76,10 @@ rosbuild_link_boost(sim_test mpi serialization)
 rosbuild_add_executable(mpi_test src/experiments/search_mpi_test.cpp)
 rosbuild_link_boost(mpi_test mpi serialization)
 target_link_libraries(mpi_test ${PROJECT_NAME})
+
+rosbuild_add_executable(experiments/ground_truth_parser
+  experiments/src/ground_truth_parser.cpp)
+target_link_libraries(experiments/ground_truth_parser ${PROJECT_NAME})
 
 rosbuild_add_gtest(tests/states_test tests/states_test.cpp)
 target_link_libraries(tests/states_test ${PROJECT_NAME})

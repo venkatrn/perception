@@ -10,7 +10,7 @@
   <arg if="$(arg debug)" name="launch_prefix" value="xterm -e gdb --args" />
 
   <!-- <node pkg="sbpl_perception" type="experiments" name="experiments" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
-    <node pkg="sbpl_perception" type="experiments" name="experiments" output="screen" launch-prefix="mpirun -n 8" respawn="false">
+    <node pkg="sbpl_perception" type="real_test" name="real_test" output="screen" launch-prefix="mpirun -n 8" respawn="false">
     <param name="image_debug" value="$(arg image_debug)"/>
     <param name="icp_succ" value="$(arg icp_succ)"/>
 
@@ -22,6 +22,6 @@
     <!--3 separated objects-->
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142303.479339.txt"/> -->
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114846.520256.txt"/> -->
-    <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120202.414337.txt"/>
+    <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142303.479339.txt"/>
   </node>
 </launch>

@@ -9,6 +9,7 @@
 
 #include <perception_utils/perception_utils.h>
 #include <sbpl_perception/discretization_manager.h>
+#include <sbpl_perception/config_parser.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -160,8 +161,7 @@ void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
                                         const vector<bool> model_symmetric) {
 
   assert(model_files.size() == model_symmetric.size());
-  model_files_ = model_files;
-  env_params_.num_models = static_cast<int>(model_files_.size());
+  env_params_.num_models = static_cast<int>(model_files.size());
 
   for (size_t ii = 0; ii < model_files.size(); ++ii) {
     printf("Object %zu: Symmetry %d\n", ii, static_cast<int>(model_symmetric[ii]));
@@ -172,25 +172,12 @@ void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
 
   for (int ii = 0; ii < env_params_.num_models; ++ii) {
     pcl::PolygonMesh mesh;
-    pcl::io::loadPolygonFile (model_files_[ii].c_str(), mesh);
+    pcl::io::loadPolygonFile (model_files[ii].c_str(), mesh);
 
-    pcl::PolygonMesh::Ptr mesh_in (new pcl::PolygonMesh(mesh));
-    pcl::PolygonMesh::Ptr mesh_out (new pcl::PolygonMesh(mesh));
-
-    PreprocessModel(mesh_in, mesh_in);
-
-    Eigen::Matrix4f transform;
-    transform <<
-              1, 0 , 0 , 0,
-              0, 1 , 0 , 0,
-              0, 0 , 1 , 0,
-              0, 0 , 0 , 1;
-    TransformPolyMesh(mesh_in, mesh_out, 0.001 * transform);
-
-    ObjectModel obj_model(*mesh_out, model_symmetric[ii]);
+    ObjectModel obj_model(mesh, model_files[ii].c_str(), model_symmetric[ii]);
     obj_models_.push_back(obj_model);
 
-    printf("Read %s with %d polygons and %d triangles\n", model_files_[ii].c_str(),
+    printf("Read %s with %d polygons and %d triangles\n", model_files[ii].c_str(),
              static_cast<int>(mesh.polygons.size()),
              static_cast<int>(mesh.cloud.data.size()));
     printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f\n",
@@ -1084,20 +1071,12 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   for (size_t ii = 0; ii < object_states.size(); ++ii) {
     const auto &object_state = object_states[ii];
     ObjectModel obj_model = obj_models_[object_state.id()];
-    pcl::PolygonMesh::Ptr cloud (new pcl::PolygonMesh (
-                                   obj_model.mesh()));
     ContPose p = object_state.cont_pose();
 
-    Eigen::Matrix4f transform;
-    transform <<
-              cos(p.yaw()), -sin(p.yaw()) , 0, p.x(),
-                  sin(p.yaw()) , cos(p.yaw()) , 0, p.y(),
-                  0, 0 , 1 , env_params_.table_height,
-                  0, 0 , 0 , 1;
-    TransformPolyMesh(cloud, cloud, transform);
+    auto transformed_mesh = obj_model.GetTransformedMesh(p, env_params_.table_height);
 
     PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
-                                                           GL_POLYGON, cloud));
+                                                           GL_POLYGON, transformed_mesh));
     scene_->add (model);
   }
 
@@ -1106,52 +1085,6 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
   return depth_buffer;
 };
-
-
-void EnvObjectRecognition::TransformPolyMesh(const pcl::PolygonMesh::Ptr
-                                             mesh_in, pcl::PolygonMesh::Ptr mesh_out, Eigen::Matrix4f transform) {
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new
-                                                pcl::PointCloud<pcl::PointXYZ>);
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new
-                                                 pcl::PointCloud<pcl::PointXYZ>);
-  //   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_xyz (new
-  //                                                     pcl::PointCloud<pcl::PointXYZ>);
-  //
-  //   pcl::fromPCLPointCloud2(mesh->cloud, *cloud_in_xyz);
-  //   copyPointCloud(*cloud_in_xyz, *cloud_in);
-  pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
-
-  transformPointCloud(*cloud_in, *cloud_out, transform);
-
-  *mesh_out = *mesh_in;
-  pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
-  return;
-}
-
-
-void EnvObjectRecognition::PreprocessModel(const pcl::PolygonMesh::Ptr mesh_in,
-                                           pcl::PolygonMesh::Ptr mesh_out) {
-  pcl::PointCloud<PointT>::Ptr cloud_in (new
-                                         pcl::PointCloud<PointT>);
-  pcl::PointCloud<PointT>::Ptr cloud_out (new
-                                          pcl::PointCloud<PointT>);
-  pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
-
-  PointT min_pt, max_pt;
-  pcl::getMinMax3D(*cloud_in, min_pt, max_pt);
-  // Shift bottom most points to 0-z coordinate
-  Eigen::Matrix4f transform;
-  transform << 1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, -min_pt.z,
-            0, 0 , 0, 1;
-
-  transformPointCloud(*cloud_in, *cloud_out, transform);
-
-  *mesh_out = *mesh_in;
-  pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
-  return;
-}
 
 void EnvObjectRecognition::SetCameraPose(Eigen::Isometry3d camera_pose) {
   env_params_.camera_pose = camera_pose;
@@ -1313,99 +1246,18 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
 
 void EnvObjectRecognition::Initialize(const string &config_file) {
 
-  std::ifstream fs;
-  fs.open(config_file.c_str());
+  ConfigParser parser;
+  parser.Parse(config_file);
 
-  if (!fs.is_open () || fs.fail ()) {
-    throw std::runtime_error("Unable to open environment config file");
-    return;
-  }
-
-  std::string line;
-
-  std::getline(fs, line);
-
-  // Read input point cloud.
-  string pcd_file_path;
-  pcd_file_path = boost::lexical_cast<string>(line.c_str());
-  cout << "pcd path: " << pcd_file_path << endl;
-
-  // Read number of model files (assumed to be same as number of objects in
-  // env.
-  std::getline (fs, line);
-  int num_models;
-  num_models = boost::lexical_cast<int>(line.c_str());
-  cout << "num models: " << num_models << endl;
-
-  // Read the model files.
-  vector<string> model_files;
-
-  for (int ii = 0; ii < num_models; ++ii) {
-    std::getline(fs, line);
-    const string model_file = boost::lexical_cast<string>(line.c_str());
-    cout << "model file: " << model_file << endl;
-    model_files.push_back(model_file);
-  }
-
-  vector<bool> model_symmetries;
-
-  for (int ii = 0; ii < num_models; ++ii) {
-    std::getline(fs, line);
-    // const bool model_symmetry = boost::lexical_cast<bool>(line.c_str());
-    const bool model_symmetry = line == "true";
-
-    cout << "model symmetry: " << model_symmetry << endl;
-    model_symmetries.push_back(model_symmetry);
-  }
-
-  // Read workspace limits.
-  double min_x = 0, max_x = 0, min_y = 0, max_y = 0;
-  double table_height = 0;
-  std::getline(fs, line, ' ');
-  min_x = boost::lexical_cast<double>(line.c_str());
-  std::getline(fs, line);
-  max_x = boost::lexical_cast<double>(line.c_str());
-  cout << "X bounds: " << max_x << " " << min_x << endl;
-  std::getline(fs, line, ' ');
-  min_y = boost::lexical_cast<double>(line.c_str());
-  std::getline(fs, line);
-  max_y = boost::lexical_cast<double>(line.c_str());
-  cout << "Y bounds: " << max_y << " " << min_y << endl;
-  std::getline(fs, line);
-  table_height = boost::lexical_cast<double>(line.c_str());
-  cout << "table height: " << table_height << endl;
-
-  Eigen::Isometry3d camera_pose;
-  fs >> camera_pose.matrix()(0, 0);
-  fs >> camera_pose.matrix()(0, 1);
-  fs >> camera_pose.matrix()(0, 2);
-  fs >> camera_pose.matrix()(0, 3);
-  fs >> camera_pose.matrix()(1, 0);
-  fs >> camera_pose.matrix()(1, 1);
-  fs >> camera_pose.matrix()(1, 2);
-  fs >> camera_pose.matrix()(1, 3);
-  fs >> camera_pose.matrix()(2, 0);
-  fs >> camera_pose.matrix()(2, 1);
-  fs >> camera_pose.matrix()(2, 2);
-  fs >> camera_pose.matrix()(2, 3);
-  fs >> camera_pose.matrix()(3, 0);
-  fs >> camera_pose.matrix()(3, 1);
-  fs >> camera_pose.matrix()(3, 2);
-  fs >> camera_pose.matrix()(3, 3);
-
-  fs.close();
-  cout << std::setfill(' ') << "camera: " << camera_pose.matrix();
-  // return;
-
-  LoadObjFiles(model_files, model_symmetries);
-  SetBounds(min_x, max_x, min_y, max_y);
-  SetTableHeight(table_height);
-  SetCameraPose(camera_pose);
+  LoadObjFiles(parser.model_files, parser.model_symmetries);
+  SetBounds(parser.min_x, parser.max_x, parser.min_y, parser.max_y);
+  SetTableHeight(parser.table_height);
+  SetCameraPose(parser.camera_pose);
 
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
 
   // Read the input PCD file from disk.
-  if (pcl::io::loadPCDFile<PointT>(pcd_file_path.c_str(), *cloud_in) != 0) {
+  if (pcl::io::loadPCDFile<PointT>(parser.pcd_file_path.c_str(), *cloud_in) != 0) {
     cerr << "Could not find input PCD file!" << endl;
     return;
   }
@@ -1421,7 +1273,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
               0, -1, 0, 0,
               0, 0, 0, 1;
   PointCloudPtr depth_img_cloud(new PointCloud);
-  Eigen::Matrix4f world_to_cam = camera_pose.matrix().cast<float>().inverse();
+  Eigen::Matrix4f world_to_cam = parser.camera_pose.matrix().cast<float>().inverse();
   transformPointCloud(*cloud_in, *depth_img_cloud,
                       cam_to_body.inverse()*world_to_cam);
   vector<unsigned short> depth_image(num_pixels);
@@ -1449,7 +1301,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
   }
 
 
-  SetObservation(num_models, depth_image, cloud_in);
+  SetObservation(parser.num_models, depth_image, cloud_in);
 }
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
