@@ -67,7 +67,6 @@ int main(int argc, char **argv) {
 
   // Plan
   if (world->rank() == kMasterRank) {
-    env_obj->TestConversion();
     int goal_id = env_obj->GetGoalStateID();
     int start_id = env_obj->GetStartStateID();
 

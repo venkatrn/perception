@@ -191,9 +191,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
                   std::vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
                   unsigned short *max_succ_depth);
 
-  bool IsValidPose(GraphState s, int model_id, ContPose p);
+  bool IsValidPose(GraphState s, int model_id, ContPose p, bool after_refinement);
 
   void LabelEuclideanClusters();
+  PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image);
+  void PrintValidStates();
 
   void SetDebugOptions(bool image_debug);
 
@@ -219,7 +221,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetAllPreds(CMDPSTATE *state) {};
   void PrintState(int stateID, bool bVerbose, FILE *fOut = NULL) {};
   void PrintEnv_Config(FILE *fOut) {};
-  void TestConversion();
 
  private:
 
@@ -246,11 +247,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
+  pcl::search::KdTree<PointT>::Ptr projected_knn_;
 
 
   std::vector<unsigned short> observed_depth_image_;
   PointCloudPtr observed_cloud_, downsampled_observed_cloud_,
-                observed_organized_cloud_;
+                observed_organized_cloud_, projected_cloud_;
   pcl::RangeImagePlanar empty_range_image_;
 
   GraphState start_state_, goal_state_;

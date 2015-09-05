@@ -214,8 +214,6 @@ int main(int argc, char **argv) {
   // Plan
 
   if (world->rank() == kMasterRank) {
-    env_obj->TestConversion();
-
     // unique_ptr<SBPLPlanner> planner(new LazyARAPlanner(env_obj, true));
     unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
 
