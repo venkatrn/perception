@@ -83,10 +83,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetObservation(std::vector<int> object_ids,
                       std::vector<ContPose> poses);
   void SetObservation(int num_objects,
-                      const std::vector<unsigned short> observed_depth_image,
-                      const PointCloudPtr observed_organized_cloud);
-  void SetObservation(int num_objects,
-                      const unsigned short *observed_depth_image);
+                      const std::vector<unsigned short> observed_depth_image);
   void SetCameraPose(Eigen::Isometry3d camera_pose);
   void SetTableHeight(double height);
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
@@ -248,6 +245,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr projected_knn_;
+  std::vector<int> valid_indices_;
 
 
   std::vector<unsigned short> observed_depth_image_;
