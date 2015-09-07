@@ -51,16 +51,20 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
 
   PointT min_pt, max_pt;
   pcl::getMinMax3D(*cloud_in, min_pt, max_pt);
+  double z_translation = min_pt.z;
+
   // Shift bottom most points to 0-z coordinate
   Eigen::Affine3f transform = Eigen::Affine3f::Identity();
-  Eigen::Vector3f translation;
-  translation << 0, 0, -min_pt.z;
-  transform.translation() = translation;
-
   // By default, assume cad models are in mm.
   if (mesh_in_mm) {
     transform.scale(0.001);
+    z_translation *= 0.001;
   }
+
+  Eigen::Vector3f translation;
+  translation << 0, 0, -z_translation;
+  transform.translation() = translation;
+
   transformPointCloud(*cloud_in, *cloud_out, transform);
 
   *mesh_out = *mesh_in;

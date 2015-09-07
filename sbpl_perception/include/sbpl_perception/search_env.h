@@ -256,6 +256,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   GraphState start_state_, goal_state_;
 
   bool image_debug_;
+  unsigned short min_observed_depth_, max_observed_depth_;
 
   Eigen::Matrix4f gl_inverse_transform_;
   Eigen::Isometry3d cam_to_world_;

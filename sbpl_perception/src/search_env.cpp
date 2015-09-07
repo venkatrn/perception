@@ -1026,25 +1026,6 @@ void EnvObjectRecognition::PrintImage(string fname,
   assert(depth_image.size() != 0);
   static cv::Mat image;
   image.create(env_params_.img_height, env_params_.img_width, CV_8UC1);
-  unsigned short max_depth = 0, min_depth = 20000;
-
-  for (int ii = 0; ii < env_params_.img_height; ++ii) {
-    for (int jj = 0; jj < env_params_.img_width; ++jj) {
-      int idx = ii * env_params_.img_width + jj;
-
-      if (observed_depth_image_[idx] == 20000) {
-        continue;
-      }
-
-      if (max_depth < observed_depth_image_[idx]) {
-        max_depth = observed_depth_image_[idx];
-      }
-
-      if (min_depth > observed_depth_image_[idx]) {
-        min_depth = observed_depth_image_[idx];
-      }
-    }
-  }
 
   // for (int ii = 0; ii < env_params_.img_height; ++ii) {
   //   for (int jj = 0; jj < env_params_.img_width; ++jj) {
@@ -1069,25 +1050,37 @@ void EnvObjectRecognition::PrintImage(string fname,
   // max_depth = 12000;
   // min_depth = 5000;
 
-  const double range = double(max_depth - min_depth);
+  const double range = double(max_observed_depth_ - min_observed_depth_);
 
   for (int ii = 0; ii < env_params_.img_height; ++ii) {
     for (int jj = 0; jj < env_params_.img_width; ++jj) {
       int idx = ii * env_params_.img_width + jj;
 
-      if (depth_image[idx] > max_depth || depth_image[idx] == 20000) {
+      if (depth_image[idx] > max_observed_depth_ || depth_image[idx] == 20000) {
         image.at<uchar>(ii, jj) = 0;
-      } else if (depth_image[idx] < min_depth) {
+      } else if (depth_image[idx] < min_observed_depth_) {
         image.at<uchar>(ii, jj) = 255;
       } else {
         image.at<uchar>(ii, jj) = static_cast<uchar>(255.0 - double(
-                                                       depth_image[idx] - min_depth) * 255.0 / range);
+                                                       depth_image[idx] - min_observed_depth_) * 255.0 / range);
       }
     }
   }
 
   static cv::Mat c_image;
   cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
+
+  // Convert background to white to make pretty.
+  for (int ii = 0; ii < env_params_.img_height; ++ii) {
+    for (int jj = 0; jj < env_params_.img_width; ++jj) {
+      if (image.at<uchar>(ii, jj) == 0) {
+        c_image.at<cv::Vec3b>(ii,jj)[0] = 0;
+        c_image.at<cv::Vec3b>(ii,jj)[1] = 0;
+        c_image.at<cv::Vec3b>(ii,jj)[2] = 0;
+      }
+    }
+  }
+  
   cv::imwrite(fname.c_str(), c_image);
   //http://docs.opencv.org/modules/contrib/doc/facerec/colormaps.html
 }
@@ -1203,15 +1196,6 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   knn->setInputCloud(observed_cloud_);
   LabelEuclideanClusters();
 
-  if (mpi_comm_->rank() == kMasterRank) {
-    std::stringstream ss;
-    ss.precision(20);
-    ss << kDebugDir + "obs_cloud" << ".pcd";
-    pcl::PCDWriter writer;
-    writer.writeBinary (ss.str()  , *observed_cloud_);
-    PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
-  }
-
   // Project point cloud to table.
   *projected_cloud_ = *observed_cloud_;
 
@@ -1228,6 +1212,36 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   projected_knn_.reset(new pcl::search::KdTree<PointT>(true));
   projected_knn_->setInputCloud(projected_cloud_);
+
+  min_observed_depth_ = 20000;
+  max_observed_depth_ = 0;
+  for (int ii = 0; ii < env_params_.img_height; ++ii) {
+    for (int jj = 0; jj < env_params_.img_width; ++jj) {
+      int idx = ii * env_params_.img_width + jj;
+
+      if (observed_depth_image_[idx] == 20000) {
+        continue;
+      }
+
+      if (max_observed_depth_ < observed_depth_image_[idx]) {
+        max_observed_depth_ = observed_depth_image_[idx];
+      }
+
+      if (min_observed_depth_ > observed_depth_image_[idx]) {
+        min_observed_depth_ = observed_depth_image_[idx];
+      }
+    }
+  }
+
+  if (mpi_comm_->rank() == kMasterRank) {
+    std::stringstream ss;
+    ss.precision(20);
+    ss << kDebugDir + "obs_cloud" << ".pcd";
+    pcl::PCDWriter writer;
+    writer.writeBinary (ss.str()  , *observed_cloud_);
+    PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
+  }
+
 
   if (mpi_comm_->rank() == kMasterRank) {
     std::stringstream ss;
