@@ -51,6 +51,9 @@ constexpr double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
 // for that state to be considered as valid.
 constexpr int kMinimumNeighborPointsForValidPose = 50;
 
+// Offset used to adjust table height when using RANSAC to fit table to real
+// data.
+constexpr double kTableHeightOffset = 0.01;
 
 // Whether should use depth-dependent cost penalty. If true, cost is
 // indicator(pixel explained) * range_in_meters(pixel). Otherwise, cost is
@@ -594,9 +597,12 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   case 1:
     return depth_first_heur;
 
-  case 2:
+  case 2: {
     // return GetICPHeuristic(s);
-    return static_cast<int>(1000 * minz_map_[state_id]);
+    // return static_cast<int>(1000 * minz_map_[state_id]);
+    const int num_pixels = env_params_.img_width * env_params_.img_height;
+    return num_pixels - static_cast<int>(counted_pixels_map_[state_id].size());
+          }
 
   default:
     return 0;
@@ -1277,7 +1283,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
 
   LoadObjFiles(parser.model_files, parser.model_symmetries);
   SetBounds(parser.min_x, parser.max_x, parser.min_y, parser.max_y);
-  SetTableHeight(parser.table_height);
+  SetTableHeight(parser.table_height - kTableHeightOffset);
   SetCameraPose(parser.camera_pose);
 
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
