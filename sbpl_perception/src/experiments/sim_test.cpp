@@ -215,7 +215,7 @@ int main(int argc, char **argv) {
 
   if (world->rank() == kMasterRank) {
     // unique_ptr<SBPLPlanner> planner(new LazyARAPlanner(env_obj, true));
-    unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
+    unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 3, true));
 
     int goal_id = env_obj->GetGoalStateID();
     int start_id = env_obj->GetStartStateID();

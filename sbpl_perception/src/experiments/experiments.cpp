@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
   pcl::PointCloud<PointT>::Ptr cloud_out(new PointCloud);
 
   unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition(world));
-  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
+  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 3, true));
 
   env_obj->Initialize(config_file);
   env_obj->SetDebugOptions(image_debug);
