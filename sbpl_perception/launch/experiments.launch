@@ -21,9 +21,9 @@
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
 
     <!--3 separated objects-->
-    <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142303.479339.txt"/> -->
+    <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142303.479339.txt"/>
 
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114846.520256.txt"/> -->
-    <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142031.994106.txt"/>
+    <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142031.994106.txt"/> -->
   </node>
 </launch>

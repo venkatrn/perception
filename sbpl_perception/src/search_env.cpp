@@ -595,7 +595,8 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
     return depth_first_heur;
 
   case 2:
-    return GetICPHeuristic(s);
+    // return GetICPHeuristic(s);
+    return static_cast<int>(1000 * minz_map_[state_id]);
 
   default:
     return 0;
