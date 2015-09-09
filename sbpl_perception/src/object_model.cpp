@@ -42,12 +42,18 @@ void TransformPolyMesh(const pcl::PolygonMesh::Ptr
 }
 
 Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
-                     pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm) {
+                     pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, bool flipped) {
   pcl::PointCloud<PointT>::Ptr cloud_in (new
                                          pcl::PointCloud<PointT>);
   pcl::PointCloud<PointT>::Ptr cloud_out (new
                                           pcl::PointCloud<PointT>);
   pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
+
+  Eigen::Affine3f flipping_transform = Eigen::Affine3f::Identity();
+  if (flipped) {
+    flipping_transform.matrix()(2, 2) = -1;
+    transformPointCloud(*cloud_in, *cloud_in, flipping_transform);
+  }
 
   PointT min_pt, max_pt;
   pcl::getMinMax3D(*cloud_in, min_pt, max_pt);
@@ -69,14 +75,14 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
 
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
-  return transform;
+  return transform * flipping_transform;
 }
 }
 
-ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name, const bool symmetric) {
+ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name, const bool symmetric, const bool flipped) {
   pcl::PolygonMesh::Ptr mesh_in(new pcl::PolygonMesh(mesh));
   pcl::PolygonMesh::Ptr mesh_out(new pcl::PolygonMesh);
-  preprocessing_transform_ = PreprocessModel(mesh_in, mesh_out, kMeshInMillimeters);
+  preprocessing_transform_ = PreprocessModel(mesh_in, mesh_out, kMeshInMillimeters, flipped);
   mesh_ = *mesh_out;
   symmetric_ = symmetric;
   name_ = name;

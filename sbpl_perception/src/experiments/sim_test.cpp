@@ -34,6 +34,7 @@ int main(int argc, char **argv) {
 
   vector<string> model_files;
   vector<bool> symmetries;
+  vector<bool> flippings;
   bool image_debug;
 
   if (world->rank() == kMasterRank) {
@@ -42,8 +43,10 @@ int main(int argc, char **argv) {
     ros::NodeHandle private_nh("~");
     vector<string> empty_model_files;
     vector<bool> empty_symmetries;
+    vector<bool> empty_flippings;
     private_nh.param("model_files", model_files, empty_model_files);
     private_nh.param("model_symmetries", symmetries, empty_symmetries);
+    private_nh.param("model_flippings", flippings, empty_flippings);
     private_nh.param("image_debug", image_debug, false);
     printf("There are %d model files\n", model_files.size());
   }
@@ -53,12 +56,13 @@ int main(int argc, char **argv) {
 
   broadcast(*world, model_files, kMasterRank);
   broadcast(*world, symmetries, kMasterRank);
+  broadcast(*world, flippings, kMasterRank);
   broadcast(*world, image_debug, kMasterRank);
 
   unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition(world));
 
   // Set model files
-  env_obj->LoadObjFiles(model_files, symmetries);
+  env_obj->LoadObjFiles(model_files, symmetries, flippings);
   // Set debug options
   env_obj->SetDebugOptions(image_debug);
 

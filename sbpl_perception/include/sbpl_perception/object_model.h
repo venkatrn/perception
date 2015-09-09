@@ -15,11 +15,11 @@
 
 class ObjectModel {
  public:
-  ObjectModel(const pcl::PolygonMesh &mesh, const std::string name, const bool symmetric);
+  ObjectModel(const pcl::PolygonMesh &mesh, const std::string name, const bool symmetric, const bool flipped);
   double GetInscribedRadius() const;
   double GetCircumscribedRadius() const;
   pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p, double table_height);
-pcl::PolygonMeshPtr GetTransformedMesh(const Eigen::Matrix4f &transform);
+  pcl::PolygonMeshPtr GetTransformedMesh(const Eigen::Matrix4f &transform);
 
   // Accessors
   const pcl::PolygonMesh &mesh() const {

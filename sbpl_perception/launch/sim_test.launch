@@ -90,6 +90,11 @@ $(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply]
         [1, 0, 0, 0, 0]
         <!-- [1, 0, 0] -->
        </rosparam>
+      </rosparam>
+      <rosparam param="model_flippings">
+        [0, 0, 0, 0, 0]
+        <!-- [1, 0, 0] -->
+       </rosparam>
   </node>
 
   <!--<node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />-->

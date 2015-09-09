@@ -67,7 +67,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator> &comm);
   ~EnvObjectRecognition();
   void LoadObjFiles(const std::vector<std::string> &model_files,
-                    const std::vector<bool> model_symmetric);
+                    const std::vector<bool> &model_symmetric,
+                    const std::vector<bool> &model_flipped);
   void PrintState(int state_id, std::string fname);
   void PrintState(GraphState s, std::string fname);
   void PrintImage(std::string fname,

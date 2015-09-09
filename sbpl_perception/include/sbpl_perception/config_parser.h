@@ -15,6 +15,7 @@ class ConfigParser {
   int num_models;
   std::vector<std::string> model_files;
   std::vector<bool> model_symmetries;
+  std::vector<bool> model_flippings;
   double min_x, max_x;
   double min_y, max_y;
   double table_height;

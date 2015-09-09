@@ -163,9 +163,13 @@ EnvObjectRecognition::~EnvObjectRecognition() {
 }
 
 void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
-                                        const vector<bool> model_symmetric) {
+                                        const vector<bool> &model_symmetric,
+                                        const vector<bool> &model_flipped) {
 
   assert(model_files.size() == model_symmetric.size());
+  assert(model_flipped.size() == model_symmetric.size());
+
+  // TODO: assign all env params in a separate method
   env_params_.num_models = static_cast<int>(model_files.size());
 
   for (size_t ii = 0; ii < model_files.size(); ++ii) {
@@ -179,7 +183,7 @@ void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFile (model_files[ii].c_str(), mesh);
 
-    ObjectModel obj_model(mesh, model_files[ii].c_str(), model_symmetric[ii]);
+    ObjectModel obj_model(mesh, model_files[ii].c_str(), model_symmetric[ii], model_flipped[ii]);
     obj_models_.push_back(obj_model);
 
     printf("Read %s with %d polygons and %d triangles\n", model_files[ii].c_str(),
@@ -1281,7 +1285,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
   ConfigParser parser;
   parser.Parse(config_file);
 
-  LoadObjFiles(parser.model_files, parser.model_symmetries);
+  LoadObjFiles(parser.model_files, parser.model_symmetries, parser.model_flippings);
   SetBounds(parser.min_x, parser.max_x, parser.min_y, parser.max_y);
   SetTableHeight(parser.table_height - kTableHeightOffset);
   SetCameraPose(parser.camera_pose);

@@ -34,6 +34,9 @@ for subdir, dirs, files in os.walk(pcd_files_dir):
         for x in range(int(num_models)):
             symmetric = 'false'
             out_file.write(symmetric + '\n')
+        for x in range(int(num_models)):
+            flipped = 'false'
+            out_file.write(flipped + '\n')
         out_file.close()
 
         print 'There are {0} models and max range is {1}'.format(num_models, max_range)

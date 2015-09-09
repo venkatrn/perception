@@ -52,6 +52,13 @@ void ConfigParser::Parse(const string &config_file) {
     model_symmetries.push_back(model_symmetry);
   }
 
+  for (int ii = 0; ii < num_models; ++ii) {
+    std::getline(fs, line);
+    const bool model_flipped = line == "true";
+    cout << "model flipped: " << model_flipped << endl;
+    model_flippings.push_back(model_flipped);
+  }
+
   // Read workspace limits.
   std::getline(fs, line, ' ');
   min_x = boost::lexical_cast<double>(line.c_str());
