@@ -212,8 +212,8 @@ int main(int argc, char **argv) {
       cout << "roll : " << roll << " ,pitch : " << pitch << " ,yaw : " << yaw <<
            std::endl;
 
-      fs << x << " " << y << " " << z << endl;
-      fs << roll << " " << pitch << " " << yaw << endl;
+      fs << x << " " << y << " " << z << " " << yaw << endl;
+      // fs << roll << " " << pitch << " " << yaw << endl;
 
 
       // cout << "HELLOO" << endl << preprocessing_transform_inverse.matrix() << endl;

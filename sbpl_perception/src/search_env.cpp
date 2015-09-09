@@ -53,7 +53,7 @@ constexpr int kMinimumNeighborPointsForValidPose = 50;
 
 // Offset used to adjust table height when using RANSAC to fit table to real
 // data.
-constexpr double kTableHeightOffset = 0.01;
+constexpr double kTableHeightOffset = 0.00;
 
 // Whether should use depth-dependent cost penalty. If true, cost is
 // indicator(pixel explained) * range_in_meters(pixel). Otherwise, cost is
