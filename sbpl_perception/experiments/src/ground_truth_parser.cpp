@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
       pcl::io::loadPolygonFile (parser.model_files[ii].c_str(), mesh);
       ObjectModel obj_model(mesh, parser.model_files[ii].c_str(),
                             parser.model_symmetries[ii],
-                            parser.model_flippings);
+                            parser.model_flippings[ii]);
       obj_models.push_back(obj_model);
       printf("Read %s with %d polygons and %d triangles\n",
              parser.model_files[ii].c_str(),
