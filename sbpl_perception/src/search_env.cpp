@@ -535,21 +535,9 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
     assert(output != nullptr);
     output->clear();
     output->resize(count);
-
-    for (int rank = 0; rank < mpi_comm_->size(); ++rank) {
-      if (rank == kMasterRank) {
-        continue;
-      }
-      mpi_comm_->isend(rank, 10, count);
-    }
-  } else {
-    boost::mpi::request req = mpi_comm_->irecv(kMasterRank, 10, count);
-    if (!req.test()) {
-      return;
-    }
   }
 
-  // broadcast(*mpi_comm_, count, kMasterRank);
+  broadcast(*mpi_comm_, count, kMasterRank);
 
   if (count == 0) {
     return;
