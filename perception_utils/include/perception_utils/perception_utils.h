@@ -34,7 +34,7 @@ namespace perception_utils
   PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud, pcl::ModelCoefficients::Ptr coefficients);
 
   /**@brief Get clusters from the point cloud**/ 
-  void DoEuclideanClustering(PointCloudPtr cloud, std::vector<PointCloudPtr>* cluster_clouds, std::vector<pcl::PointIndices>* cluster_indices);
+  void DoEuclideanClustering(PointCloudPtr cloud, std::vector<PointCloudPtr>* cluster_clouds, std::vector<pcl::PointIndices>* cluster_indices, int num_clusters = -1);
   void DoEuclideanClusteringOrganized(PointCloudPtr cloud, std::vector<PointCloudPtr>* cluster_clouds, std::vector<pcl::PointIndices>* cluster_indices);
 
   /**@brief Project points onto model specified by coefficients--only planes for now**/

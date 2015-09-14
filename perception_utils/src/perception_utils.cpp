@@ -40,9 +40,9 @@
 #include <boost/thread/thread.hpp>
 
 // Euclidean cluster extraction params
-const int kMaxClusterSize = 100000; //10000
+const int kMaxClusterSize = 1000000; //10000
 const int kMinClusterSize = 100; //100
-const double kClusterTolerance = 0.03; //0.2
+const double kClusterTolerance = 0.01; //0.03
 
 // Plane Extraction
 const double kPlaneInlierThreshold = 0.005;
@@ -389,7 +389,8 @@ PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
 
 void DoEuclideanClustering(PointCloudPtr cloud,
                                              vector<PointCloudPtr> *cluster_clouds,
-                                             vector<pcl::PointIndices> *cluster_indices) {
+                                             vector<pcl::PointIndices> *cluster_indices,
+                                             int num_clusters/*=-1*/) {
   PointCloudPtr cluster_pcd (new PointCloud);
   cluster_clouds->clear();
 
@@ -438,6 +439,40 @@ void DoEuclideanClustering(PointCloudPtr cloud,
     //printf("Size: %d\n",(int)cloud_cluster->points.size ());
 
     cluster_clouds->push_back(cloud_cluster);
+  }
+  std::sort(cluster_clouds->begin(), cluster_clouds->end(), [](PointCloudPtr cluster_cloud_1, PointCloudPtr cluster_cloud_2) {
+        return cluster_cloud_2->size() < cluster_cloud_1->size();
+      });
+
+  // If desired number of clusters is specified, merge extra clusters into
+  // the closest clusters.
+  if (num_clusters != -1) {
+    std::vector<PointT> centroids(cluster_clouds->size());
+    for (size_t ii = 0; ii < cluster_clouds->size(); ++ii) {
+      Eigen::Vector4f centroid_eigen;
+      pcl::compute3DCentroid(*cluster_clouds->at(ii), centroid_eigen);
+      centroids[ii].x = centroid_eigen[0];
+      centroids[ii].y = centroid_eigen[1];
+      // centroids[ii].z = centroid_eigen[2];
+      centroids[ii].z = 0; // project to table
+    }
+    for (size_t ii = num_clusters; ii < cluster_clouds->size(); ++ii) {
+      vector<double> distances(num_clusters);
+      for (size_t jj = 0; jj < num_clusters; ++jj) {
+        distances[jj] = pcl::euclideanDistance(centroids[ii], centroids[jj]);
+      }
+      auto min_element_it = std::min_element(distances.begin(), distances.end());
+      int closest_idx = std::distance(distances.begin(), min_element_it);
+      double closest_dist = *min_element_it;
+      if (closest_dist > 0.15) {
+        continue;
+      }
+      for (size_t kk = 0; kk < cluster_clouds->at(ii)->size(); ++kk) {
+        cluster_clouds->at(closest_idx)->points.push_back(cluster_clouds->at(ii)->points[kk]);
+      }
+      cluster_clouds->at(closest_idx)->width = cluster_clouds->at(closest_idx)->points.size();
+    }
+    cluster_clouds->resize(num_clusters);
   }
 }
 

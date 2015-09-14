@@ -7,6 +7,8 @@
 #include <pcl/io/io.h>
 #include <pcl/io/vtk_lib_io.h>
 #include <pcl/features/vfh.h>
+#include <pcl/features/cvfh.h>
+#include <pcl/features/our_cvfh.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/visualization/pcl_visualizer.h>
@@ -20,6 +22,7 @@
 #include <boost/filesystem.hpp>
 #include <fstream>
 #include <iostream>
+
 
 class VFHPoseEstimator {
  private:
@@ -49,6 +52,8 @@ class VFHPoseEstimator {
     * \param filename the input file name
     */
   bool loadFLANNAngleData (std::vector<CloudInfo> &cloudInfoList,
+                           const std::string &filename);
+  bool loadTransformData (std::vector<CloudInfo> &cloudInfoList,
                            const std::string &filename);
 
   /** \brief loads angle data corresponding to a pointcloud
@@ -81,6 +86,8 @@ class VFHPoseEstimator {
   */
   bool getPose (const PointCloud::Ptr &cloud, float &roll, float &pitch,
                 float &yaw, const bool visMatch);
+
+  std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> getPoseConstrained (const PointCloud::Ptr &cloud, const bool visMatch, const std::vector<std::string> &model_names, std::vector<double> *best_distances, std::vector<Eigen::Affine3f> *model_to_scene_transforms);
 
   /** \brief Returns closest pose of closest cloud in training dataset to the query cloud
       \param dataDir boost path to directory with training data

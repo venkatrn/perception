@@ -48,3 +48,4 @@ rosbuild_add_executable(align_pcd_to_world tools/align_pcd_to_world.cpp)
 target_link_libraries(align_pcd_to_world ${PROJECT_NAME} ${HDF5_hdf5_LIBRARY})
 target_link_libraries(align_pcd_to_world libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
+

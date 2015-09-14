@@ -10,23 +10,23 @@
   <!--<include file="$(find pr2_description)/robots/upload_pr2.launch" />-->
   <!--<param name="robot_description" command="$(find xacro)/xacro.py '$(find pr2_description)/robots/pr2.urdf.xacro'" />-->
 
-    <!-- <node pkg="sbpl_perception" type="sim_test" name="sim_test" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
+  <!-- <node pkg="sbpl_perception" type="sim_test" name="sim_test" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
     <node pkg="sbpl_perception" type="sim_test" name="sim_test" output="screen" launch-prefix="mpirun -n 8" respawn="false">
 
       <param name="reference_frame" value="/base_link"/>
       <param name="image_debug" value="$(arg image_debug)"/>
       <param name="icp_succ" value="$(arg icp_succ)"/>
       <!-- <param name="reference_frame" value="head_mount_kinect_rgb_optical_frame"/>&#45;&#45;> -->
-       <rosparam param="model_files" subst_value="True">
-         <!-- [$(find sbpl_perception)/data/birdhouse/1&#45;S.obj, -->
-         <!-- $(find sbpl_perception)/data/birdhouse/2&#45;SC.obj, -->
-         <!-- $(find sbpl_perception)/data/birdhouse/3&#45;SH.obj, -->
-         <!-- $(find sbpl_perception)/data/birdhouse/4&#45;SDC.obj, -->
-         <!-- $(find sbpl_perception)/data/birdhouse/5&#45;T.obj, -->
-         <!-- $(find sbpl_perception)/data/birdhouse/6&#45;R.obj, -->
-         <!-- $(find sbpl_perception)/data/birdhouse/7&#45;TH.obj, -->
-         <!-- $(find sbpl_perception)/data/birdhouse/8&#45;RH.obj, -->
-         <!-- $(find sbpl_perception)/data/birdhouse/9&#45;RC.obj] -->
+      <rosparam param="model_files" subst_value="True">
+        <!-- [$(find sbpl_perception)/data/birdhouse/1&#45;S.obj, -->
+        <!-- $(find sbpl_perception)/data/birdhouse/2&#45;SC.obj, -->
+        <!-- $(find sbpl_perception)/data/birdhouse/3&#45;SH.obj, -->
+        <!-- $(find sbpl_perception)/data/birdhouse/4&#45;SDC.obj, -->
+        <!-- $(find sbpl_perception)/data/birdhouse/5&#45;T.obj, -->
+        <!-- $(find sbpl_perception)/data/birdhouse/6&#45;R.obj, -->
+        <!-- $(find sbpl_perception)/data/birdhouse/7&#45;TH.obj, -->
+        <!-- $(find sbpl_perception)/data/birdhouse/8&#45;RH.obj, -->
+        <!-- $(find sbpl_perception)/data/birdhouse/9&#45;RC.obj] -->
 
         <!-- [$(find sbpl_perception)/data/mug.obj, -->
         <!-- $(find sbpl_perception)/data/mug.obj, -->
@@ -72,29 +72,34 @@
 
 
 <!--occlusion example-->
-[$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply,
-$(find sbpl_perception)/data/RAM/cad_models/clorox.ply,
-<!-- $(find sbpl_perception)/data/RAM/cad_models/milk_carton.ply, -->
-<!-- $(find sbpl_perception)/data/RAM/cad_models/milkjug.ply, -->
-$(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply,
-$(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply,
-<!-- $(find sbpl_perception)/data/RAM/cad_models/peroxide.ply, -->
-$(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply]
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/clorox.ply, -->
+<!-- <!&#45;&#45; $(find sbpl_perception)/data/RAM/cad_models/milk_carton.ply, &#45;&#45;> -->
+<!-- <!&#45;&#45; $(find sbpl_perception)/data/RAM/cad_models/milkjug.ply, &#45;&#45;> -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply, -->
+<!-- <!&#45;&#45; $(find sbpl_perception)/data/RAM/cad_models/peroxide.ply, &#45;&#45;> -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply] -->
 
 <!-- [$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply, -->
 <!-- $(find sbpl_perception)/data/RAM/cad_models/clorox.ply, -->
 <!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply] -->
 
+[$(find sbpl_perception)/data/staunton/king.ply,
+$(find sbpl_perception)/data/staunton/queen.ply,
+$(find sbpl_perception)/data/staunton/pawn.ply]
+
       </rosparam>
       <rosparam param="model_symmetries">
-        [1, 0, 0, 0, 0]
+        <!-- [1, 0, 0, 0, 0] -->
         <!-- [1, 0, 0] -->
-       </rosparam>
+        [0, 0, 1]
       </rosparam>
-      <rosparam param="model_flippings">
-        [0, 0, 0, 0, 0]
-        <!-- [1, 0, 0] -->
-       </rosparam>
+    <rosparam param="model_flippings">
+      <!-- [0, 0, 0, 0, 0] -->
+      <!-- [1, 0, 0] -->
+      [0, 0, 1]
+    </rosparam>
   </node>
 
   <!--<node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />-->

@@ -1,5 +1,5 @@
 /**
- * @file experiments.cpp
+ * @file perch.cpp
  * @brief Experiments to quantify performance
  * @author Venkatraman Narayanan
  * Carnegie Mellon University, 2015
@@ -20,6 +20,8 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/features/normal_3d.h>
 
+#include <boost/filesystem.hpp>
+
 #include <memory>
 
 using namespace std;
@@ -32,28 +34,47 @@ const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
 
 int main(int argc, char **argv) {
+
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
-  string config_file;
-  bool image_debug;
-
-  if (world->rank() == kMasterRank) {
-    ros::init(argc, argv, "experiments");
-    ros::NodeHandle nh;
-    ros::NodeHandle private_nh("~");
-
-    vector<string> model_files, empty_model_files;
-    vector<bool> symmetries, empty_symmetries;
-    private_nh.param("config_file", config_file, std::string(""));
-    private_nh.param("image_debug", image_debug, false);
+  if (argc < 2) {
+    cerr << "Usage: ./perch <path_to_config_file> <path_output_file_poses> <path_output_file_stats>"
+         << endl;
+    return -1;
   }
 
-  // All processes should wait until master has loaded params.
+  boost::filesystem::path config_file_path = argv[1];
+  boost::filesystem::path output_file_poses = argv[2];
+  boost::filesystem::path output_file_stats = argv[3];
+
+  if (!boost::filesystem::is_regular_file(config_file_path)) {
+    cerr << "Invalid config file" << endl;
+    return -1;
+  }
+
+  ofstream fs_poses, fs_stats;
+  if (world->rank() == kMasterRank) {
+    fs_poses.open (output_file_poses.string().c_str(), std::ofstream::out | std::ofstream::app);
+    fs_stats.open (output_file_stats.string().c_str(), std::ofstream::out | std::ofstream::app);
+  }
+
+  string config_file = config_file_path.string();
+  cout << config_file << endl;
+
+  bool image_debug = false;
+  string debug_dir = kDebugDir + config_file_path.filename().string();
+
+  if (world->rank() == kMasterRank &&
+      !boost::filesystem::is_directory(debug_dir)) {
+    boost::filesystem::create_directory(debug_dir);
+  }
+
+  debug_dir = debug_dir + "/";
+
+  // All processes should wait until params are loaded.
   world->barrier();
-  broadcast(*world, config_file, kMasterRank);
-  broadcast(*world, image_debug, kMasterRank);
 
   // Objects for storing the point clouds.
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
@@ -62,8 +83,9 @@ int main(int argc, char **argv) {
   unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition(world));
   unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 3, true));
 
-  env_obj->Initialize(config_file);
+  env_obj->SetDebugDir(debug_dir);
   env_obj->SetDebugOptions(image_debug);
+  env_obj->Initialize(config_file);
 
   // Wait until all processes are ready for the planning phase.
   world->barrier();
@@ -91,7 +113,7 @@ int main(int argc, char **argv) {
     replan_params.return_first_solution =
       true; // Setting this to true also means planner will ignore max time limit.
     replan_params.repair_time = -1;
-    replan_params.inflation_eps = 1.5; // 10.0
+    replan_params.inflation_eps = 1.5; // 1.5
     replan_params.anchor_eps = 1;
     replan_params.use_anchor = true;
     replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN;
@@ -111,20 +133,46 @@ int main(int argc, char **argv) {
       printf("%d: %d\n", ii, solution_state_ids[ii]);
     }
 
-    assert(solution_state_ids.size() > 1);
-    int goal_state_id = env_obj->GetBestSuccessorID(solution_state_ids[solution_state_ids.size() - 2]);
+    // assert(solution_state_ids.size() > 1);
+    if(!(solution_state_ids.size() > 1)) {
+      world->abort(0);
+      return 0;
+    }
+
+    int goal_state_id = env_obj->GetBestSuccessorID(
+                          solution_state_ids[solution_state_ids.size() - 2]);
     printf("Goal state ID is %d\n", goal_state_id);
     env_obj->PrintState(goal_state_id,
-                        kDebugDir + string("goal_state.png"));
+                        debug_dir + string("goal_state.png"));
     vector<PlannerStats> stats_vector;
     planner->get_search_stats(&stats_vector);
     int succs_rendered, succs_valid;
     string pcd_file_path;
     env_obj->GetEnvStats(succs_rendered, succs_valid, pcd_file_path);
+    vector<ContPose> object_poses;
+    env_obj->GetGoalPoses(goal_state_id, &object_poses);
 
     cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
     cout << pcd_file_path << endl;
-    cout << succs_rendered << " " << succs_valid << " "  << stats_vector[0].expands << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
+    cout << succs_rendered << " " << succs_valid << " "  << stats_vector[0].expands
+         << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
+
+    for (const auto &pose : object_poses) {
+      cout << pose.x() << " " << pose.y() << " " << env_obj->GetTableHeight() << " "
+           << pose.yaw() << endl;
+    }
+
+    // Now write to file
+    fs_poses << pcd_file_path << endl;
+    fs_stats << pcd_file_path << endl;
+    fs_stats << succs_rendered << " " << succs_valid << " "  <<
+             stats_vector[0].expands
+             << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
+
+    for (const auto &pose : object_poses) {
+      fs_poses << pose.x() << " " << pose.y() << " " << env_obj->GetTableHeight() <<
+               " " << pose.yaw() << endl;
+    }
   } else {
     while (1) {
       vector<CostComputationInput> input;
@@ -133,6 +181,12 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (world->rank() == kMasterRank) {
+    fs_poses.close();
+    fs_stats.close();
+  }
+
+  world->abort(0);
   return 0;
 }
 

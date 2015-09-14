@@ -6,8 +6,11 @@
 #include <pcl/io/vtk_lib_io.h>
 #include <vtkPolyDataMapper.h>
 #include <pcl/apps/render_views_tesselated_sphere.h>
+#include <pcl/surface/mls.h>
+#include <pcl/filters/filter.h>
 
 #include <ros/package.h>
+#include <vector>
 
 /** \brief loads either a .pcd or .ply file into a pointcloud
     \param cloud pointcloud to load data into
@@ -88,6 +91,51 @@ bool VFHPoseEstimator::loadFLANNAngleData (
   return (true);
 }
 
+bool VFHPoseEstimator::loadTransformData (
+  std::vector<VFHPoseEstimator::CloudInfo> &cloudInfoList,
+  const std::string &filename) {
+  ifstream fs;
+  fs.open (filename.c_str ());
+
+  if (!fs.is_open () || fs.fail ()) {
+    return (false);
+  }
+
+  int num_histograms = cloudInfoList.size();
+  assert(num_histograms != 0);
+
+  int idx = 0;
+
+  while (idx < num_histograms) {
+    Eigen::Matrix4f transform;
+    assert(idx < num_histograms);
+
+    fs >> transform(0, 0);
+    fs >> transform(0, 1);
+    fs >> transform(0, 2);
+    fs >> transform(0, 3);
+    fs >> transform(1, 0);
+    fs >> transform(1, 1);
+    fs >> transform(1, 2);
+    fs >> transform(1, 3);
+    fs >> transform(2, 0);
+    fs >> transform(2, 1);
+    fs >> transform(2, 2);
+    fs >> transform(2, 3);
+    fs >> transform(3, 0);
+    fs >> transform(3, 1);
+    fs >> transform(3, 2);
+    fs >> transform(3, 3);
+    cloudInfoList.at(idx).transform = transform;
+    idx++;
+  }
+
+  // TODO: verify there is no more data to read
+
+  fs.close ();
+  return (true);
+}
+
 /** \brief loads either angle data corresponding
     \param path path to .txt file containing angle information
     \param cloudInfo stuct to load theta and phi angles into
@@ -146,8 +194,39 @@ void VFHPoseEstimator::nearestKSearch (
   delete[] p.ptr ();
 }
 
-bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud, float &roll,
-                                float &pitch, float &yaw, const bool visMatch) {
+std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>
+VFHPoseEstimator::getPoseConstrained (
+  const PointCloud::Ptr &cloud_in, const bool visMatch,
+  const std::vector<std::string> &model_names,
+  std::vector<double> *best_distances,
+  std::vector<Eigen::Affine3f> *model_to_scene_transforms) {
+
+  std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> matched_clouds;
+
+  PointCloud::Ptr cloud(new PointCloud);
+  // Upsample using MLS to common resolution
+  pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ> mls;
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr mlsTree (new
+                                                    pcl::search::KdTree<pcl::PointXYZ>);
+  mls.setComputeNormals (true);
+  mls.setInputCloud(cloud_in);
+  mls.setSearchRadius (0.01);
+  mls.setSearchMethod(mlsTree);
+  mls.setPolynomialFit (true);
+  mls.setPolynomialOrder (2);
+  mls.setUpsamplingMethod (
+  pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::SAMPLE_LOCAL_PLANE);
+  mls.setUpsamplingRadius (0.005);
+  mls.setUpsamplingStepSize (0.003);
+  mls.process(*cloud);
+
+  // Downsample cloud to common resolution
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_rgb (new
+                                                    pcl::PointCloud<pcl::PointXYZRGB>);
+  copyPointCloud(*cloud, *cloud_rgb);
+  cloud_rgb = perception_utils::DownsamplePointCloud(cloud_rgb, 0.0025);
+  copyPointCloud(*cloud_rgb, *cloud);
+
   //Estimate normals
   Normals::Ptr normals (new Normals);
   pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normEst;
@@ -155,11 +234,254 @@ bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud, float &roll,
   pcl::search::KdTree<pcl::PointXYZ>::Ptr normTree (new
                                                     pcl::search::KdTree<pcl::PointXYZ>);
   normEst.setSearchMethod(normTree);
-  normEst.setRadiusSearch(0.005);
+  normEst.setRadiusSearch(0.01); //0.005
   normEst.compute(*normals);
 
   //Create VFH estimation class
-  pcl::VFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::VFHSignature308> vfh;
+  pcl::OURCVFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::VFHSignature308> vfh;
+  vfh.setInputCloud(cloud);
+  vfh.setInputNormals(normals);
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr vfhsTree (new
+                                                    pcl::search::KdTree<pcl::PointXYZ>);
+  vfh.setSearchMethod(vfhsTree);
+
+  //calculate VFHS features
+  pcl::PointCloud<pcl::VFHSignature308>::Ptr vfhs (new
+                                                   pcl::PointCloud<pcl::VFHSignature308>);
+  vfh.setViewPoint(0, 0, 0);
+
+  // OUR-CVFH
+  vfh.setEPSAngleThreshold(0.13f); // 5 / 180 * M_PI
+  vfh.setCurvatureThreshold(0.025f); //1
+  vfh.setClusterTolerance(0.015f); //1
+  vfh.setNormalizeBins(false);
+  // Set the minimum axis ratio between the SGURF axes. At the disambiguation phase,
+  // this will decide if additional Reference Frames need to be created, if ambiguous.
+  vfh.setAxisRatio(0.8);
+
+  vfh.compute(*vfhs);
+
+  std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>>
+                                                                       sgurf_transforms;
+  vfh.getTransforms(sgurf_transforms);
+
+  //filenames
+  const std::string kTrainPath =  ros::package::getPath("perception_utils") +
+                                  "/config/";
+
+  std::string featuresFileName = kTrainPath + "training_features.h5";
+  std::string anglesFileName = kTrainPath + "training_angles.list";
+  std::string transformsFileName = kTrainPath + "training_transforms.list";
+  std::string kdtreeIdxFileName = kTrainPath + "training_kdtree.idx";
+  // std::string featuresFileName = "training_features.h5";
+  // std::string anglesFileName = "training_angles.list";
+  // std::string kdtreeIdxFileName = "training_kdtree.idx";
+
+  cout << featuresFileName << endl;
+
+  //allocate flann matrices
+  static std::vector<CloudInfo> cloudInfoList;
+  static bool training_loaded = false;
+  flann::Matrix<int> k_indices;
+  flann::Matrix<float> k_distances;
+  flann::Matrix<float> data;
+
+  //load training data angles list
+  if (!training_loaded) {
+    if (!loadFLANNAngleData(cloudInfoList, anglesFileName)) {
+      std::cout << "Could not load FLANN angle data" << std::endl;
+      return matched_clouds;
+    }
+
+    if (!loadTransformData(cloudInfoList, transformsFileName)) {
+      std::cout << "Could not load transform data" << std::endl;
+      return matched_clouds;
+    }
+    training_loaded = true;
+  }
+
+  flann::load_from_file (data, featuresFileName, "training_data");
+  // flann::Index<flann::ChiSquareDistance<float>> index (data,
+  //                                                      flann::SavedIndexParams ("training_kdtree.idx"));
+  //
+  flann::Index<flann::ChiSquareDistance<float>> index (data,
+                                                       flann::SavedIndexParams (kdtreeIdxFileName.c_str()));
+  //perform knn search
+  index.buildIndex ();
+  // Get distances to all histograms.
+  int k = cloudInfoList.size();
+  nearestKSearch (index, vfhs, k, k_indices, k_distances);
+
+  assert(!model_names.empty());
+  best_distances->clear();
+  best_distances->resize(model_names.size());
+  model_to_scene_transforms->clear();
+  model_to_scene_transforms->resize(model_names.size());
+
+  for (size_t jj = 0; jj < model_names.size(); ++jj) {
+    double best_distance = std::numeric_limits<double>::max();
+    int best_index = -1;
+
+    for (int ii = 0; ii < k; ++ii) {
+      if (k_distances[0][ii] < best_distance) {
+        std::string cloud_path = cloudInfoList.at(k_indices[0][ii]).filePath.string();
+
+        // Trailing underscore for correct name match.
+        if (cloud_path.find(model_names[jj] + '_') == std::string::npos) {
+          continue;
+        }
+
+        best_distance = k_distances[0][ii];
+        best_index = ii;
+      }
+    }
+
+    assert(best_index != -1);
+    best_distances->at(jj) = best_distance;
+    //retrieve matched pointcloud
+    PointCloud::Ptr cloudMatch (new PointCloud);
+    pcl::PCDReader reader;
+    reader.read(cloudInfoList.at(k_indices[0][best_index]).filePath.native(),
+                *cloudMatch);
+    matched_clouds.push_back(cloudMatch);
+
+    // roll  = cloudInfoList.at(k_indices[0][best_index]).roll;
+    // pitch = cloudInfoList.at(k_indices[0][best_index]).pitch;
+    // yaw   = cloudInfoList.at(k_indices[0][best_index]).yaw;
+
+    boost::filesystem::path model_to_view_transform_path = cloudInfoList.at(
+                                                             k_indices[0][best_index]).filePath;
+    model_to_view_transform_path.replace_extension(".eig");
+    std::ifstream fs;
+    fs.open(model_to_view_transform_path.c_str());
+
+    if (!fs.is_open () || fs.fail ()) {
+      std::cout << "Could not load model transform: " <<
+                model_to_view_transform_path.c_str() << std::endl;
+      return matched_clouds;
+    }
+
+    Eigen::Affine3f model_to_view_transform;
+    fs >> model_to_view_transform.matrix()(0, 0);
+    fs >> model_to_view_transform.matrix()(0, 1);
+    fs >> model_to_view_transform.matrix()(0, 2);
+    fs >> model_to_view_transform.matrix()(0, 3);
+    fs >> model_to_view_transform.matrix()(1, 0);
+    fs >> model_to_view_transform.matrix()(1, 1);
+    fs >> model_to_view_transform.matrix()(1, 2);
+    fs >> model_to_view_transform.matrix()(1, 3);
+    fs >> model_to_view_transform.matrix()(2, 0);
+    fs >> model_to_view_transform.matrix()(2, 1);
+    fs >> model_to_view_transform.matrix()(2, 2);
+    fs >> model_to_view_transform.matrix()(2, 3);
+    fs >> model_to_view_transform.matrix()(3, 0);
+    fs >> model_to_view_transform.matrix()(3, 1);
+    fs >> model_to_view_transform.matrix()(3, 2);
+    fs >> model_to_view_transform.matrix()(3, 3);
+    fs.close();
+
+    Eigen::Affine3f training_cloud_transform, observed_cloud_transform,
+          final_transform;
+    training_cloud_transform.matrix() = cloudInfoList.at(
+                                          k_indices[0][best_index]).transform;
+    observed_cloud_transform.matrix() = sgurf_transforms[0];
+    final_transform = observed_cloud_transform.inverse() * training_cloud_transform
+                      * model_to_view_transform;
+    model_to_scene_transforms->at(jj) = final_transform;
+
+    // Output the results on screen
+    if (visMatch) {
+      pcl::console::print_highlight ("The closest neighbor is:\n");
+      pcl::console::print_info ("(%s) with a distance of: %f\n",
+                                cloudInfoList.at(k_indices[0][best_index]).filePath.c_str(),
+                                k_distances[0][best_index]);
+
+      //retrieve matched pointcloud
+      PointCloud::Ptr cloudMatch (new PointCloud);
+      pcl::PCDReader reader;
+      reader.read(cloudInfoList.at(k_indices[0][best_index]).filePath.native(),
+                  *cloudMatch);
+
+      //Move point cloud so it is is centered at the origin
+      Eigen::Matrix<float, 4, 1> centroid;
+      pcl::compute3DCentroid(*cloudMatch, centroid);
+      pcl::demeanPointCloud(*cloudMatch, centroid, *cloudMatch);
+
+      //Visualize point cloud and matches
+      //viewpoint calcs
+      int y_s = (int)std::floor (sqrt (2.0));
+      int x_s = y_s + (int)std::ceil ((2.0 / (double)y_s) - y_s);
+      double x_step = (double)(1 / (double)x_s);
+      double y_step = (double)(1 / (double)y_s);
+      int viewport = 0, l = 0, m = 0;
+
+      //setup visualizer and add query cloud
+      pcl::visualization::PCLVisualizer visu("KNN search");
+      visu.createViewPort (l * x_step, m * y_step, (l + 1) * x_step,
+                           (m + 1) * y_step, viewport);
+
+      //Move point cloud so it is is centered at the origin
+      PointCloud::Ptr cloudDemeaned (new PointCloud);
+      pcl::compute3DCentroid(*cloud, centroid);
+      pcl::demeanPointCloud(*cloud, centroid, *cloudDemeaned);
+      visu.addPointCloud<pcl::PointXYZ> (cloudDemeaned, ColorHandler(cloud, 0.0 ,
+                                                                     255.0, 0.0), "Query Cloud Cloud", viewport);
+
+      visu.addText ("Query Cloud", 20, 30, 136.0 / 255.0, 58.0 / 255.0, 1,
+                    "Query Cloud", viewport);
+      visu.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_FONT_SIZE,
+                                        18, "Query Cloud", viewport);
+      visu.addCoordinateSystem (0.05, 0);
+
+      //add matches to plot
+      //shift viewpoint
+      ++l;
+
+      //names and text labels
+      std::string viewName = "match";
+      std::string textString = viewName;
+      std::string cloudname = viewName;
+
+      //add cloud
+      visu.createViewPort (l * x_step, m * y_step, (l + 1) * x_step,
+                           (m + 1) * y_step, viewport);
+      visu.addPointCloud<pcl::PointXYZ> (cloudMatch, ColorHandler(cloudMatch, 0.0 ,
+                                                                  255.0, 0.0), cloudname, viewport);
+      visu.addText (textString, 20, 30, 136.0 / 255.0, 58.0 / 255.0, 1, textString,
+                    viewport);
+      visu.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_FONT_SIZE,
+                                        18, textString, viewport);
+      visu.spin();
+    }
+  }
+
+  return matched_clouds;
+}
+
+bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud_in, float &roll,
+                                float &pitch, float &yaw, const bool visMatch) {
+
+
+  // Downsample cloud to common resolution
+  PointCloud::Ptr cloud(new PointCloud);
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_rgb (new
+                                                    pcl::PointCloud<pcl::PointXYZRGB>);
+  copyPointCloud(*cloud_in, *cloud_rgb);
+  cloud_rgb = perception_utils::DownsamplePointCloud(cloud_rgb, 0.0025);
+  copyPointCloud(*cloud_rgb, *cloud);
+
+  //Estimate normals
+  Normals::Ptr normals (new Normals);
+  pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normEst;
+  normEst.setInputCloud(cloud);
+  pcl::search::KdTree<pcl::PointXYZ>::Ptr normTree (new
+                                                    pcl::search::KdTree<pcl::PointXYZ>);
+  normEst.setSearchMethod(normTree);
+  normEst.setRadiusSearch(0.01); //0.005
+  normEst.compute(*normals);
+
+  //Create VFH estimation class
+  pcl::CVFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::VFHSignature308> vfh;
   vfh.setInputCloud(cloud);
   vfh.setInputNormals(normals);
   pcl::search::KdTree<pcl::PointXYZ>::Ptr vfhsTree (new
@@ -173,7 +495,8 @@ bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud, float &roll,
   vfh.compute(*vfhs);
 
   //filenames
-  const std::string kTrainPath =  ros::package::getPath("sbpl_perception") + "/config/";
+  const std::string kTrainPath =  ros::package::getPath("perception_utils") +
+                                  "/config/";
 
   std::string featuresFileName = kTrainPath + "training_features.h5";
   std::string anglesFileName = kTrainPath + "training_angles.list";
@@ -181,7 +504,7 @@ bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud, float &roll,
   // std::string featuresFileName = "training_features.h5";
   // std::string anglesFileName = "training_angles.list";
   // std::string kdtreeIdxFileName = "training_kdtree.idx";
- 
+
   cout << featuresFileName << endl;
 
   //allocate flann matrices
@@ -203,7 +526,7 @@ bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud, float &roll,
                                                        flann::SavedIndexParams (kdtreeIdxFileName.c_str()));
   //perform knn search
   index.buildIndex ();
-  int k = 1;
+  int k = 10;
   nearestKSearch (index, vfhs, k, k_indices, k_distances);
 
   roll  = cloudInfoList.at(k_indices[0][0]).roll;
@@ -217,6 +540,13 @@ bool VFHPoseEstimator::getPose (const PointCloud::Ptr &cloud, float &roll,
                               roll * 180.0 / M_PI, pitch * 180.0 / M_PI, yaw * 180.0 / M_PI,
                               cloudInfoList.at(k_indices[0][0]).filePath.c_str(),
                               k_distances[0][0]);
+
+    for (int ii = 1; ii < k; ++ii) {
+      pcl::console::print_info ("roll = %f, pitch = %f, yaw = %f,  (%s) with a distance of: %f\n",
+                                roll * 180.0 / M_PI, pitch * 180.0 / M_PI, yaw * 180.0 / M_PI,
+                                cloudInfoList.at(k_indices[0][ii]).filePath.c_str(),
+                                k_distances[0][ii]);
+    }
 
     //retrieve matched pointcloud
     PointCloud::Ptr cloudMatch (new PointCloud);
@@ -411,11 +741,24 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
     if (dirItr->path().extension().native().compare(".pcd") != 0) {
       continue;
     }
+    // if (dirItr->path().filename().string().find("963.111.00.dec_10") != std::string::npos) {
+    //   continue;
+    // }
+    // if (dirItr->path().filename().string().find("963.111.00.dec_11") != std::string::npos) {
+    //   continue;
+    // }
+    // if (dirItr->path().filename().string().find("100.919.00-cup_358") != std::string::npos) {
+    //   continue;
+    // }
 
     //load point cloud
     if (!loadPointCloud(dirItr->path(), *cloud)) {
       return false;
     }
+    std::vector<int> indices;
+    pcl::removeNaNFromPointCloud(*cloud,*cloud, indices);
+
+    cout << "UNFILTERED " << cloud->size() << endl;
 
     //load angle data from txt file
     angleDataPath = dirItr->path();
@@ -426,26 +769,58 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
       return false;
     }
 
+    // Upsample using MLS to common resolution
+    pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ> mls;
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr mlsTree (new
+                                                      pcl::search::KdTree<pcl::PointXYZ>);
+
+    Eigen::Vector4f centroid_cluster;
+    pcl::compute3DCentroid (*cloud, centroid_cluster);
+    float dist_to_sensor = centroid_cluster.norm ();
+    float sigma = dist_to_sensor * 0.02f;
+
+    mls.setComputeNormals (false);
+    mls.setSearchMethod(mlsTree);
+    mls.setSearchRadius (sigma);
+    mls.setInputCloud(cloud);
+    mls.setPolynomialFit (true);
+    mls.setPolynomialOrder (2);
+    mls.setUpsamplingMethod (
+    pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::SAMPLE_LOCAL_PLANE);
+    mls.setUpsamplingRadius (0.003); //0.002
+    mls.setUpsamplingStepSize (0.001); //001
+    // mls.setUpsamplingMethod (pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::VOXEL_GRID_DILATION); 
+    // mls.setDilationIterations (2); 
+    // mls.setDilationVoxelSize (0.003);//3mm Kinect resolution 
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZ>);
+    mls.process(*filtered);
+    copyPointCloud(*filtered, *cloud);
+    cout << "FILTERED " << cloud->size() << endl;
+
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_rgb (new
-                                             pcl::PointCloud<pcl::PointXYZRGB>);
+                                                      pcl::PointCloud<pcl::PointXYZRGB>);
     copyPointCloud(*cloud, *cloud_rgb);
+    // cloud_rgb = perception_utils::DownsamplePointCloud(cloud_rgb, 0.0025);
     cloud_rgb = perception_utils::DownsamplePointCloud(cloud_rgb, 0.003);
     copyPointCloud(*cloud_rgb, *cloud);
+    cout << "DOWNSAMPLED " << cloud->size() << endl;
 
     //setup normal estimation class
     Normals::Ptr normals (new Normals);
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normEst;
     pcl::search::KdTree<pcl::PointXYZ>::Ptr normTree (new
                                                       pcl::search::KdTree<pcl::PointXYZ>);
+    normEst.setInputCloud(cloud);
     normEst.setSearchMethod(normTree);
-    normEst.setRadiusSearch(0.005);
+    normEst.setRadiusSearch(0.01); //0.005
 
     //estimate normals
-    normEst.setInputCloud(cloud);
     normEst.compute(*normals);
 
+    cout << "NORMALS COMPUTED\n";
+
     //Create VFH estimation class
-    pcl::VFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::VFHSignature308> vfh;
+    pcl::OURCVFHEstimation<pcl::PointXYZ, pcl::Normal, pcl::VFHSignature308> vfh;
     pcl::search::KdTree<pcl::PointXYZ>::Ptr vfhsTree (new
                                                       pcl::search::KdTree<pcl::PointXYZ>);
     vfh.setSearchMethod(vfhsTree);
@@ -453,17 +828,37 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
                                                      pcl::PointCloud<pcl::VFHSignature308>);
     vfh.setViewPoint(0, 0, 0);
 
+    // OUR-CVFH
+    vfh.setEPSAngleThreshold(0.13f); // 5 / 180 * M_PI
+    vfh.setCurvatureThreshold(0.035f); //1
+    vfh.setClusterTolerance(3.0f); //0.015
+    vfh.setNormalizeBins(true);
+    // Set the minimum axis ratio between the SGURF axes. At the disambiguation phase,
+    // this will decide if additional Reference Frames need to be created, if ambiguous.
+    vfh.setAxisRatio(0.8);
+
     //compute vfhs features
     vfh.setInputCloud(cloud);
     vfh.setInputNormals(normals);
+    cout << "COMPUTING VFGHS\n";
     vfh.compute(*vfhs);
+    cout << "COMPUTED VFGHS\n";
+
+    std::vector<Eigen::Matrix4f, Eigen::aligned_allocator<Eigen::Matrix4f>>
+                                                                         sgurf_transforms;
+    vfh.getTransforms(sgurf_transforms);
 
     //store vfhs feature in vfh model and push it to the training data list
-    for (size_t i = 0; i < histLength; ++i) {
-      cloudInfo.hist[i] = vfhs->points[0].histogram[i];
-    }
+    for (size_t j = 0; j < vfhs->size(); ++j) {
+      CloudInfo specific_cloud_info = cloudInfo;
+      specific_cloud_info.transform = sgurf_transforms[j];
 
-    training.push_front(cloudInfo);
+      for (size_t i = 0; i < histLength; ++i) {
+        specific_cloud_info.hist[i] = vfhs->points[j].histogram[i];
+      }
+
+      training.push_front(specific_cloud_info);
+    }
   }
 
   //convert training data to FLANN format
@@ -483,6 +878,7 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
   //filenames
   std::string featuresFileName = "training_features.h5";
   std::string anglesFileName = "training_angles.list";
+  std::string transformsFileName = "training_transforms.list";
   std::string kdtreeIdxFileName = "training_kdtree.idx";
 
   // Save features to data file
@@ -499,6 +895,16 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
 
   fs.close ();
 
+  // Save SGURF transforms to file
+  fs.open (transformsFileName.c_str ());
+
+  for (it = training.begin(); it != training.end(); ++it) {
+    fs << it->transform << "\n";
+  }
+
+  fs.close ();
+
+
   // Build the tree index and save it to disk
   pcl::console::print_error ("Building the kdtree index (%s) for %d elements...",
                              kdtreeIdxFileName.c_str (), (int)data.rows);
@@ -507,11 +913,16 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
   //flann::Index<flann::ChiSquareDistance<float> > index (data, flann::KDTreeIndexParams (4));
   index.buildIndex ();
   index.save (kdtreeIdxFileName);
+
   delete[] data.ptr ();
   pcl::console::print_error (stderr, "Done\n");
 
   return true;
 }
+
+
+
+
 
 
 

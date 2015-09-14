@@ -16,7 +16,7 @@
 
     <!-- 4 glasses-->
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120006.581890.txt"/> <!&#45;&#45;incorrect&#45;&#45;> -->
-    <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114557.353958.txt"/>
+    <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114557.353958.txt"/> -->
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114827.329624.txt"/> -->
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
     <!--4 small objects-->
@@ -27,7 +27,7 @@
 
     <!--DONE-->
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114846.520256.txt"/> -->
-    <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142031.994106.txt"/> -->
+    <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142031.994106.txt"/>
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142049.534583.txt"/> -->
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> --> <!--long!!-->
     <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/> -->

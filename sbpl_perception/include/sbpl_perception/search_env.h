@@ -13,6 +13,7 @@
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/object_model.h>
 #include <sbpl_perception/mpi_utils.h>
+#include <sbpl_perception/config_parser.h>
 
 #include <perception_utils/pcl_typedefs.h>
 #include <perception_utils/vfh/vfh_pose_estimator.h>
@@ -87,6 +88,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                       const std::vector<unsigned short> observed_depth_image);
   void SetCameraPose(Eigen::Isometry3d camera_pose);
   void SetTableHeight(double height);
+  double GetTableHeight();
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
   void PrecomputeHeuristics();
 
@@ -196,6 +198,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintValidStates();
 
   void SetDebugOptions(bool image_debug);
+  void SetDebugDir(const std::string &debug_dir);
 
   // Not needed
   bool InitializeEnv(const char *sEnvFile) {
@@ -220,12 +223,18 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintState(int stateID, bool bVerbose, FILE *fOut = NULL) {};
   void PrintEnv_Config(FILE *fOut) {};
 
+  void GetEnvStats(int &succs_rendered, int &succs_valid, std::string &file_path);
+  void GetGoalPoses(int true_goal_id, std::vector<ContPose> *object_poses);
+
  private:
 
   std::vector<ObjectModel> obj_models_;
   pcl::simulation::Scene::Ptr scene_;
 
   EnvParams env_params_;
+
+  // Config parser.
+  ConfigParser parser_;
 
   // The MPI communicator.
   std::shared_ptr<boost::mpi::communicator> mpi_comm_;
@@ -265,4 +274,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<int> sorted_greedy_icp_ids_;
   std::vector<double> sorted_greedy_icp_scores_;
   std::vector<int> cluster_labels_;
+
+  int succs_rendered_;
 };

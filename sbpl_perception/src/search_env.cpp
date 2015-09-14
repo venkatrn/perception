@@ -9,7 +9,6 @@
 
 #include <perception_utils/perception_utils.h>
 #include <sbpl_perception/discretization_manager.h>
-#include <sbpl_perception/config_parser.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -60,8 +59,8 @@ constexpr double kTableHeightOffset = 0.00;
 // indicator(pixel explained).
 constexpr bool kUseDepthSensitiveCost = false;
 
-const string kDebugDir = ros::package::getPath("sbpl_perception") +
-                         "/visualization/";
+string kDebugDir = ros::package::getPath("sbpl_perception") +
+                   "/visualization/";
 constexpr int kMasterRank = 0;
 }
 
@@ -69,7 +68,8 @@ constexpr int kMasterRank = 0;
 EnvObjectRecognition::EnvObjectRecognition(const
                                            std::shared_ptr<boost::mpi::communicator> &comm) :
   mpi_comm_(comm),
-  image_debug_(false) {
+  image_debug_(false),
+  succs_rendered_(0) {
 
   // OpenGL requires argc and argv
   char **argv;
@@ -183,7 +183,8 @@ void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFile (model_files[ii].c_str(), mesh);
 
-    ObjectModel obj_model(mesh, model_files[ii].c_str(), model_symmetric[ii], model_flipped[ii]);
+    ObjectModel obj_model(mesh, model_files[ii].c_str(), model_symmetric[ii],
+                          model_flipped[ii]);
     obj_models_.push_back(obj_model);
 
     printf("Read %s with %d polygons and %d triangles\n", model_files[ii].c_str(),
@@ -311,7 +312,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   if (it != succ_cache.end()) {
     *costs = cost_cache[source_state_id];
 
-    if (static_cast<int>(source_state.NumObjects()) == env_params_.num_objects - 1) {
+    if (static_cast<int>(source_state.NumObjects()) == env_params_.num_objects -
+        1) {
       succ_ids->resize(costs->size(), env_params_.goal_state_id);
     } else {
       *succ_ids = succ_cache[source_state_id];
@@ -375,6 +377,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       }
     }
   }
+
+  succs_rendered_ += static_cast<int>(candidate_succs.size());
 
   // We don't need IDs for the candidate succs at all.
   candidate_succ_ids.resize(candidate_succs.size(), 0);
@@ -531,9 +535,21 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
     assert(output != nullptr);
     output->clear();
     output->resize(count);
+
+    for (int rank = 0; rank < mpi_comm_->size(); ++rank) {
+      if (rank == kMasterRank) {
+        continue;
+      }
+      mpi_comm_->isend(rank, 10, count);
+    }
+  } else {
+    boost::mpi::request req = mpi_comm_->irecv(kMasterRank, 10, count);
+    if (!req.test()) {
+      return;
+    }
   }
 
-  broadcast(*mpi_comm_, count, kMasterRank);
+  // broadcast(*mpi_comm_, count, kMasterRank);
 
   if (count == 0) {
     return;
@@ -606,7 +622,7 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
     // return static_cast<int>(1000 * minz_map_[state_id]);
     const int num_pixels = env_params_.img_width * env_params_.img_height;
     return num_pixels - static_cast<int>(counted_pixels_map_[state_id].size());
-          }
+  }
 
   default:
     return 0;
@@ -722,7 +738,8 @@ int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
                                                    env_params_.camera_pose);
 
   // Compute costs
-  const bool last_level = static_cast<int>(child_state.NumObjects()) == env_params_.num_objects;
+  const bool last_level = static_cast<int>(child_state.NumObjects()) ==
+                          env_params_.num_objects;
   int target_cost = 0, source_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
   source_cost = GetSourceCost(succ_cloud,
@@ -895,7 +912,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     assert(num_neighbors_found >= kMinimumNeighborPointsForValidPose);
     std::sort(infeasible_points.begin(), infeasible_points.end());
     indices_to_consider.resize(infeasible_points.size());
-    auto it = std::set_difference(infeasible_points.begin(), infeasible_points.end(),
+    auto it = std::set_difference(infeasible_points.begin(),
+                                  infeasible_points.end(),
                                   child_counted_pixels->begin(), child_counted_pixels->end(),
                                   indices_to_consider.begin());
     indices_to_consider.resize(it - indices_to_consider.begin());
@@ -1085,13 +1103,13 @@ void EnvObjectRecognition::PrintImage(string fname,
   for (int ii = 0; ii < env_params_.img_height; ++ii) {
     for (int jj = 0; jj < env_params_.img_width; ++jj) {
       if (image.at<uchar>(ii, jj) == 0) {
-        c_image.at<cv::Vec3b>(ii,jj)[0] = 0;
-        c_image.at<cv::Vec3b>(ii,jj)[1] = 0;
-        c_image.at<cv::Vec3b>(ii,jj)[2] = 0;
+        c_image.at<cv::Vec3b>(ii, jj)[0] = 0;
+        c_image.at<cv::Vec3b>(ii, jj)[1] = 0;
+        c_image.at<cv::Vec3b>(ii, jj)[2] = 0;
       }
     }
   }
-  
+
   cv::imwrite(fname.c_str(), c_image);
   //http://docs.opencv.org/modules/contrib/doc/facerec/colormaps.html
 }
@@ -1144,6 +1162,9 @@ void EnvObjectRecognition::SetTableHeight(double height) {
   env_params_.table_height = height;
 }
 
+double EnvObjectRecognition::GetTableHeight() {
+  return env_params_.table_height;
+}
 
 void EnvObjectRecognition::SetBounds(double x_min, double x_max, double y_min,
                                      double y_max) {
@@ -1226,6 +1247,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   min_observed_depth_ = 20000;
   max_observed_depth_ = 0;
+
   for (int ii = 0; ii < env_params_.img_height; ++ii) {
     for (int jj = 0; jj < env_params_.img_width; ++jj) {
       int idx = ii * env_params_.img_width + jj;
@@ -1267,33 +1289,37 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
                                           vector<ContPose> object_poses) {
   assert(object_ids.size() == object_poses.size());
   GraphState s;
+
   for (size_t ii = 0; ii < object_ids.size(); ++ii) {
     if (object_ids[ii] >= env_params_.num_models) {
       ROS_ERROR("Invalid object ID %d when setting ground truth", object_ids[ii]);
     }
+
     s.AppendObject(ObjectState(object_ids[ii],
                                obj_models_[object_ids[ii]].symmetric(), object_poses[ii]));
   }
+
   vector<unsigned short> depth_image;
   GetDepthImage(s, &depth_image);
-  kinect_simulator_->rl_->getOrganizedPointCloud(observed_organized_cloud_, true, env_params_.camera_pose);
+  kinect_simulator_->rl_->getOrganizedPointCloud(observed_organized_cloud_, true,
+                                                 env_params_.camera_pose);
   SetObservation(object_ids.size(), depth_image);
 }
 
 void EnvObjectRecognition::Initialize(const string &config_file) {
 
-  ConfigParser parser;
-  parser.Parse(config_file);
+  parser_.Parse(config_file);
 
-  LoadObjFiles(parser.model_files, parser.model_symmetries, parser.model_flippings);
-  SetBounds(parser.min_x, parser.max_x, parser.min_y, parser.max_y);
-  SetTableHeight(parser.table_height - kTableHeightOffset);
-  SetCameraPose(parser.camera_pose);
+  LoadObjFiles(parser_.model_files, parser_.model_symmetries,
+               parser_.model_flippings);
+  SetBounds(parser_.min_x, parser_.max_x, parser_.min_y, parser_.max_y);
+  SetTableHeight(parser_.table_height - kTableHeightOffset);
+  SetCameraPose(parser_.camera_pose);
 
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
 
   // Read the input PCD file from disk.
-  if (pcl::io::loadPCDFile<PointT>(parser.pcd_file_path.c_str(),
+  if (pcl::io::loadPCDFile<PointT>(parser_.pcd_file_path.c_str(),
                                    *cloud_in) != 0) {
     cerr << "Could not find input PCD file!" << endl;
     return;
@@ -1304,16 +1330,32 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
   const int width = 640;
 
 
-  Eigen::Matrix4f cam_to_body;
-  cam_to_body << 0, 0, 1, 0,
-              -1, 0, 0, 0,
-              0, -1, 0, 0,
-              0, 0, 0, 1;
+  // Eigen::Matrix4f cam_to_body;
+  // cam_to_body << 0, 0, 1, 0,
+  //             -1, 0, 0, 0,
+  //             0, -1, 0, 0,
+  //             0, 0, 0, 1;
+  // PointCloudPtr depth_img_cloud(new PointCloud);
+  // Eigen::Matrix4f world_to_cam =
+  //   parser_.camera_pose.matrix().cast<float>().inverse();
+  // transformPointCloud(*cloud_in, *depth_img_cloud,
+  //                     cam_to_body.inverse()*world_to_cam);
+
+
+  Eigen::Affine3f cam_to_body;
+  cam_to_body.matrix() << 0, 0, 1, 0,
+                     -1, 0, 0, 0,
+                     0, -1, 0, 0,
+                     0, 0, 0, 1;
   PointCloudPtr depth_img_cloud(new PointCloud);
+  Eigen::Affine3f transform;
+  transform.matrix() = parser_.camera_pose.matrix().cast<float>();
+  transform = cam_to_body.inverse() * transform.inverse();
   Eigen::Matrix4f world_to_cam =
-    parser.camera_pose.matrix().cast<float>().inverse();
+    parser_.camera_pose.matrix().cast<float>().inverse();
   transformPointCloud(*cloud_in, *depth_img_cloud,
-                      cam_to_body.inverse()*world_to_cam);
+                      transform);
+
   vector<unsigned short> depth_image(num_pixels);
 
   for (int ii = 0; ii < height; ++ii) {
@@ -1339,7 +1381,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
   }
 
 
-  SetObservation(parser.num_models, depth_image);
+  SetObservation(parser_.num_models, depth_image);
   PrintValidStates();
 }
 
@@ -1724,18 +1766,30 @@ void EnvObjectRecognition::SetDebugOptions(bool image_debug) {
   image_debug_ = image_debug;
 }
 
+void EnvObjectRecognition::SetDebugDir(const string &debug_dir) {
+  kDebugDir = debug_dir;
+}
 
+void EnvObjectRecognition::GetEnvStats(int &succs_rendered, int &succs_valid,
+                                       string &file_path) {
+  succs_rendered = succs_rendered_;
+  succs_valid = hash_manager_.Size() - 1; // Ignore the start state
+  file_path = parser_.pcd_file_path;
+}
 
+void EnvObjectRecognition::GetGoalPoses(int true_goal_id,
+                                        vector<ContPose> *object_poses) {
+  object_poses->clear();
+  GraphState goal_state = hash_manager_.GetState(true_goal_id);
+  assert(goal_state.NumObjects() == env_params_.num_objects);
+  object_poses->resize(env_params_.num_objects);
 
-
-
-
-
-
-
-
-
-
-
-
-
+  for (size_t ii = 0; ii < env_params_.num_objects; ++ii) {
+    auto it = std::find_if(goal_state.object_states().begin(),
+    goal_state.object_states().end(), [ii](const ObjectState & object_state) {
+      return object_state.id() == ii;
+    });
+    assert(it != goal_state.object_states().end());
+    object_poses->at(ii) = it->cont_pose();
+  }
+}
