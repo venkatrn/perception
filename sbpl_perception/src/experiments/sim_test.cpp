@@ -100,7 +100,8 @@ int main(int argc, char **argv) {
   vector<int> model_ids;
   vector<ContPose> poses;
   if (world->rank() == kMasterRank) {
-    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    // unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    unsigned seed = -1912274402;
     printf("Random seed: %d\n", seed);
 
     // Good seeds.

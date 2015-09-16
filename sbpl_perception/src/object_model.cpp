@@ -92,9 +92,21 @@ ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name, const 
 void ObjectModel::SetObjectProperties() {
   pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new
                                              pcl::PointCloud<pcl::PointXYZ>);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr base_cloud (new
+                                             pcl::PointCloud<pcl::PointXYZ>);
   pcl::fromPCLPointCloud2(mesh_.cloud, *cloud);
+
+  for (size_t ii = 0; ii < cloud->size(); ++ii) {
+    auto point = cloud->points[ii];
+    if (point.z < 0.01) {
+      base_cloud->push_back(point);
+    }
+  }
+  base_cloud->width = base_cloud->points.size();
+  base_cloud->height = 1;
+
   pcl::PointXYZ min_pt, max_pt;
-  getMinMax3D(*cloud, min_pt, max_pt);
+  getMinMax3D(*base_cloud, min_pt, max_pt);
   min_x_ = min_pt.x;
   min_y_ = min_pt.y;
   min_z_ = min_pt.z;

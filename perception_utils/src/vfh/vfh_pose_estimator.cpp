@@ -208,24 +208,35 @@ VFHPoseEstimator::getPoseConstrained (
   pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ> mls;
   pcl::search::KdTree<pcl::PointXYZ>::Ptr mlsTree (new
                                                     pcl::search::KdTree<pcl::PointXYZ>);
-  mls.setComputeNormals (true);
-  mls.setInputCloud(cloud_in);
-  mls.setSearchRadius (0.01);
+
+  Eigen::Vector4f centroid_cluster;
+  pcl::compute3DCentroid (*cloud_in, centroid_cluster);
+  float dist_to_sensor = centroid_cluster.norm ();
+  float sigma = dist_to_sensor * 0.02f;
+
+  mls.setComputeNormals (false);
   mls.setSearchMethod(mlsTree);
+  mls.setSearchRadius (sigma);
+  mls.setInputCloud(cloud_in);
   mls.setPolynomialFit (true);
   mls.setPolynomialOrder (2);
   mls.setUpsamplingMethod (
   pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::SAMPLE_LOCAL_PLANE);
-  mls.setUpsamplingRadius (0.005);
-  mls.setUpsamplingStepSize (0.003);
+  mls.setUpsamplingRadius (0.003); //0.002
+  mls.setUpsamplingStepSize (0.001); //001
+  // mls.setUpsamplingMethod (pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::VOXEL_GRID_DILATION); 
+  // mls.setDilationIterations (2); 
+  // mls.setDilationVoxelSize (0.003);//3mm Kinect resolution 
   mls.process(*cloud);
+  cout << "FILTERED " << cloud->size() << endl;
 
-  // Downsample cloud to common resolution
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_rgb (new
                                                     pcl::PointCloud<pcl::PointXYZRGB>);
   copyPointCloud(*cloud, *cloud_rgb);
-  cloud_rgb = perception_utils::DownsamplePointCloud(cloud_rgb, 0.0025);
+  // cloud_rgb = perception_utils::DownsamplePointCloud(cloud_rgb, 0.0025);
+  cloud_rgb = perception_utils::DownsamplePointCloud(cloud_rgb, 0.003);
   copyPointCloud(*cloud_rgb, *cloud);
+  cout << "DOWNSAMPLED " << cloud->size() << endl;
 
   //Estimate normals
   Normals::Ptr normals (new Normals);
@@ -252,9 +263,9 @@ VFHPoseEstimator::getPoseConstrained (
 
   // OUR-CVFH
   vfh.setEPSAngleThreshold(0.13f); // 5 / 180 * M_PI
-  vfh.setCurvatureThreshold(0.025f); //1
-  vfh.setClusterTolerance(0.015f); //1
-  vfh.setNormalizeBins(false);
+  vfh.setCurvatureThreshold(0.035f); //1
+  vfh.setClusterTolerance(3.0f); //1
+  vfh.setNormalizeBins(true);
   // Set the minimum axis ratio between the SGURF axes. At the disambiguation phase,
   // this will decide if additional Reference Frames need to be created, if ambiguous.
   vfh.setAxisRatio(0.8);

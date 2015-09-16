@@ -33,6 +33,7 @@
 #include <opencv2/contrib/contrib.hpp>
 
 #include <boost/lexical_cast.hpp>
+#include <omp.h>
 #include <algorithm>
 
 using namespace std;
@@ -190,10 +191,11 @@ void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
     printf("Read %s with %d polygons and %d triangles\n", model_files[ii].c_str(),
            static_cast<int>(mesh.polygons.size()),
            static_cast<int>(mesh.cloud.data.size()));
-    printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f\n",
+    printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f,   %f\n",
            obj_model.min_x(),
            obj_model.max_x(), obj_model.min_y(), obj_model.max_y(), obj_model.min_z(),
-           obj_model.max_z(), obj_model.GetCircumscribedRadius());
+           obj_model.max_z(), obj_model.GetCircumscribedRadius(),
+           obj_model.GetInscribedRadius());
     printf("\n");
 
   }
@@ -1556,71 +1558,73 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
   // ICP error is computed over full model (not just the non-occluded points)--this means that the
   // final score is always an upper bound
 
+  int num_models = env_params_.num_models;
+  vector<int> model_ids(num_models);
+  for (int ii = 0; ii < num_models; ++ii) {
+    model_ids[ii] = ii;
+  }
+
+  vector<double> permutation_scores;
+  vector<GraphState> permutation_states;
+
+  int succ_id = 0;
+  do {
   vector<double> icp_scores; //smaller, the better
   vector<ContPose> icp_adjusted_poses;
   // icp_scores.resize(env_params_.num_models, numeric_limits<double>::max());
   icp_scores.resize(env_params_.num_models, 100.0);
   icp_adjusted_poses.resize(env_params_.num_models);
-
-
-
-  int succ_id = 0;
+  
   GraphState empty_state;
   GraphState committed_state;
-
-  for (int ii = 0; ii < env_params_.num_models; ++ii) {
+  double total_score = 0;
+#pragma omp parallel for
+  for (int model_id : model_ids) {
+        cout << "Greedy ICP for model: " << model_id << endl;
+#pragma omp parallel for
     for (double x = env_params_.x_min; x <= env_params_.x_max;
          x += env_params_.res) {
+#pragma omp parallel for
       for (double y = env_params_.y_min; y <= env_params_.y_max;
            y += env_params_.res) {
+#pragma omp parallel for
         for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
           ContPose p_in(x, y, theta);
           ContPose p_out = p_in;
 
           GraphState succ_state;
-          const ObjectState object_state(ii, obj_models_[ii].symmetric(), p_in);
+          const ObjectState object_state(model_id, obj_models_[model_id].symmetric(), p_in);
           succ_state.AppendObject(object_state);
 
-          // if (!IsValidPose(committed_state, ii, p_in)) {
-          //   continue;
-          // }
+          if (!IsValidPose(committed_state, model_id, p_in)) {
+            continue;
+          }
 
-          // pcl::PolygonMesh::Ptr mesh (new pcl::PolygonMesh (
-          //                               obj_models_[ii].mesh()));
+          auto transformed_mesh = obj_models_[model_id].GetTransformedMesh(p_in, env_params_.table_height);
+          PointCloudPtr cloud_in(new PointCloud);
+          PointCloudPtr cloud_aligned(new PointCloud);
+          pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_xyz (new
+                                                            pcl::PointCloud<pcl::PointXYZ>);
+
+          pcl::fromPCLPointCloud2(transformed_mesh->cloud, *cloud_in_xyz);
+          copyPointCloud(*cloud_in_xyz, *cloud_in);
+
+          double icp_fitness_score = GetICPAdjustedPose(cloud_in, p_in,
+                                                        cloud_aligned, &p_out);
+
+
           // PointCloudPtr cloud_in(new PointCloud);
           // PointCloudPtr cloud_out(new PointCloud);
-          // PointCloudPtr cloud_aligned(new PointCloud);
-          // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_xyz (new
-          //                                                   pcl::PointCloud<pcl::PointXYZ>);
+          // vector<unsigned short> succ_depth_image;
+          // GetDepthImage(succ_state, &succ_depth_image);
+          // kinect_simulator_->rl_->getPointCloud (cloud_in, true,
+          //                                        env_params_.camera_pose);
           //
-          // pcl::fromPCLPointCloud2(mesh->cloud, *cloud_in_xyz);
-          // copyPointCloud(*cloud_in_xyz, *cloud_in);
-          //
-          // Eigen::Matrix4f transform;
-          // transform <<
-          //           cos(p_in.theta), -sin(p_in.theta) , 0, p_in.x,
-          //               sin(p_in.theta) , cos(p_in.theta) , 0, p_in.y,
-          //               0, 0 , 1 , env_params_.table_height,
-          //               0, 0 , 0 , 1;
-          //
-          //
-          // transformPointCloud(*cloud_in, *cloud_out, transform);
-          // double icp_fitness_score = GetICPAdjustedPose(cloud_out, p_in,
-          //                                               cloud_aligned, &p_out);
-
-
-          PointCloudPtr cloud_in(new PointCloud);
-          PointCloudPtr cloud_out(new PointCloud);
-          vector<unsigned short> succ_depth_image;
-          GetDepthImage(succ_state, &succ_depth_image);
-          kinect_simulator_->rl_->getPointCloud (cloud_in, true,
-                                                 env_params_.camera_pose);
-
-          double icp_fitness_score = GetICPAdjustedPose(cloud_in, p_in, cloud_out,
-                                                        &p_out);
+          // double icp_fitness_score = GetICPAdjustedPose(cloud_in, p_in, cloud_out,
+          //                                               &p_out);
 
           // Check *after* icp alignment
-          if (!IsValidPose(committed_state, ii, p_out)) {
+          if (!IsValidPose(committed_state, model_id, p_out)) {
             continue;
           }
 
@@ -1638,15 +1642,16 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
             printf("%d: %f\n", succ_id, icp_fitness_score);
           }
 
-          if (icp_fitness_score < icp_scores[ii]) {
-            icp_scores[ii] = icp_fitness_score;
-            icp_adjusted_poses[ii] = p_out;
+          if (icp_fitness_score < icp_scores[model_id]) {
+            icp_scores[model_id] = icp_fitness_score;
+            icp_adjusted_poses[model_id] = p_out;
+            total_score += icp_fitness_score;
           }
 
           succ_id++;
 
           // Skip multiple orientations for symmetric objects
-          if (obj_models_[ii].symmetric()) {
+          if (obj_models_[model_id].symmetric()) {
             break;
           }
 
@@ -1654,52 +1659,62 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
       }
     }
 
-    committed_state.AppendObject(ObjectState(ii, obj_models_[ii].symmetric(),
-                                             icp_adjusted_poses[ii]));
+    committed_state.AppendObject(ObjectState(model_id, obj_models_[model_id].symmetric(),
+                                             icp_adjusted_poses[model_id]));
   }
+  permutation_scores.push_back(total_score);
+  permutation_states.push_back(committed_state);
+  } while (std::next_permutation(model_ids.begin(), model_ids.end()));
 
 
-  vector<int> sorted_indices(env_params_.num_models);
-
-  for (int ii = 0; ii < env_params_.num_models; ++ii) {
-    sorted_indices[ii] = ii;
-  }
-
-  // sort indexes based on comparing values in icp_scores
-  sort(sorted_indices.begin(), sorted_indices.end(),
-  [&icp_scores](int idx1, int idx2) {
-    return icp_scores[idx1] < icp_scores[idx2];
-  });
-
-  for (int ii = 0; ii < env_params_.num_models; ++ii) {
-    printf("ICP Score for Object %d: %f\n", ii, icp_scores[ii]);
-  }
-
-  printf("Sorted scores:\n");
-
-  for (int ii = 0; ii < env_params_.num_models; ++ii) {
-    printf("%f ", icp_scores[sorted_indices[ii]]);
-  }
-
-
-  // Store for future use
-  sorted_greedy_icp_ids_ = sorted_indices;
-  sorted_greedy_icp_scores_.resize(env_params_.num_models);
-
-  for (int ii = 0; ii < env_params_.num_models; ++ ii) {
-    sorted_greedy_icp_scores_[ii] = icp_scores[sorted_indices[ii]];
-  }
-
+  // vector<int> sorted_indices(env_params_.num_models);
+  //
+  // for (int ii = 0; ii < env_params_.num_models; ++ii) {
+  //   sorted_indices[ii] = ii;
+  // }
+  //
+  // // sort indexes based on comparing values in icp_scores
+  // sort(sorted_indices.begin(), sorted_indices.end(),
+  // [&icp_scores](int idx1, int idx2) {
+  //   return icp_scores[idx1] < icp_scores[idx2];
+  // });
+  //
+  // for (int ii = 0; ii < env_params_.num_models; ++ii) {
+  //   printf("ICP Score for Object %d: %f\n", ii, icp_scores[ii]);
+  // }
+  //
+  // printf("Sorted scores:\n");
+  //
+  // for (int ii = 0; ii < env_params_.num_models; ++ii) {
+  //   printf("%f ", icp_scores[sorted_indices[ii]]);
+  // }
+  //
+  //
+  // // Store for future use
+  // sorted_greedy_icp_ids_ = sorted_indices;
+  // sorted_greedy_icp_scores_.resize(env_params_.num_models);
+  //
+  // for (int ii = 0; ii < env_params_.num_models; ++ ii) {
+  //   sorted_greedy_icp_scores_[ii] = icp_scores[sorted_indices[ii]];
+  // }
+  //
 
   // Take the first 'k'
-  GraphState greedy_state;
+  
+  auto min_element_it = std::min_element(permutation_scores.begin(), permutation_scores.end());
+  int offset = std::distance(permutation_scores.begin(), min_element_it);
 
-  for (int ii = 0; ii < env_params_.num_objects; ++ii) {
-    int object_id = sorted_indices[ii];
-    const ObjectState object_state(object_id, obj_models_[object_id].symmetric(),
-                                   icp_adjusted_poses[object_id]);
-    greedy_state.AppendObject(object_state);
-  }
+  GraphState greedy_state = permutation_states[offset];
+  std::sort(greedy_state.mutable_object_states().begin(), greedy_state.mutable_object_states().end(), [](const ObjectState& state1, const ObjectState& state2) {
+      return state1.id() < state2.id();
+      });
+
+  // for (int model_id = 0; model_id < env_params_.num_objects; ++model_id) {
+  //   // int object_id = sorted_indices[ii];
+  //   const ObjectState object_state(model_id, obj_models_[model_id].symmetric(),
+  //                                  icp_adjusted_poses[model_id]);
+  //   greedy_state.AppendObject(object_state);
+  // }
 
   string fname = kDebugDir + "greedy_state.png";
   PrintState(greedy_state, fname);

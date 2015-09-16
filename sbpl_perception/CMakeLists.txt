@@ -100,3 +100,8 @@ target_link_libraries(experiments/vfh_estimator ${PROJECT_NAME})
 rosbuild_add_executable(experiments/perch
   experiments/src/perch.cpp)
 target_link_libraries(experiments/perch ${PROJECT_NAME})
+
+rosbuild_add_executable(experiments/greedy_icp
+  experiments/src/greedy_icp.cpp)
+target_link_libraries(experiments/greedy_icp ${PROJECT_NAME})
+rosbuild_add_openmp_flags(experiments/greedy_icp)
