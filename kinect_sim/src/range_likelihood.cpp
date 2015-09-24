@@ -190,7 +190,7 @@ pcl::simulation::RangeLikelihood::RangeLikelihood (int rows, int cols,
   camera_cx_ = 321.06398107f;
   camera_cy_ = 242.97676897f;
 
-  z_near_ = 0.5f; //ZNEAR
+  z_near_ = 0.1f; //ZNEAR
   z_far_ = 20.0f;
 
   which_cost_function_ = 2; // default to commonly used meter based function

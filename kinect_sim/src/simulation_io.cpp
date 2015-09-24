@@ -190,7 +190,7 @@ pcl::simulation::SimExample::write_depth_image(const float* depth_buffer, std::s
       int i_in= (height_-1 -y) *width_ + x ; // flip up down
     
     
-      float zn = 0.5; //ZNEAR
+      float zn = 0.1; //ZNEAR
       float zf = 20.0;
       float d = depth_buffer[i_in];
       float z = -zf*zn/((zf-zn)*(d - zf/(zf-zn)));
@@ -270,7 +270,7 @@ pcl::simulation::SimExample::write_depth_image_uint(const float* depth_buffer, s
       int i= y*width_ + x ;
       int i_in= (height_-1 -y) *width_ + x ; // flip up down
     
-      float zn = 0.5; //ZNEAR
+      float zn = 0.1; //ZNEAR
       float zf = 20.0;
       float d = depth_buffer[i_in];
       
@@ -323,7 +323,7 @@ pcl::simulation::SimExample::get_depth_image_uint(const float* depth_buffer, std
       int i= y*width_ + x ;
       int i_in= (height_-1 -y) *width_ + x ; // flip up down
     
-      float zn = 0.5; //ZNEAR
+      float zn = 0.1; //ZNEAR
       float zf = 20.0;
       float d = depth_buffer[i_in];
       
