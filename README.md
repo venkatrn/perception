@@ -4,7 +4,7 @@ Overview
 --------
 This stack provides the implementation for PERCH (described in TODO: add link).
 
-The package 'kinect_sim' is based-off PCL's simulation API and serves as the depth-image renderer/simulator for PERCH. This provides the functionality to generate the depth-image for a scene, given a camera pose, set of 3D models/meshes and their poses.
+The package 'kinect_sim' is based on PCL's simulation API and serves as the depth-image renderer/simulator for PERCH. This provides the functionality to generate the depth-image for a scene, given a camera pose, set of 3D models/meshes and their poses.
 
 The 'sbpl_perception' package implements the PERCH algorithm. This works in conjunction with the SBPL planning library (https://github.com/sbpl/sbpl) and provides the 'search environment'. The documentation in the SBPL github page provides examples of the planner-environment usage.  
 
@@ -18,14 +18,14 @@ Setup
 cd ~/hydro_workspace/sandbox && git clone https://github.com/venkatrn/perception.git
 cd ~/hydro_workspace/sandbox && git clone https://github.com/venkatrn/improved-mha-planner.git 
 rosmake sbpl_perception
-#If above fails, try the following to diagnose error:
-#rosmake sbpl
-#rosmake kinect_sim
+
 ```
- If you have any missing ROS package dependencies, do:
+ Install any missing ROS dependencies with:
  ```bash
  sudo apt-get install ros-hydro-<package> #or replace 'hydro' by appropriate version name
  ```
+ 
+ Note: The implementation makes extensive use of C++11 and Boost MPI, and the latter should be available already with the full desktop installation of ROS.
 
 Test
 ----
