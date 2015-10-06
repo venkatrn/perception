@@ -1,19 +1,17 @@
-# Object Localization through Heuristic Search
+# PERCH: Perception via Search for Multi-Object Recognition and Localization
 
 Overview
 --------
+This stack provides the implementation for PERCH (described in TODO: add link).
 
-This stack provides two packages: kinect_sim and sbpl_perception.
-The former is the depth-image renderer/simulator. Given a camera pose, set of 3D models/meshes and their locations,
-it can generate a depth-image for that scene. 
+The package 'kinect_sim' is based-off PCL's simulation API and serves as the depth-image renderer/simulator for PERCH. This provides the functionality to generate the depth-image for a scene, given a camera pose, set of 3D models/meshes and their poses.
 
-The latter is the object localization package and contains the search environment that communicates with the planner.
-It internally uses kinect_sim to generate 'states' for the planner to search through.
+The 'sbpl_perception' package implements the PERCH algorithm. This works in conjunction with the SBPL planning library (https://github.com/sbpl/sbpl) and provides the 'search environment'. The documentation in the SBPL github page provides examples of the planner-environment usage.  
 
 Setup
 -----
 
-1. Get ROS Hydro from http://wiki.ros.org/hydro/Installation/Ubuntu
+1. Get ROS Hydro (or Indigo) from http://wiki.ros.org/hydro/Installation/Ubuntu
 2. Create a rosbuild workspace ~/hydro_workspace as described in http://wiki.ros.org/ROS/Tutorials/InstallingandConfiguringROSEnvironment and make sure ~/hydro_workspace/sandbox is in your ROS package path.
 
 ```bash
@@ -32,11 +30,17 @@ rosmake sbpl_perception
 Test
 ----
 
-Please download required data files from https://sbpl.pc.cs.cmu.edu/shared/Venkat/sbpl_perception/ and place the data directory under ~/hydro_workspace/sandbox/perception/sbpl_perception/
+Download required data files from https://sbpl.pc.cs.cmu.edu/shared/Venkat/sbpl_perception/ and place the data directory under ~/hydro_workspace/sandbox/perception/sbpl_perception/
 
-To test the system, run 
+Example usage:
 ```bash
-roslaunch sbpl_perception sim_test.launch 
+cd sbpl_perception && mkdir visualization
+roslaunch sbpl_perception experiments.launch 
 ```
 
-This should dump some output images into your /tmp folder. Upon successful completion of the search, you should see an image named goal_state.png.
+The states 'expanded' as well as the goal state will be available in sbpl_perception/visualization. To also visualize the 'generated' states, 
+
+```bash
+roslaunch sbpl_perception experiments.launch image_debug:=true
+```
+
