@@ -49,6 +49,12 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
                                           pcl::PointCloud<PointT>);
   pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
 
+
+  Eigen::Vector4f centroid;
+  pcl::compute3DCentroid(*cloud_in, centroid);
+  double x_translation = centroid[0];
+  double y_translation = centroid[1];
+
   Eigen::Affine3f flipping_transform = Eigen::Affine3f::Identity();
   if (flipped) {
     flipping_transform.matrix()(2, 2) = -1;
@@ -59,19 +65,32 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   pcl::getMinMax3D(*cloud_in, min_pt, max_pt);
   double z_translation = min_pt.z;
 
+  std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl 
+    << max_pt.y - min_pt.y << endl
+    << max_pt.z - min_pt.z << endl;
+
   // Shift bottom most points to 0-z coordinate
   Eigen::Affine3f transform = Eigen::Affine3f::Identity();
   // By default, assume cad models are in mm.
   if (mesh_in_mm) {
-    transform.scale(0.001);
-    z_translation *= 0.001;
+    // const double kScale = 0.001 * 0.74531;
+    const double kScale = 0.001 * 0.7;
+    transform.scale(kScale);
+    x_translation *= kScale;
+    y_translation *= kScale;
+    z_translation *= kScale;
   }
 
   Eigen::Vector3f translation;
-  translation << 0, 0, -z_translation;
+  translation << -x_translation, -y_translation, -z_translation;
   transform.translation() = translation;
 
   transformPointCloud(*cloud_in, *cloud_out, transform);
+
+  pcl::getMinMax3D(*cloud_out, min_pt, max_pt);
+  std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl 
+    << max_pt.y - min_pt.y << endl
+    << max_pt.z - min_pt.z << endl;
 
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);

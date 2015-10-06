@@ -39,6 +39,6 @@ rosbuild_add_library(${PROJECT_NAME}
 
 rosbuild_add_executable(object_recognition_node src/object_recognition_node.cpp)
 # target_link_libraries(object_recognition_node ${PROJECT_NAME})
-# target_link_libraries(object_recognition_node libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-#   libvtkGraphics.so)
+target_link_libraries(object_recognition_node libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  libvtkGraphics.so)
 

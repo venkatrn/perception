@@ -48,6 +48,7 @@ namespace perception_utils
 
   /**@brief Passthrough filter**/
   PointCloudPtr PassthroughFilter(PointCloudPtr cloud);
+  PointCloudPtr PassthroughFilter(PointCloudPtr cloud, double min_x, double max_x, double min_y, double max_y, double min_z, double max_z);
 
   /**@brief Downsample point cloud**/
   PointCloudPtr DownsamplePointCloud(PointCloudPtr cloud);

@@ -6,8 +6,6 @@
  * Carnegie Mellon University, 2014
  */
 
-#include <sbpl_perception/search_env.h>
-
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -19,7 +17,7 @@
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
 
-#include <sbpl/headers.h>
+#include <keyboard/Key.h>
 
 #include <memory>
 
@@ -29,7 +27,7 @@ class PerceptionInterface
     PerceptionInterface(ros::NodeHandle nh);
     void CloudCB(const sensor_msgs::PointCloud2ConstPtr& sensor_cloud);
     void CloudCBInternal(const std::string& pcd_file);
-    void DepthImageCB(const sensor_msgs::ImageConstPtr& depth_image);
+    // void DepthImageCB(const sensor_msgs::ImageConstPtr& depth_image);
 
     void DetectObjects();
 
@@ -47,23 +45,24 @@ class PerceptionInterface
 
     //pcl::visualization::PCLVisualizer viewer_;
     bool pcl_visualization_;
+    double table_height_;
     ros::Publisher rectangle_pub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;
+    ros::Subscriber keyboard_sub_;
     std::string reference_frame_;
     tf::TransformListener tf_listener_;
 
-    // Environment and planner variables
-    std::unique_ptr<EnvObjectRecognition> env_obj_;
-    std::unique_ptr<SBPLPlanner> planner_;
+    bool capture_kinect_;
+
     sensor_msgs::Image recent_depth_image_;
     PointCloudPtr recent_cloud_; 
-
-    bool planning_;
-    double table_height_;
 
     // Does all the work
     void CloudCBInternal(const PointCloudPtr& original_cloud);
 
     bool IsPointInWorkspace(PointT p);
+
+    // Keyboard callback for variour triggers
+    void KeyboardCB(const keyboard::Key &pressed_key);
 };

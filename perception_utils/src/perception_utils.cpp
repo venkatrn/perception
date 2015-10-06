@@ -786,6 +786,7 @@ PointCloudPtr PassthroughFilter(PointCloudPtr cloud) {
                                      (new vector<int>);
   pcl::PassThrough<PointT> pt_filter;
   pt_filter.setInputCloud(cloud);
+  pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("x");
   pt_filter.setFilterLimits(kMinX, kMaxX);
   pt_filter.filter(*retained_indices);
@@ -798,6 +799,31 @@ PointCloudPtr PassthroughFilter(PointCloudPtr cloud) {
 
   pt_filter.setFilterFieldName("z");
   pt_filter.setFilterLimits(kMinZ, kMaxZ);
+  pt_filter.filter(*filtered_cloud);
+  return filtered_cloud;
+}
+
+PointCloudPtr PassthroughFilter(PointCloudPtr cloud, double min_x, double max_x, double min_y, double max_y, double min_z, double max_z) {
+  PointCloudPtr filtered_cloud(new PointCloud);
+  pcl::IndicesPtr retained_indices = boost::shared_ptr<vector<int>>
+                                     (new vector<int>);
+  pcl::PassThrough<PointT> pt_filter;
+  pt_filter.setInputCloud(cloud);
+  pt_filter.setKeepOrganized (true);
+  pt_filter.setFilterFieldName("x");
+  pt_filter.setFilterLimits(min_x, max_x);
+  pt_filter.filter(*retained_indices);
+  pt_filter.setIndices(retained_indices);
+
+  pt_filter.setKeepOrganized (true);
+  pt_filter.setFilterFieldName("y");
+  pt_filter.setFilterLimits(min_y, max_y);
+  pt_filter.filter(*retained_indices);
+  pt_filter.setIndices(retained_indices);
+
+  pt_filter.setKeepOrganized (true);
+  pt_filter.setFilterFieldName("z");
+  pt_filter.setFilterLimits(min_z, max_z);
   pt_filter.filter(*filtered_cloud);
   return filtered_cloud;
 }

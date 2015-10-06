@@ -11,7 +11,9 @@
   
   <depend package="sensor_msgs"/>
   <depend package="perception_utils"/>
-  <depend package="sbpl_perception"/>
+  <depend package="keyboard"/>
+  <depend package="tf_conversions"/>
+  <!-- <depend package="sbpl_perception"/> -->
 
 </package>
 

@@ -72,33 +72,33 @@
 
 
 <!--occlusion example-->
-[$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply,
-$(find sbpl_perception)/data/RAM/cad_models/clorox.ply,
-<!-- $(find sbpl_perception)/data/RAM/cad_models/milk_carton.ply, -->
-<!-- $(find sbpl_perception)/data/RAM/cad_models/milkjug.ply, -->
-$(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply,
-$(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply,
-<!-- $(find sbpl_perception)/data/RAM/cad_models/peroxide.ply, -->
-$(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply]
+<!-- [$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/clorox.ply, -->
+<!-- <!&#45;&#45; $(find sbpl_perception)/data/RAM/cad_models/milk_carton.ply, &#45;&#45;> -->
+<!-- <!&#45;&#45; $(find sbpl_perception)/data/RAM/cad_models/milkjug.ply, &#45;&#45;> -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply, -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply, -->
+<!-- <!&#45;&#45; $(find sbpl_perception)/data/RAM/cad_models/peroxide.ply, &#45;&#45;> -->
+<!-- $(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply] -->
 
 <!-- [$(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply, -->
 <!-- $(find sbpl_perception)/data/RAM/cad_models/clorox.ply, -->
 <!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply] -->
 
-<!-- [$(find sbpl_perception)/data/staunton/king.ply, -->
-<!-- $(find sbpl_perception)/data/staunton/queen.ply, -->
-<!-- $(find sbpl_perception)/data/staunton/pawn.ply] -->
+[$(find sbpl_perception)/data/staunton/king.ply,
+$(find sbpl_perception)/data/staunton/queen.ply,
+$(find sbpl_perception)/data/staunton/pawn.ply]
 
       </rosparam>
       <rosparam param="model_symmetries">
-        [1, 0, 0, 0, 0]
+        <!-- [1, 0, 0, 0, 0] -->
         <!-- [1, 0, 0] -->
-        <!-- [0, 0, 1] -->
+        [0, 0, 1]
       </rosparam>
     <rosparam param="model_flippings">
-      [0, 0, 0, 0, 0]
+      <!-- [0, 0, 0, 0, 0] -->
       <!-- [1, 0, 0] -->
-      <!-- [0, 0, 1] -->
+      [0, 0, 1]
     </rosparam>
   </node>
 

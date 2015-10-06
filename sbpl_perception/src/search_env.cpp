@@ -44,12 +44,12 @@ using namespace Eigen;
 namespace {
 constexpr int kICPCostMultiplier = 1000000;
 // const double kSensorResolution = 0.01 / 2;//0.01
-constexpr double kSensorResolution = 0.003;
+constexpr double kSensorResolution = 0.0075;
 constexpr double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
 
 // Number of points that should be near the (x,y,table height) of the object
 // for that state to be considered as valid.
-constexpr int kMinimumNeighborPointsForValidPose = 50;
+constexpr int kMinimumNeighborPointsForValidPose = 10;  //50 for ICRA experiments
 
 // Offset used to adjust table height when using RANSAC to fit table to real
 // data.
@@ -88,7 +88,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
   // env_params_.res = 0.05;
   // env_params_.theta_res = M_PI / 10; //8
 
-  env_params_.res = 0.1; //0.2
+  env_params_.res = 0.025; //0.04 for ICRA
   const int num_thetas = 16;
   env_params_.theta_res = 2 * M_PI / static_cast<double>(num_thetas); //8
   // TODO: Refactor.
@@ -345,14 +345,24 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   for (int ii = 0; ii < env_params_.num_models; ++ii) {
 
-    auto it = std::find_if(source_object_states.begin(),
+    // auto it = std::find_if(source_object_states.begin(),
+    // source_object_states.end(), [ii](const ObjectState & object_state) {
+    //   return object_state.id() == ii;
+    // });
+    //
+    // if (it != source_object_states.end()) {
+    //   continue;
+    // }
+
+    if (ii > 5) continue;
+    int count = std::count_if(source_object_states.begin(),
     source_object_states.end(), [ii](const ObjectState & object_state) {
       return object_state.id() == ii;
     });
-
-    if (it != source_object_states.end()) {
-      continue;
-    }
+    if (ii == 0 && count == 2) continue;
+    if (ii == 5 && count == 6) continue;
+    if (ii != 0 && ii != 5 && count == 1) continue;
+    
 
     for (double x = env_params_.x_min; x <= env_params_.x_max;
          x += env_params_.res) {
@@ -873,6 +883,11 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
   child_counted_pixels->clear();
   *child_counted_pixels = parent_counted_pixels;
+
+  if (full_rendered_cloud->points.empty()) {
+    return 100000;
+  }
+
   std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
 
   vector<int> indices_to_consider;
@@ -1379,7 +1394,6 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const ContPose &pose_in, PointCloudPtr cloud_out, ContPose *pose_out) {
   *pose_out = pose_in;
 
-
   pcl::IterativeClosestPointNonLinear<PointT, PointT> icp;
 
   // int num_points_original = cloud_in->points.size();
@@ -1414,6 +1428,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
 
   // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
   icp.setMaxCorrespondenceDistance (env_params_.res / 2); //TODO: properly
+  // icp.setMaxCorrespondenceDistance (0.01); //TODO: properly
   // icp.setMaxCorrespondenceDistance (0.5); //TODO: properly
   // Set the maximum number of iterations (criterion 1)
   icp.setMaximumIterations (50);
@@ -1448,14 +1463,16 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     // printf("Old xy: %f %f, New xy: %f %f\n", pose_in.x, pose_in.y, pose_out->x, pose_out->y);
 
 
+    // static int i = 0;
     // std::stringstream ss1, ss2;
     // ss1.precision(20);
     // ss2.precision(20);
-    // ss1 << "sim_cloud_" << i << ".pcd";
-    // ss2 << "sim_cloud_aligned_" << i << ".pcd";
+    // ss1 << kDebugDir + "sim_cloud_" << i << ".pcd";
+    // ss2 << kDebugDir + "sim_cloud_aligned_" << i << ".pcd";
     // pcl::PCDWriter writer;
-    // writer.writeBinary (ss1.str()  , *cloud);
-    // writer.writeBinary (ss2.str()  , aligned_cloud);
+    // writer.writeBinary (ss1.str()  , *cloud_in);
+    // writer.writeBinary (ss2.str()  , *cloud_out);
+    // i++;
   }
 
   return score;

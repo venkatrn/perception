@@ -84,14 +84,14 @@ int main(int argc, char **argv) {
     }
 
     MHAReplanParams replan_params(60.0);
-    replan_params.max_time = 60.0;
-    replan_params.initial_eps = 1.0;
-    replan_params.final_eps = 1.0;
+    replan_params.max_time = 60.0 * 10.0;
+    replan_params.initial_eps = 10.0;
+    replan_params.final_eps = 10.0;
     replan_params.dec_eps = 0.2;
     replan_params.return_first_solution =
-      true; // Setting this to true also means planner will ignore max time limit.
+      false; // Setting this to true also means planner will ignore max time limit.
     replan_params.repair_time = -1;
-    replan_params.inflation_eps = 1.5; // 10.0
+    replan_params.inflation_eps = 10.0; // 10.0
     replan_params.anchor_eps = 1;
     replan_params.use_anchor = true;
     replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN;
