@@ -44,12 +44,12 @@ using namespace Eigen;
 namespace {
 constexpr int kICPCostMultiplier = 1000000;
 // const double kSensorResolution = 0.01 / 2;//0.01
-constexpr double kSensorResolution = 0.0075;
+constexpr double kSensorResolution = 0.003;
 constexpr double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
 
 // Number of points that should be near the (x,y,table height) of the object
 // for that state to be considered as valid.
-constexpr int kMinimumNeighborPointsForValidPose = 10;  //50 for ICRA experiments
+constexpr int kMinimumNeighborPointsForValidPose = 50;  //50 for ICRA experiments
 
 // Offset used to adjust table height when using RANSAC to fit table to real
 // data.
@@ -345,24 +345,14 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   for (int ii = 0; ii < env_params_.num_models; ++ii) {
 
-    // auto it = std::find_if(source_object_states.begin(),
-    // source_object_states.end(), [ii](const ObjectState & object_state) {
-    //   return object_state.id() == ii;
-    // });
-    //
-    // if (it != source_object_states.end()) {
-    //   continue;
-    // }
-
-    if (ii > 5) continue;
-    int count = std::count_if(source_object_states.begin(),
+    auto it = std::find_if(source_object_states.begin(),
     source_object_states.end(), [ii](const ObjectState & object_state) {
       return object_state.id() == ii;
     });
-    if (ii == 0 && count == 2) continue;
-    if (ii == 5 && count == 6) continue;
-    if (ii != 0 && ii != 5 && count == 1) continue;
-    
+
+    if (it != source_object_states.end()) {
+      continue;
+    }
 
     for (double x = env_params_.x_min; x <= env_params_.x_max;
          x += env_params_.res) {
@@ -884,6 +874,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   child_counted_pixels->clear();
   *child_counted_pixels = parent_counted_pixels;
 
+  // TODO: make principled
   if (full_rendered_cloud->points.empty()) {
     return 100000;
   }
