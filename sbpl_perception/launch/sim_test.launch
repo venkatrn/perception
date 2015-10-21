@@ -11,7 +11,7 @@
   <!--<param name="robot_description" command="$(find xacro)/xacro.py '$(find pr2_description)/robots/pr2.urdf.xacro'" />-->
 
   <!-- <node pkg="sbpl_perception" type="sim_test" name="sim_test" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
-    <node pkg="sbpl_perception" type="sim_test" name="sim_test" output="screen" launch-prefix="mpirun -n 8" respawn="false">
+    <node pkg="sbpl_perception" type="sim_test" name="sim_test" output="screen" launch-prefix="mpirun -n 1" respawn="false">
 
       <param name="reference_frame" value="/base_link"/>
       <param name="image_debug" value="$(arg image_debug)"/>

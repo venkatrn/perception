@@ -47,6 +47,9 @@
 #include <Eigen/Dense>
 #include <boost/mpi.hpp>
 
+#include <opencv/cv.h>
+#include <opencv2/core/core.hpp>
+
 #include <memory>
 #include <string>
 #include <unordered_map>

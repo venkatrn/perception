@@ -26,9 +26,7 @@
 #include <pcl/common/common.h>
 #include <pcl/console/print.h>
 
-#include <opencv/cv.h>
 #include <opencv/highgui.h>
-#include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/contrib/contrib.hpp>
 
@@ -42,7 +40,11 @@ using namespace pcl::simulation;
 using namespace Eigen;
 
 namespace {
-constexpr int kICPCostMultiplier = 1000000;
+
+// Depth image parameters (TODO: read in from config file).
+const int kDepthImageHeight = 480;
+const int kDepthImageWidth = 640;
+
 // const double kSensorResolution = 0.01 / 2;//0.01
 constexpr double kSensorResolution = 0.003;
 constexpr double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
@@ -50,10 +52,6 @@ constexpr double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
 // Number of points that should be near the (x,y,table height) of the object
 // for that state to be considered as valid.
 constexpr int kMinimumNeighborPointsForValidPose = 50;  //50 for ICRA experiments
-
-// Offset used to adjust table height when using RANSAC to fit table to real
-// data.
-constexpr double kTableHeightOffset = 0.00;
 
 // Whether should use depth-dependent cost penalty. If true, cost is
 // indicator(pixel explained) * range_in_meters(pixel). Otherwise, cost is
@@ -63,7 +61,48 @@ constexpr bool kUseDepthSensitiveCost = false;
 string kDebugDir = ros::package::getPath("sbpl_perception") +
                    "/visualization/";
 constexpr int kMasterRank = 0;
+
+// Colorize depth image, given the max and min depths. Type is assumed to be
+// unsigned short (CV_16UC1) as typical of a kinect sensor.
+void ColorizeDepthImage(const cv::Mat &depth_image,
+                        cv::Mat &colored_depth_image,
+                        unsigned short min_depth,
+                        unsigned short max_depth) {
+  const double range = double(max_depth - min_depth);
+
+  static cv::Mat normalized_depth_image;
+  normalized_depth_image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    auto row = depth_image.ptr<unsigned short>(ii);
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      const unsigned short depth = row[jj];
+      if (depth > max_depth || depth == 20000) {
+        normalized_depth_image.at<uchar>(ii, jj) = 0;
+      } else if (depth < min_depth) {
+        normalized_depth_image.at<uchar>(ii, jj) = 255;
+      } else {
+        normalized_depth_image.at<uchar>(ii, jj) = static_cast<uchar>(255.0 - double(
+                                                       depth - min_depth) * 255.0 / range);
+      }
+    }
+  }
+       
+  cv::applyColorMap(normalized_depth_image, colored_depth_image, cv::COLORMAP_JET);
+
+  // Convert background to black to make pretty.
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      if (normalized_depth_image.at<uchar>(ii, jj) == 0) {
+        colored_depth_image.at<cv::Vec3b>(ii, jj)[0] = 0;
+        colored_depth_image.at<cv::Vec3b>(ii, jj)[1] = 0;
+        colored_depth_image.at<cv::Vec3b>(ii, jj)[2] = 0;
+      }
+    }
+  }
 }
+
+}  // namespace
 
 
 EnvObjectRecognition::EnvObjectRecognition(const
@@ -88,7 +127,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
   // env_params_.res = 0.05;
   // env_params_.theta_res = M_PI / 10; //8
 
-  env_params_.res = 0.025; //0.04 for ICRA
+  env_params_.res = 0.04; //0.04 for ICRA // 0.025 for chess
   const int num_thetas = 16;
   env_params_.theta_res = 2 * M_PI / static_cast<double>(num_thetas); //8
   // TODO: Refactor.
@@ -98,8 +137,6 @@ EnvObjectRecognition::EnvObjectRecognition(const
   DiscretizationManager::Initialize(world_resolution_params);
 
   env_params_.table_height = 0;
-  env_params_.img_width = 640;
-  env_params_.img_height = 480;
   env_params_.num_models = 0;
   env_params_.num_objects = 0;
 
@@ -144,7 +181,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
 
 
   kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
-                                                     env_params_.img_height, env_params_.img_width));
+                                                     kDepthImageHeight, kDepthImageWidth));
   scene_ = kinect_simulator_->scene_;
   observed_cloud_.reset(new PointCloud);
   projected_cloud_.reset(new PointCloud);
@@ -271,19 +308,19 @@ void EnvObjectRecognition::LabelEuclideanClusters() {
            observed_organized_cloud_->height);
 
     for (const auto &index : cluster.indices) {
-      int u = index % env_params_.img_width;
-      int v = index / env_params_.img_width;
-      int image_index = v * env_params_.img_width + u;
+      int u = index % kDepthImageWidth;
+      int v = index / kDepthImageWidth;
+      int image_index = v * kDepthImageWidth + u;
       cluster_labels_[image_index] = static_cast<int>(ii + 1);
     }
   }
 
   static cv::Mat image;
-  image.create(env_params_.img_height, env_params_.img_width, CV_8UC1);
+  image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
 
-  for (int ii = 0; ii < env_params_.img_height; ++ii) {
-    for (int jj = 0; jj < env_params_.img_width; ++jj) {
-      int index = ii * env_params_.img_width + jj;
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      int index = ii * kDepthImageWidth + jj;
       image.at<uchar>(ii, jj) = static_cast<uchar>(cluster_labels_[index]);
     }
   }
@@ -610,7 +647,7 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   case 2: {
     // return GetICPHeuristic(s);
     // return static_cast<int>(1000 * minz_map_[state_id]);
-    const int num_pixels = env_params_.img_width * env_params_.img_height;
+    const int num_pixels = kDepthImageWidth * kDepthImageHeight;
     return num_pixels - static_cast<int>(counted_pixels_map_[state_id].size());
   }
 
@@ -651,12 +688,12 @@ int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
   succ_depth_buffer = GetDepthImage(s_new_obj, &new_obj_depth_image);
 
   // Create new buffer with only new pixels
-  float new_pixel_buffer[env_params_.img_width * env_params_.img_height];
+  float new_pixel_buffer[kDepthImageWidth * kDepthImageHeight];
 
-  for (int y = 0; y <  env_params_.img_height; ++y) {
-    for (int x = 0; x < env_params_.img_width; ++x) {
-      int i = y * env_params_.img_width + x ; // depth image index
-      int i_in = (env_params_.img_height - 1 - y) * env_params_.img_width + x
+  for (int y = 0; y <  kDepthImageHeight; ++y) {
+    for (int x = 0; x < kDepthImageWidth; ++x) {
+      int i = y * kDepthImageWidth + x ; // depth image index
+      int i_in = (kDepthImageHeight - 1 - y) * kDepthImageWidth + x
                  ; // flip up down (buffer index)
 
       if (new_obj_depth_image[i] != 20000 && source_depth_image[i] == 20000) {
@@ -709,10 +746,10 @@ int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,
   child_properties->last_max_depth = succ_max_depth;
 
   // Must use re-rendered adjusted partial cloud for cost
-  for (int y = 0; y <  env_params_.img_height; ++y) {
-    for (int x = 0; x < env_params_.img_width; ++x) {
-      int i = y * env_params_.img_width + x ; // depth image index
-      int i_in = (env_params_.img_height - 1 - y) * env_params_.img_width + x
+  for (int y = 0; y <  kDepthImageHeight; ++y) {
+    for (int x = 0; x < kDepthImageWidth; ++x) {
+      int i = y * kDepthImageWidth + x ; // depth image index
+      int i_in = (kDepthImageHeight - 1 - y) * kDepthImageWidth + x
                  ; // flip up down (buffer index)
 
       if (depth_image[i] != 20000 && source_depth_image[i] == 20000) {
@@ -770,7 +807,7 @@ bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
                                       vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
                                       unsigned short *max_succ_depth) {
 
-  const int num_pixels = env_params_.img_width * env_params_.img_height;
+  const int num_pixels = kDepthImageWidth * kDepthImageHeight;
   assert(static_cast<int>(parent_depth_image.size()) == num_pixels);
   assert(static_cast<int>(succ_depth_image.size()) == num_pixels);
 
@@ -864,7 +901,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
                                         const std::vector<int> &parent_counted_pixels,
                                         std::vector<int> *child_counted_pixels) {
 
-  const int num_pixels = env_params_.img_width * env_params_.img_height;
+  const int num_pixels = kDepthImageWidth * kDepthImageHeight;
 
   // Compute the cost of points made infeasible in the observed point cloud.
   pcl::search::KdTree<PointT>::Ptr knn_reverse;
@@ -944,7 +981,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   const vector<unsigned short> &depth_image) {
-  const int num_pixels = env_params_.img_width * env_params_.img_height;
+  const int num_pixels = kDepthImageWidth * kDepthImageHeight;
   PointCloudPtr cloud(new PointCloud);
 
   for (int ii = 0; ii < num_pixels; ++ii) {
@@ -957,10 +994,10 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
     vector<float> sqr_dists;
     PointT point;
 
-    // int u = env_params_.img_width - ii % env_params_.img_width;
-    int u = ii % env_params_.img_width;
-    int v = ii / env_params_.img_width;
-    v = env_params_.img_height - 1 - v;
+    // int u = kDepthImageWidth - ii % kDepthImageWidth;
+    int u = ii % kDepthImageWidth;
+    int v = ii / kDepthImageWidth;
+    v = kDepthImageHeight - 1 - v;
     // int idx = y * camera_width_ + x;
     //         int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
     // point = observed_organized_cloud_->at(v, u);
@@ -1050,11 +1087,11 @@ void EnvObjectRecognition::PrintImage(string fname,
                                       const vector<unsigned short> &depth_image) {
   assert(depth_image.size() != 0);
   static cv::Mat image;
-  image.create(env_params_.img_height, env_params_.img_width, CV_8UC1);
+  image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
 
-  // for (int ii = 0; ii < env_params_.img_height; ++ii) {
-  //   for (int jj = 0; jj < env_params_.img_width; ++jj) {
-  //     int idx = ii * env_params_.img_width + jj;
+  // for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+  //   for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+  //     int idx = ii * kDepthImageWidth + jj;
   //
   //     if (depth_image[idx] == 20000) {
   //       continue;
@@ -1077,9 +1114,9 @@ void EnvObjectRecognition::PrintImage(string fname,
 
   const double range = double(max_observed_depth_ - min_observed_depth_);
 
-  for (int ii = 0; ii < env_params_.img_height; ++ii) {
-    for (int jj = 0; jj < env_params_.img_width; ++jj) {
-      int idx = ii * env_params_.img_width + jj;
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      int idx = ii * kDepthImageWidth + jj;
 
       if (depth_image[idx] > max_observed_depth_ || depth_image[idx] == 20000) {
         image.at<uchar>(ii, jj) = 0;
@@ -1096,8 +1133,8 @@ void EnvObjectRecognition::PrintImage(string fname,
   cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
 
   // Convert background to white to make pretty.
-  for (int ii = 0; ii < env_params_.img_height; ++ii) {
-    for (int jj = 0; jj < env_params_.img_width; ++jj) {
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
       if (image.at<uchar>(ii, jj) == 0) {
         c_image.at<cv::Vec3b>(ii, jj)[0] = 0;
         c_image.at<cv::Vec3b>(ii, jj)[1] = 0;
@@ -1145,6 +1182,15 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   kinect_simulator_->doSim(env_params_.camera_pose);
   const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
   kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
+  cv::Mat cv_depth_image;
+  cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
+
+  if (mpi_comm_->rank() == kMasterRank) {
+    static cv::Mat c_image;
+    ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
+    cv::imshow("depth image", c_image);
+    cv::waitKey(1);
+  }
   return depth_buffer;
 };
 
@@ -1183,7 +1229,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   observed_depth_image_ = observed_depth_image;
   env_params_.num_objects = num_objects;
 
-  const int num_pixels = env_params_.img_width * env_params_.img_height;
+  const int num_pixels = kDepthImageWidth * kDepthImageHeight;
   // Compute the range in observed image
   unsigned short observed_min_depth = 20000;
   unsigned short observed_max_depth = 0;
@@ -1217,7 +1263,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
 
   empty_range_image_.setDepthImage(&observed_depth_image_[0],
-                                   env_params_.img_width, env_params_.img_height, 321.06398107f, 242.97676897f,
+                                   kDepthImageWidth, kDepthImageHeight, 321.06398107f, 242.97676897f,
                                    576.09757860f, 576.09757860f);
 
   knn.reset(new pcl::search::KdTree<PointT>(true));
@@ -1244,9 +1290,9 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   min_observed_depth_ = 20000;
   max_observed_depth_ = 0;
 
-  for (int ii = 0; ii < env_params_.img_height; ++ii) {
-    for (int jj = 0; jj < env_params_.img_width; ++jj) {
-      int idx = ii * env_params_.img_width + jj;
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      int idx = ii * kDepthImageWidth + jj;
 
       if (observed_depth_image_[idx] == 20000) {
         continue;
@@ -1309,7 +1355,7 @@ void EnvObjectRecognition::Initialize(const string &config_file) {
   LoadObjFiles(parser_.model_files, parser_.model_symmetries,
                parser_.model_flippings);
   SetBounds(parser_.min_x, parser_.max_x, parser_.min_y, parser_.max_y);
-  SetTableHeight(parser_.table_height - kTableHeightOffset);
+  SetTableHeight(parser_.table_height);
   SetCameraPose(parser_.camera_pose);
 
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
@@ -1554,6 +1600,7 @@ int EnvObjectRecognition::GetICPHeuristic(GraphState s) {
 
   }
 
+  const int kICPCostMultiplier = 1000000;
   return static_cast<int>(kICPCostMultiplier * heuristic);
 }
 
