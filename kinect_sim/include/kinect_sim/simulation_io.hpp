@@ -30,6 +30,8 @@
 #include <kinect_sim/scene.h>
 #include <kinect_sim/range_likelihood.h>
 
+#include <opencv/cv.h>
+
 #include <vector>
 
 namespace pcl
@@ -58,6 +60,7 @@ namespace pcl
         void write_rgb_image(const uint8_t* rgb_buffer,std::string fname);
 
         void get_depth_image_uint(const float* depth_buffer, std::vector<unsigned short>* depth_img_uint);
+        void get_depth_image_cv(const float* depth_buffer, cv::Mat &depth_image);
     
       private:
         uint16_t t_gamma[2048];  

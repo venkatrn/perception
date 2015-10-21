@@ -1,7 +1,7 @@
 #include <kinect_sim/simulation_io.hpp>
 #include <pcl/io/png_io.h>
 
-
+#include <opencv2/core/core.hpp>
 
 pcl::simulation::SimExample::SimExample(int argc, char** argv,
 	int height,int width):
@@ -349,6 +349,51 @@ pcl::simulation::SimExample::get_depth_image_uint(const float* depth_buffer, std
   }
 }
 
+void pcl::simulation::SimExample::get_depth_image_cv(const float* depth_buffer, cv::Mat &depth_image)
+{
+  int npixels = rl_->getWidth() * rl_->getHeight();
+  depth_image.create(height_, width_, CV_16UC1);
+
+  float min_depth = depth_buffer[0];
+  float max_depth = depth_buffer[0];
+  for (int i=1; i<npixels; i++)
+  {
+    if (depth_buffer[i] < min_depth) min_depth = depth_buffer[i];
+    if (depth_buffer[i] > max_depth) max_depth = depth_buffer[i];
+  }
+
+  for (int y = 0; y <  height_; ++y)
+  {
+    for (int x = 0; x < width_; ++x)
+    {
+      int i= y*width_ + x ;
+      int i_in= (height_-1 -y) *width_ + x ; // flip up down
+    
+      float zn = 0.1; //ZNEAR
+      float zf = 20.0;
+      float d = depth_buffer[i_in];
+      
+      unsigned short z_new = (unsigned short)  round( 1000*( -zf*zn/((zf-zn)*(d - zf/(zf-zn))))); //ZNEAR
+      if (z_new < 0) z_new = 0;
+      else if (z_new>65535) z_new = 65535;
+      
+      if ( z_new < 18000){
+	  //cout << z_new << " " << d << " " << x << "\n";  
+      }
+	
+      float z = 1000*( -zf*zn/((zf-zn)*(d - zf/(zf-zn))));
+      float b = 0.075;
+      float f = 580.0;
+      uint16_t kd = static_cast<uint16_t>(1090 - b*f/z*8);
+      if (kd < 0) kd = 0;
+      else if (kd>2047) kd = 2047;
+
+      int pval = t_gamma[kd];
+      int lb = pval & 0xff;
+      depth_image.at<unsigned short>(y, x)= z_new;
+    }
+  }
+}
 
 void
 pcl::simulation::SimExample::write_rgb_image(const uint8_t* rgb_buffer, std::string fname)

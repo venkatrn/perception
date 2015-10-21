@@ -32,6 +32,9 @@ rosbuild_init()
 # GLEW_LIBRARY
 #
 
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS} )
+
 IF (WIN32)
 FIND_PATH( GLEW_INCLUDE_PATH GL/glew.h
            $ENV{PROGRAMFILES}/GLEW/include

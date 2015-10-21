@@ -1182,15 +1182,16 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   kinect_simulator_->doSim(env_params_.camera_pose);
   const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
   kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
-  cv::Mat cv_depth_image;
-  cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
 
-  if (mpi_comm_->rank() == kMasterRank) {
-    static cv::Mat c_image;
-    ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
-    cv::imshow("depth image", c_image);
-    cv::waitKey(1);
-  }
+  // kinect_simulator_->get_depth_image_cv(depth_buffer, depth_image);
+  // cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
+  // if (mpi_comm_->rank() == kMasterRank) {
+  //   static cv::Mat c_image;
+  //   ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
+  //   cv::imshow("depth image", c_image);
+  //   cv::waitKey(1);
+  // }
+
   return depth_buffer;
 };
 

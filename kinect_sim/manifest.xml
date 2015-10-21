@@ -14,7 +14,7 @@
   <depend package="roslib"/>
   <!--<depend package="pcl"/>-->
   <depend package="pcl_ros"/>
-
+  <depend package="cv_bridge"/>
   <export>
     <cpp cflags="`pkg-config --cflags eigen3` -I${prefix}/include" 
       lflags="-Wl,-rpath,${prefix}/lib -L${prefix}/lib -lkinect_sim"/>

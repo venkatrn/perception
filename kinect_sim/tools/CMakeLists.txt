@@ -1,3 +1,6 @@
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS} )
+
 find_package(GLEW)
 if(GLEW_FOUND)
   find_package(GLUT)
