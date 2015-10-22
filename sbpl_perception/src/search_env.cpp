@@ -481,6 +481,10 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       counted_pixels_map_[candidate_succ_ids[ii]] = output_unit.child_counted_pixels;
       g_value_map_[candidate_succ_ids[ii]] = g_value_map_[source_state_id] +
                                              output_unit.cost;
+      // Cache the depth image only for single object renderings.
+      if (source_state.NumObjects() == 0) {
+        depth_image_cache_[candidate_succ_ids[ii]] = output_unit.depth_image;
+      }
     }
   }
 
@@ -533,7 +537,6 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   }
 
   printf("\n");
-
 
   // ROS_INFO("Expanding state: %d with %d objects and %d successors",
   //          source_state_id,
@@ -654,6 +657,92 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   default:
     return 0;
   }
+}
+
+
+int EnvObjectRecognition::GetLazyCost(const GraphState &source_state, const GraphState &child_state,
+                const std::vector<unsigned short> &source_depth_image,
+                const std::vector<unsigned short> &child_depth_image,
+                const std::vector<int> &parent_counted_pixels) {
+  assert(child_state.NumObjects() > 0);
+
+  const auto &last_object = child_state.object_states().back();
+  ContPose child_pose = last_object.cont_pose();
+  int last_object_id = last_object.id();
+
+  const float *succ_depth_buffer;
+  ContPose pose_in(child_pose.x(), child_pose.y(), child_pose.yaw()),
+           pose_out(child_pose.x(), child_pose.y(), child_pose.yaw());
+  PointCloudPtr cloud_in(new PointCloud);
+  PointCloudPtr succ_cloud(new PointCloud);
+  PointCloudPtr cloud_out(new PointCloud);
+
+  unsigned short succ_min_depth, succ_max_depth;
+  vector<int> new_pixel_indices;
+
+  if (IsOccluded(source_depth_image, child_depth_image, &new_pixel_indices,
+                 &succ_min_depth,
+                 &succ_max_depth)) {
+    return -1;
+  }
+
+  vector<unsigned short> new_obj_depth_image(kDepthImageWidth * kDepthImageHeight, 20000);
+  for (int ii = 0; ii < new_pixel_indices.size(); ++ii) {
+    new_obj_depth_image[new_pixel_indices[ii]] = child_depth_image[new_pixel_indices[ii]];
+  }
+
+  // Create point cloud (cloud_in) corresponding to new pixels.
+  kinect_simulator_->rl_->getPointCloudFromDepthImage(cloud_in, new_obj_depth_image,
+                                                   true,
+                                                   env_params_.camera_pose);
+
+  // TODO: Remove points that may be self-occluded or occluded by other objects
+  // in the scene.
+  
+  // Begin ICP Adjustment
+  GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out);
+  const ObjectState modified_last_object(last_object.id(),
+                                         last_object.symmetric(), pose_out);
+  // End ICP Adjustment
+  // Check again after ICP.
+  if (!IsValidPose(source_state, last_object_id,
+                   modified_last_object.cont_pose(), true)) {
+    // printf(" state %d is invalid\n ", child_id);
+    return -1;
+  }
+
+  // Compute costs
+  const bool last_level = static_cast<int>(child_state.NumObjects()) ==
+                          env_params_.num_objects;
+  int target_cost = 0, source_cost = 0, total_cost = 0;
+  target_cost = GetTargetCost(cloud_out);
+
+  vector<int> child_counted_pixels;
+  source_cost = GetSourceCost(cloud_out,
+                              modified_last_object,
+                              last_level, parent_counted_pixels, &child_counted_pixels);
+  total_cost = source_cost + target_cost;
+
+  // std::stringstream cloud_ss;
+  // cloud_ss.precision(20);
+  // cloud_ss << kDebugDir + "cloud_" << rand() << ".pcd";
+  // pcl::PCDWriter writer;
+  // writer.writeBinary (cloud_ss.str()  , *succ_cloud);
+
+  // if (image_debug_) {
+  //   std::stringstream ss1, ss2, ss3;
+  //   ss1.precision(20);
+  //   ss2.precision(20);
+  //   ss1 << kDebugDir + "cloud_" << child_id << ".pcd";
+  //   ss2 << kDebugDir + "cloud_aligned_" << child_id << ".pcd";
+  //   ss3 << kDebugDir + "cloud_succ_" << child_id << ".pcd";
+  //   pcl::PCDWriter writer;
+  //   writer.writeBinary (ss1.str()  , *cloud_in);
+  //   writer.writeBinary (ss2.str()  , *cloud_out);
+  //   writer.writeBinary (ss3.str()  , *succ_cloud);
+  // }
+
+  return total_cost;
 }
 
 int EnvObjectRecognition::GetTrueCost(const GraphState &source_state,

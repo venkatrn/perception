@@ -18,6 +18,10 @@ struct CostComputationInput {
 
   std::vector<unsigned short> source_depth_image;  
   std::vector<int> source_counted_pixels;
+
+  // This is optional: a non-empty vector should be used only when lazily
+  // computing cost from cached depth images of individual objects.
+  std::vector<unsigned short> child_depth_image;
 };
 
 struct CostComputationOutput {
@@ -34,11 +38,13 @@ namespace serialization {
 template<class Archive>
 void serialize(Archive &ar, CostComputationInput &input,
                const unsigned int version) {
-    ar &input.source_id;
-    ar &input.child_id;
     ar &input.source_state;
     ar &input.child_state;
+    ar &input.source_id;
+    ar &input.child_id;
     ar &input.source_depth_image;
+    ar &input.source_counted_pixels;
+    ar &input.child_depth_image;
 }
 
 template<class Archive>

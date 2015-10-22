@@ -136,6 +136,9 @@ class PCL_EXPORTS RangeLikelihood {
   void getPointCloudFromBuffer (pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc,
                                 const float *depth_buffer,
                                 bool make_global, const Eigen::Isometry3d &pose);
+  void getPointCloudFromDepthImage (pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc,
+                                const std::vector<unsigned short> &depth_image,
+                                bool make_global, const Eigen::Isometry3d &pose);
   void getOrganizedPointCloud (pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc,
                                bool make_global, const Eigen::Isometry3d &pose);
 
