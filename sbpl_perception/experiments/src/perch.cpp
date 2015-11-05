@@ -177,7 +177,8 @@ int main(int argc, char **argv) {
     while (1) {
       vector<CostComputationInput> input;
       vector<CostComputationOutput> output;
-      env_obj->ComputeCostsInParallel(input, &output);
+      bool lazy;
+      env_obj->ComputeCostsInParallel(input, &output, lazy);
     }
   }
 

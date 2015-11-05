@@ -145,6 +145,7 @@ class PCL_EXPORTS RangeLikelihood {
 
   void getGlobalPoint (int u, int v, float range, const Eigen::Isometry3d &pose,
                        Eigen::Vector3f &world_point);
+  void getCameraCoordinate(const Eigen::Isometry3d &pose, const Eigen::Vector3f &world_point, int &u, int &v, float &range);
 
   // Convenience function to return RangeImagePlanar containing
   // simulated RGB-D:

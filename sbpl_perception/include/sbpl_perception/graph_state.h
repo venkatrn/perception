@@ -49,3 +49,14 @@ struct GraphStateProperties {
   }
 };
 
+// Specialize the hash function for GraphState type.
+namespace std {
+    template <>
+        class hash<GraphState>{
+        public :
+            size_t operator()(const GraphState &graph_state) const
+            {
+                return graph_state.GetHash();
+            }
+    };
+};

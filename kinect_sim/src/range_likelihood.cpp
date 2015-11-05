@@ -1014,18 +1014,52 @@ pcl::simulation::RangeLikelihood::getGlobalPoint (int u, int v, float range,
   Eigen::Matrix4f transform = pose.matrix ().cast<float> ();
   transform = transform * T;
   Eigen::Matrix<float, 3, 1> pt (p.x, p.y, p.z);
-  world_point[0] = static_cast<float> (transform (0,
-                                                  0) * pt.coeffRef (0) + transform (0, 1) * pt.coeffRef (1) + transform (0,
-                                                      2) * pt.coeffRef (2) + transform (0, 3));
-  world_point[1] = static_cast<float> (transform (1,
-                                                  0) * pt.coeffRef (0) + transform (1, 1) * pt.coeffRef (1) + transform (1,
-                                                      2) * pt.coeffRef (2) + transform (1, 3));
-  world_point[2] = static_cast<float> (transform (2,
-                                                  0) * pt.coeffRef (0) + transform (2, 1) * pt.coeffRef (1) + transform (2,
-                                                      2) * pt.coeffRef (2) + transform (2, 3));
+
+  world_point = transform.block<3,3>(0,0) * pt;
+  world_point += transform.block<3,1>(0,3);
+
+  // world_point[0] = static_cast<float> (transform (0,
+  //                                                 0) * pt.coeffRef (0) + transform (0, 1) * pt.coeffRef (1) + transform (0,
+  //                                                     2) * pt.coeffRef (2) + transform (0, 3));
+  // world_point[1] = static_cast<float> (transform (1,
+  //                                                 0) * pt.coeffRef (0) + transform (1, 1) * pt.coeffRef (1) + transform (1,
+  //                                                     2) * pt.coeffRef (2) + transform (1, 3));
+  // world_point[2] = static_cast<float> (transform (2,
+  //                                                 0) * pt.coeffRef (0) + transform (2, 1) * pt.coeffRef (1) + transform (2,
+  //                                                     2) * pt.coeffRef (2) + transform (2, 3));
+  
   // world_point << pc.points[0].x, pc.points[0].y, pc.points[0].z;
 
 }
+
+void pcl::simulation::RangeLikelihood::getCameraCoordinate(
+  const Eigen::Isometry3d &pose, const Eigen::Vector3f &world_point, int &u,
+  int &v, float &range) {
+  Eigen::Matrix4f T;
+  T <<  0, 0, -1, 0,
+  -1, 0,  0, 0,
+  0, 1,  0, 0,
+  0, 0,  0, 1;
+  Eigen::Affine3f transform;
+  transform.matrix() = pose.matrix ().cast<float>() * T;
+  transform = transform.inverse();
+
+  Eigen::Matrix<float, 3, 1> local_point;
+
+  local_point = transform.matrix().block<3, 3>(0, 0) * world_point;
+  local_point += transform.matrix().block<3, 1>(0, 3);
+
+  float camera_fx_reciprocal_ = 1.0f / camera_fx_;
+  float camera_fy_reciprocal_ = 1.0f / camera_fy_;
+
+  range = local_point[2];
+  u = static_cast<int>(local_point[0] / (range * -camera_fx_reciprocal_) + camera_cx_);
+  v = static_cast<int>(local_point[1] / (range * -camera_fy_reciprocal_) + camera_cy_);
+
+  // TODO: such ugliness...please clean up.
+  range = -range;
+}
+
 
 void
 pcl::simulation::RangeLikelihood::getOrganizedPointCloud (

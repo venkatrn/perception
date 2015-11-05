@@ -98,7 +98,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   double ComputeScore(const PointCloudPtr cloud);
 
   double GetICPAdjustedPose(const PointCloudPtr cloud_in, const ContPose &pose_in,
-                            PointCloudPtr cloud_out, ContPose *pose_out);
+                            PointCloudPtr &cloud_out, ContPose *pose_out);
 
   // Greedy ICP planner
   GraphState ComputeGreedyICPPoses();
@@ -137,15 +137,15 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // For MHA
   void GetSuccs(int q_id, int source_state_id, std::vector<int> *succ_ids,
                 std::vector<int> *costs) {
-    printf("Expanding from %d\n", q_id);
+    printf("Expanding %d from %d\n", source_state_id, q_id);
     GetSuccs(source_state_id, succ_ids, costs);
   }
 
   void GetLazySuccs(int q_id, int source_state_id, std::vector<int> *succ_ids,
                     std::vector<int> *costs,
                     std::vector<bool> *true_costs) {
-    throw std::runtime_error("don't use lazy for now...");
-    printf("Expanding from %d\n", q_id);
+    // throw std::runtime_error("don't use lazy for now...");
+    printf("Lazily expanding %d from %d\n", source_state_id, q_id);
     GetLazySuccs(source_state_id, succ_ids, costs, true_costs);
   }
 
@@ -154,6 +154,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     std::vector<bool> *true_costs) {
     throw std::runtime_error("unimplement");
   }
+
+  int GetTrueCost(int source_state_id, int child_state_id);
 
   int GetGoalHeuristic(int state_id);
   int GetGoalHeuristic(int q_id, int state_id); // For MHA*
@@ -168,11 +170,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Compute costs of successor states in parallel using MPI. This method must
   // be called by all processors.
   void ComputeCostsInParallel(const std::vector<CostComputationInput> &input,
-                              std::vector<CostComputationOutput> *output);
+                              std::vector<CostComputationOutput> *output, bool lazy);
 
   // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
   // of the last added object is adjusted using ICP and the computed state properties.
-  int GetTrueCost(const GraphState &source_state, const GraphState &child_state,
+  int GetCost(const GraphState &source_state, const GraphState &child_state,
                   const std::vector<unsigned short> &source_depth_image,
                   const std::vector<int> &parent_counted_pixels, std::vector<int> *child_counted_pixels,
                   GraphState *adjusted_child_state,
@@ -190,8 +192,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any additional renderings. This requires the true source depth image and unadjusted child depth image (pre-ICP).
   int GetLazyCost(const GraphState &source_state, const GraphState &child_state,
                   const std::vector<unsigned short> &source_depth_image,
-                  const std::vector<unsigned short> &child_depth_image,
-                  const std::vector<int> &parent_counted_pixels);
+                  const std::vector<unsigned short> &last_object_depth_image,
+                  const std::vector<int> &parent_counted_pixels,
+                  GraphState *adjusted_child_state,
+                  std::vector<unsigned short> *final_depth_image);
 
   // Returns true if parent is occluded by successor. Additionally returns min and max depth for newly rendered pixels
   // when occlusion-free.
@@ -200,10 +204,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
                   std::vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
                   unsigned short *max_succ_depth);
 
-  bool IsValidPose(GraphState s, int model_id, ContPose p, bool after_refinement);
+  bool IsValidPose(GraphState s, int model_id, ContPose p, bool after_refinement) const;
 
   void LabelEuclideanClusters();
   PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image);
+  std::vector<unsigned short> GetDepthImageFromPointCloud(const PointCloudPtr &cloud);
+
   void PrintValidStates();
 
   void SetDebugOptions(bool image_debug);
@@ -250,6 +256,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   /**@brief The hash manager**/
   sbpl_utils::HashManager<GraphState> hash_manager_;
+  /**@brief Mapping from state IDs to states for those states that were changed
+   * after evaluating true cost**/
+  std::unordered_map<int, GraphState> adjusted_states_;
 
   /**@brief Mapping from State to State ID**/
   std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
@@ -260,6 +269,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, int> g_value_map_;
   std::unordered_map<int, std::vector<int>>
                                          counted_pixels_map_; // Keep track of the pixels we have accounted for in cost computation for a given state
+
+  // Maps state hash to depth image.
+  std::unordered_map<GraphState, std::vector<unsigned short>> single_object_depth_image_cache_;
 
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
@@ -285,4 +297,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<int> cluster_labels_;
 
   int succs_rendered_;
+
+  void GenerateSuccessorStates(const GraphState &source_state, std::vector<GraphState> *succ_states) const;
+
+  // Returns true if a valid depth image was composed.
+  bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image, const std::vector<unsigned short> &last_object_depth_image, std::vector<unsigned short>* composed_depth_image);
+  bool GetSingleObjectDepthImage(const GraphState &child_state, std::vector<unsigned short>* single_object_depth_image);
 };

@@ -101,7 +101,10 @@ int main(int argc, char **argv) {
   vector<ContPose> poses;
   if (world->rank() == kMasterRank) {
     // unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-    unsigned seed = -1912274402;
+    // unsigned seed = -1912274402;
+    // unsigned seed = 1754182800
+    unsigned seed = -1912274402
+;
     printf("Random seed: %d\n", seed);
 
     // Good seeds.
@@ -220,7 +223,7 @@ int main(int argc, char **argv) {
 
   if (world->rank() == kMasterRank) {
     // unique_ptr<SBPLPlanner> planner(new LazyARAPlanner(env_obj, true));
-    unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 3, true));
+    unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
 
     int goal_id = env_obj->GetGoalStateID();
     int start_id = env_obj->GetStartStateID();
@@ -244,7 +247,7 @@ int main(int argc, char **argv) {
     replan_params.return_first_solution =
       true; // Setting this to true also means planner will ignore max time limit.
     replan_params.repair_time = -1;
-    replan_params.inflation_eps = 10; //10000000.0
+    replan_params.inflation_eps = 5; //10000000.0
     replan_params.anchor_eps = 1.0;
     replan_params.use_anchor = true;
     replan_params.meta_search_type =
@@ -284,7 +287,8 @@ int main(int argc, char **argv) {
     while (1) {
       vector<CostComputationInput> input;
       vector<CostComputationOutput> output;
-      env_obj->ComputeCostsInParallel(input, &output);
+      bool lazy;
+      env_obj->ComputeCostsInParallel(input, &output, lazy);
     }
   }
 
