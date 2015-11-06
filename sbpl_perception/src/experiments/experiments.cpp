@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
   pcl::PointCloud<PointT>::Ptr cloud_out(new PointCloud);
 
   unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition(world));
-  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 3, true));
+  unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 2, true));
 
   env_obj->Initialize(config_file);
   env_obj->SetDebugOptions(image_debug);
@@ -85,13 +85,13 @@ int main(int argc, char **argv) {
 
     MHAReplanParams replan_params(60.0);
     replan_params.max_time = 60.0 * 10.0;
-    replan_params.initial_eps = 10.0;
+    replan_params.initial_eps = 3.0;
     replan_params.final_eps = 10.0;
     replan_params.dec_eps = 0.2;
     replan_params.return_first_solution =
       false; // Setting this to true also means planner will ignore max time limit.
     replan_params.repair_time = -1;
-    replan_params.inflation_eps = 10.0; // 10.0
+    replan_params.inflation_eps = 3.0; // 10.0
     replan_params.anchor_eps = 1;
     replan_params.use_anchor = true;
     replan_params.meta_search_type = mha_planner::MetaSearchType::ROUND_ROBIN;

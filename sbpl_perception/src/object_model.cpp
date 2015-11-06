@@ -73,8 +73,9 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   Eigen::Affine3f transform = Eigen::Affine3f::Identity();
   // By default, assume cad models are in mm.
   if (mesh_in_mm) {
-    // const double kScale = 0.001 * 0.74531;
-    const double kScale = 0.001 * 0.7;
+    const double kScale = 0.001;
+    // const double kScale = 0.001 * 0.7; // UGH, chess piece models are
+    // off-scale. TODO: add scaling paramater for models in config file.
     transform.scale(kScale);
     x_translation *= kScale;
     y_translation *= kScale;
