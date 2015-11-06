@@ -179,7 +179,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                   const std::vector<int> &parent_counted_pixels, std::vector<int> *child_counted_pixels,
                   GraphState *adjusted_child_state,
                   GraphStateProperties *state_properties,
-                  std::vector<unsigned short> *final_depth_image);
+                  std::vector<unsigned short> *adjusted_child_depth_image,
+                  std::vector<unsigned short> *unadjusted_child_depth_image);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr
@@ -192,7 +193,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any additional renderings. This requires the true source depth image and unadjusted child depth image (pre-ICP).
   int GetLazyCost(const GraphState &source_state, const GraphState &child_state,
                   const std::vector<unsigned short> &source_depth_image,
-                  const std::vector<unsigned short> &last_object_depth_image,
+                  const std::vector<unsigned short> &unadjusted_last_object_depth_image,
+                  const std::vector<unsigned short> &adjusted_last_object_depth_image,
+                  const GraphState &adjusted_last_object_state,
                   const std::vector<int> &parent_counted_pixels,
                   GraphState *adjusted_child_state,
                   std::vector<unsigned short> *final_depth_image);
@@ -271,7 +274,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
                                          counted_pixels_map_; // Keep track of the pixels we have accounted for in cost computation for a given state
 
   // Maps state hash to depth image.
-  std::unordered_map<GraphState, std::vector<unsigned short>> single_object_depth_image_cache_;
+  std::unordered_map<GraphState, std::vector<unsigned short>> unadjusted_single_object_depth_image_cache_;
+  std::unordered_map<GraphState, std::vector<unsigned short>> adjusted_single_object_depth_image_cache_;
+  std::unordered_map<GraphState, GraphState> adjusted_single_object_state_cache_;
 
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
@@ -302,5 +307,5 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // Returns true if a valid depth image was composed.
   bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image, const std::vector<unsigned short> &last_object_depth_image, std::vector<unsigned short>* composed_depth_image);
-  bool GetSingleObjectDepthImage(const GraphState &child_state, std::vector<unsigned short>* single_object_depth_image);
+  bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state, std::vector<unsigned short>* single_object_depth_image, bool after_refinement);
 };

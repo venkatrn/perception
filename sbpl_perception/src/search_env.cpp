@@ -106,6 +106,22 @@ void ColorizeDepthImage(const cv::Mat &depth_image,
   }
 }
 
+
+// Count the number of valid pixels in a depth image.
+int GetNumValidPixels(const vector<unsigned short> &depth_image) {
+  const int num_pixels = kDepthImageWidth * kDepthImageHeight;
+  assert(static_cast<int>(depth_image.size()) == num_pixels);
+  int num_valid_pixels = 0;
+
+  // TODO: lambdaize.
+  for (int jj = 0; jj < num_pixels; ++jj) {
+    if (depth_image[jj] != 20000) {
+      ++num_valid_pixels;
+    }
+  }
+
+  return num_valid_pixels;
+}
 }  // namespace
 
 
@@ -347,11 +363,13 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   }
 
   GraphState source_state;
-  if(adjusted_states_.find(source_state_id) != adjusted_states_.end()) {
+
+  if (adjusted_states_.find(source_state_id) != adjusted_states_.end()) {
     source_state = adjusted_states_[source_state_id];
   } else {
     source_state = hash_manager_.GetState(source_state_id);
   }
+
   std::cout << source_state;
 
   // If in cache, return
@@ -405,7 +423,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   }
 
   vector<CostComputationOutput> cost_computation_output;
-  ComputeCostsInParallel(cost_computation_input, &cost_computation_output, false);
+  ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
+                         false);
 
 
   //---- PARALLELIZE THIS LOOP-----------//
@@ -432,6 +451,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
         hash_manager_.UpdateState(output_unit.adjusted_state);
       }
     }
+    // candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(cost_computation_input[ii].child_state);
 
     if (invalid_state) {
       candidate_costs[ii] = -1;
@@ -445,12 +465,21 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       counted_pixels_map_[candidate_succ_ids[ii]] = output_unit.child_counted_pixels;
       g_value_map_[candidate_succ_ids[ii]] = g_value_map_[source_state_id] +
                                              output_unit.cost;
+
       // Cache the depth image only for single object renderings, *only* if valid.
       // NOTE: The hask key is computed on the *unadjusted* child state.
       // TODO: We need to be caching the unadjusted depth image!!
       if (source_state.NumObjects() == 0) {
         // depth_image_cache_[candidate_succ_ids[ii]] = output_unit.depth_image;
-        single_object_depth_image_cache_[cost_computation_input[ii].child_state] = output_unit.depth_image;
+        adjusted_single_object_depth_image_cache_[cost_computation_input[ii].child_state]
+          =
+            output_unit.depth_image;
+        unadjusted_single_object_depth_image_cache_[cost_computation_input[ii].child_state]
+          =
+            output_unit.unadjusted_depth_image;
+        adjusted_single_object_state_cache_[cost_computation_input[ii].child_state] = output_unit.adjusted_state;
+        assert(output_unit.adjusted_state.object_states().size()> 0);
+        assert(adjusted_single_object_state_cache_[cost_computation_input[ii].child_state].object_states().size()> 0);
       }
     }
   }
@@ -576,17 +605,20 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
                                  input_unit.source_depth_image,
                                  input_unit.source_counted_pixels,
                                  &output_unit.child_counted_pixels, &output_unit.adjusted_state,
-                                 &output_unit.state_properties, &output_unit.depth_image);
+                                 &output_unit.state_properties, &output_unit.depth_image,
+                                 &output_unit.unadjusted_depth_image);
     } else {
-      if (input_unit.child_depth_image.empty()) {
+      if (input_unit.unadjusted_last_object_depth_image.empty()) {
         output_unit.cost = -1;
       } else {
         output_unit.cost = GetLazyCost(input_unit.source_state, input_unit.child_state,
-                                     input_unit.source_depth_image,
-                                     input_unit.child_depth_image,
-                                     input_unit.source_counted_pixels,
-                                     &output_unit.adjusted_state,
-                                     &output_unit.depth_image);
+                                       input_unit.source_depth_image,
+                                       input_unit.unadjusted_last_object_depth_image,
+                                       input_unit.adjusted_last_object_depth_image,
+                                       input_unit.adjusted_last_object_state,
+                                       input_unit.source_counted_pixels,
+                                       &output_unit.adjusted_state,
+                                       &output_unit.depth_image);
       }
     }
   }
@@ -618,9 +650,10 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
     true_costs->resize(succ_ids->size(), true);
     return;
   }
-  
+
   GraphState source_state;
-  if(adjusted_states_.find(source_state_id) != adjusted_states_.end()) {
+
+  if (adjusted_states_.find(source_state_id) != adjusted_states_.end()) {
     source_state = adjusted_states_[source_state_id];
   } else {
     source_state = hash_manager_.GetState(source_state_id);
@@ -680,9 +713,21 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
     input_unit.source_id = source_state_id;
     input_unit.child_id = candidate_succ_ids[ii];
     input_unit.source_depth_image = source_depth_image;
-    // GetComposedDepthImage(source_depth_image, candidate_succs[ii], &input_unit.child_depth_image);
-    GetSingleObjectDepthImage(candidate_succs[ii], &input_unit.child_depth_image);
     input_unit.source_counted_pixels = counted_pixels_map_[source_state_id];
+    
+    const ObjectState &last_object_state = candidate_succs[ii].object_states().back();
+    GraphState single_object_graph_state;
+    single_object_graph_state.AppendObject(last_object_state);
+
+    const bool valid_state = GetSingleObjectDepthImage(single_object_graph_state,
+                              &input_unit.unadjusted_last_object_depth_image, false);
+    if (!valid_state) {
+      continue;
+    }
+    GetSingleObjectDepthImage(single_object_graph_state,
+                              &input_unit.adjusted_last_object_depth_image, true);
+    assert(adjusted_single_object_state_cache_.find(single_object_graph_state) != adjusted_single_object_state_cache_.end());
+    input_unit.adjusted_last_object_state = adjusted_single_object_state_cache_[single_object_graph_state];
   }
 
   vector<CostComputationOutput> cost_computation_output;
@@ -693,9 +738,10 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
     const auto &output_unit = cost_computation_output[ii];
     const auto &input_unit = cost_computation_input[ii];
     candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
-                          input_unit.child_state);
+                               input_unit.child_state);
 
     const bool invalid_state = output_unit.cost == -1;
+
     if (invalid_state) {
       continue;
     }
@@ -752,9 +798,11 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   // PrintState(source_state_id, fname);
 }
 
-int EnvObjectRecognition::GetTrueCost(int source_state_id, int child_state_id) {
+int EnvObjectRecognition::GetTrueCost(int source_state_id,
+                                      int child_state_id) {
 
-  printf("Getting true cost for edge: %d ---> %d\n", source_state_id, child_state_id);
+  printf("Getting true cost for edge: %d ---> %d\n", source_state_id,
+         child_state_id);
 
   GraphState source_state = hash_manager_.GetState(source_state_id);
 
@@ -773,7 +821,8 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id, int child_state_id) {
                              source_depth_image,
                              source_counted_pixels,
                              &output_unit.child_counted_pixels, &output_unit.adjusted_state,
-                             &output_unit.state_properties, &output_unit.depth_image);
+                             &output_unit.state_properties, &output_unit.depth_image,
+                             &output_unit.unadjusted_depth_image);
 
   bool invalid_state = output_unit.cost == -1;
 
@@ -790,7 +839,7 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id, int child_state_id) {
     output_unit.state_properties.last_max_depth;
   counted_pixels_map_[child_state_id] = output_unit.child_counted_pixels;
   g_value_map_[child_state_id] = g_value_map_[source_state_id] +
-                                    output_unit.cost;
+                                 output_unit.cost;
 
   // Cache the depth image only for single object renderings.
   if (source_state.NumObjects() == 0) {
@@ -863,7 +912,9 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
 int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
                                       const GraphState &child_state,
                                       const std::vector<unsigned short> &source_depth_image,
-                                      const std::vector<unsigned short> &last_object_depth_image,
+                                      const std::vector<unsigned short> &unadjusted_last_object_depth_image,
+                                      const std::vector<unsigned short> &adjusted_last_object_depth_image,
+                                      const GraphState &adjusted_last_object_state,
                                       const std::vector<int> &parent_counted_pixels,
                                       GraphState *adjusted_child_state,
                                       vector<unsigned short> *final_depth_image) {
@@ -886,7 +937,8 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   vector<int> new_pixel_indices;
 
   vector<unsigned short> child_depth_image;
-  GetComposedDepthImage(source_depth_image, last_object_depth_image, &child_depth_image);
+  GetComposedDepthImage(source_depth_image, unadjusted_last_object_depth_image,
+                        &child_depth_image);
 
   if (IsOccluded(source_depth_image, child_depth_image, &new_pixel_indices,
                  &succ_min_depth,
@@ -897,41 +949,53 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   vector<unsigned short> new_obj_depth_image(kDepthImageWidth *
                                              kDepthImageHeight, 20000);
 
-  for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
-    new_obj_depth_image[new_pixel_indices[ii]] =
-      child_depth_image[new_pixel_indices[ii]];
+  // Do ICP alignment on object *only* if it has been occluded by an existing
+  // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
+
+  if (new_pixel_indices.size() != GetNumValidPixels(
+        unadjusted_last_object_depth_image)) {
+
+    for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
+      new_obj_depth_image[new_pixel_indices[ii]] =
+        child_depth_image[new_pixel_indices[ii]];
+    }
+
+    // Create point cloud (cloud_in) corresponding to new pixels.
+    cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image);
+
+    // Begin ICP Adjustment
+    GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out);
+
+    if (cloud_in->size() != 0 && cloud_out->size() == 0) {
+      ROS_ERROR("Error in ICP adjustment");
+    }
+
+    const ObjectState modified_last_object(last_object.id(),
+                                           last_object.symmetric(), pose_out);
+    int last_idx = child_state.NumObjects() - 1;
+    adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
+
+    // End ICP Adjustment
+    // Check again after ICP.
+    if (!IsValidPose(source_state, last_object_id,
+                     modified_last_object.cont_pose(), true)) {
+      // printf(" state %d is invalid\n ", child_id);
+      return -1;
+    }
+
+    // TODO: Remove points that may be occluded by other objects
+    // in the scene.
+    new_obj_depth_image = GetDepthImageFromPointCloud(cloud_out);
+
+  } else {
+    new_obj_depth_image = adjusted_last_object_depth_image;
+    int last_idx = child_state.NumObjects() - 1;
+    assert(last_idx >= 0);
+    assert(adjusted_last_object_state.object_states().size() > 0);
+    adjusted_child_state->mutable_object_states()[last_idx] = adjusted_last_object_state.object_states().back();
   }
 
-  // Create point cloud (cloud_in) corresponding to new pixels.
-  // kinect_simulator_->rl_->getPointCloudFromDepthImage(cloud_in,
-  //                                                     new_obj_depth_image,
-  //                                                     true,
-  //                                                     env_params_.camera_pose);
-  cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image);
-
-  // Begin ICP Adjustment
-  GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out);
-  if (cloud_in->size() != 0 && cloud_out->size() == 0) {
-    ROS_ERROR("Error in ICP adjustment");
-  }
-  const ObjectState modified_last_object(last_object.id(),
-                                         last_object.symmetric(), pose_out);
-  int last_idx = child_state.NumObjects() - 1;
-  adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
-
-  // End ICP Adjustment
-  // Check again after ICP.
-  if (!IsValidPose(source_state, last_object_id,
-                   modified_last_object.cont_pose(), true)) {
-    // printf(" state %d is invalid\n ", child_id);
-    return -1;
-  }
-
-  // TODO: Remove points that may be occluded by other objects
-  // in the scene.
-  new_obj_depth_image = GetDepthImageFromPointCloud(cloud_out);
   cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
-
 
   // Compute costs
   // const bool last_level = static_cast<int>(child_state.NumObjects()) ==
@@ -945,7 +1009,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
 
   vector<int> child_counted_pixels;
   source_cost = GetSourceCost(cloud_out,
-                              modified_last_object,
+                              adjusted_child_state->object_states().back(),
                               last_level, parent_counted_pixels, &child_counted_pixels);
   total_cost = source_cost + target_cost;
 
@@ -977,7 +1041,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                   const vector<unsigned short> &source_depth_image,
                                   const vector<int> &parent_counted_pixels, vector<int> *child_counted_pixels,
                                   GraphState *adjusted_child_state, GraphStateProperties *child_properties,
-                                  vector<unsigned short> *final_depth_image) {
+                                  vector<unsigned short> *final_depth_image,
+                                  vector<unsigned short> *unadjusted_depth_image) {
 
   assert(child_state.NumObjects() > 0);
 
@@ -1002,6 +1067,11 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   s_new_obj.AppendObject(ObjectState(last_object_id,
                                      obj_models_[last_object_id].symmetric(), child_pose));
   succ_depth_buffer = GetDepthImage(s_new_obj, &new_obj_depth_image);
+
+
+  unadjusted_depth_image->clear();
+  GetComposedDepthImage(source_depth_image, new_obj_depth_image,
+                        unadjusted_depth_image);
 
   // Create new buffer with only new pixels
   float new_pixel_buffer[kDepthImageWidth * kDepthImageHeight];
@@ -1334,7 +1404,8 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   return cloud;
 }
 
-vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(const PointCloudPtr &cloud) {
+vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(
+  const PointCloudPtr &cloud) {
   const int num_pixels = kDepthImageWidth * kDepthImageHeight;
   vector<unsigned short> depth_image(num_pixels, 20000);
 
@@ -1344,7 +1415,8 @@ vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(const P
     int u = 0;
     int v = 0;
     float range = 0.0;
-    kinect_simulator_->rl_->getCameraCoordinate(cam_to_world_, world_point, u, v, range);
+    kinect_simulator_->rl_->getCameraCoordinate(cam_to_world_, world_point, u, v,
+                                                range);
     v = kDepthImageHeight - 1 - v;
 
     assert(u >= 0);
@@ -1354,8 +1426,10 @@ vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(const P
 
     const int idx = v * kDepthImageWidth + u;
     assert(idx >= 0 && idx < num_pixels);
-    depth_image[idx] = std::min(static_cast<unsigned short>(1000.0 * range), depth_image[idx]);
+    depth_image[idx] = std::min(static_cast<unsigned short>(1000.0 * range),
+                                depth_image[idx]);
   }
+
   return depth_image;
 }
 
@@ -1407,11 +1481,13 @@ void EnvObjectRecognition::PrintValidStates() {
 void EnvObjectRecognition::PrintState(int state_id, string fname) {
 
   GraphState s;
-  if(adjusted_states_.find(state_id) != adjusted_states_.end()) {
+
+  if (adjusted_states_.find(state_id) != adjusted_states_.end()) {
     s = adjusted_states_[state_id];
   } else {
     s = hash_manager_.GetState(state_id);
   }
+
   PrintState(s, fname);
   return;
 }
@@ -2200,7 +2276,8 @@ void EnvObjectRecognition::GetGoalPoses(int true_goal_id,
   object_poses->clear();
 
   GraphState goal_state;
-  if(adjusted_states_.find(true_goal_id) != adjusted_states_.end()) {
+
+  if (adjusted_states_.find(true_goal_id) != adjusted_states_.end()) {
     goal_state = adjusted_states_[true_goal_id];
   } else {
     goal_state = hash_manager_.GetState(true_goal_id);
@@ -2264,35 +2341,46 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
   }
 }
 
-bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short> &source_depth_image, const vector<unsigned short> &last_object_depth_image, vector<unsigned short> *composed_depth_image) {
+bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short>
+                                                 &source_depth_image, const vector<unsigned short> &last_object_depth_image,
+                                                 vector<unsigned short> *composed_depth_image) {
 
   composed_depth_image->clear();
   composed_depth_image->resize(source_depth_image.size(), 20000);
   assert(source_depth_image.size() == last_object_depth_image.size());
 
   #pragma omp parallel for
+
   for (size_t ii = 0; ii < source_depth_image.size(); ++ii) {
-    composed_depth_image->at(ii) = std::min(source_depth_image[ii], last_object_depth_image[ii]);
+    composed_depth_image->at(ii) = std::min(source_depth_image[ii],
+                                            last_object_depth_image[ii]);
   }
 
   return true;
 }
 
-bool EnvObjectRecognition::GetSingleObjectDepthImage(const GraphState &child_state, vector<unsigned short> *single_object_depth_image) {
+bool EnvObjectRecognition::GetSingleObjectDepthImage(const GraphState
+                                                     &single_object_graph_state, vector<unsigned short> *single_object_depth_image,
+                                                     bool after_refinement) {
 
   single_object_depth_image->clear();
 
-  assert(child_state.NumObjects() > 1);
-  const ObjectState &last_object_state = child_state.object_states().back();
-  GraphState single_object_graph_state;
-  single_object_graph_state.AppendObject(last_object_state);
+  assert(single_object_graph_state.NumObjects() == 1);
+
+  auto &cache = after_refinement ? adjusted_single_object_depth_image_cache_ :
+                unadjusted_single_object_depth_image_cache_;
 
   // TODO: Verify there are no cases where this will fail.
-  if(single_object_depth_image_cache_.find(single_object_graph_state) == single_object_depth_image_cache_.end()) {
+  if (cache.find(single_object_graph_state) ==
+      cache.end()) {
     return false;
   }
 
-  *single_object_depth_image = single_object_depth_image_cache_[single_object_graph_state];
+  *single_object_depth_image =
+    cache[single_object_graph_state];
 
   return true;
 }
+
+
+

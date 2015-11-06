@@ -21,7 +21,9 @@ struct CostComputationInput {
 
   // This is optional: a non-empty vector should be used only when lazily
   // computing cost from cached depth images of individual objects.
-  std::vector<unsigned short> child_depth_image;
+  std::vector<unsigned short> unadjusted_last_object_depth_image;
+  std::vector<unsigned short> adjusted_last_object_depth_image;
+  GraphState adjusted_last_object_state;
 };
 
 struct CostComputationOutput {
@@ -30,6 +32,7 @@ struct CostComputationOutput {
   GraphStateProperties state_properties;
   std::vector<int> child_counted_pixels;
   std::vector<unsigned short> depth_image;
+  std::vector<unsigned short> unadjusted_depth_image;
 };
 
 namespace boost {
@@ -44,7 +47,9 @@ void serialize(Archive &ar, CostComputationInput &input,
     ar &input.child_id;
     ar &input.source_depth_image;
     ar &input.source_counted_pixels;
-    ar &input.child_depth_image;
+    ar &input.unadjusted_last_object_depth_image;
+    ar &input.adjusted_last_object_depth_image;
+    ar &input.adjusted_last_object_state;
 }
 
 template<class Archive>
@@ -55,6 +60,7 @@ void serialize(Archive &ar, CostComputationOutput &output,
     ar &output.state_properties;
     ar &output.child_counted_pixels;
     ar &output.depth_image;
+    ar &output.unadjusted_depth_image;
 }
 
 } // namespace serialization
