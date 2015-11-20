@@ -13,6 +13,7 @@ class ConfigParser {
   // TODO: make private;
   std::string pcd_file_path;
   int num_models;
+  std::vector<std::string> model_names;
   std::vector<std::string> model_files;
   std::vector<bool> model_symmetries;
   std::vector<bool> model_flippings;

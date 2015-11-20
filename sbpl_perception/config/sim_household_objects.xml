@@ -1,0 +1,30 @@
+<launch>
+  <rosparam param="model_bank" subst_value="True">
+    [
+      [glass,
+      $(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply,
+      false, 
+      true], 
+
+      [clorox,
+      $(find sbpl_perception)/data/RAM/cad_models/clorox.ply,
+      false,
+      false],
+
+      [odwalla_jug,
+      $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply,
+      false,
+      false],
+
+      [orange_juice_jug,
+      $(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply,
+      false,
+      false],
+
+      [pur_water_pitcher_filter,
+      $(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply,
+      false,
+      false],
+    ]
+  </rosparam>
+</launch>

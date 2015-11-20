@@ -7,65 +7,80 @@
  * Carnegie Mellon University, 2015
  */
 
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud2.h>
-
-#include <sbpl_perception/graph_state.h>
-#include <sbpl_perception/object_model.h>
-#include <sbpl_perception/mpi_utils.h>
-#include <sbpl_perception/config_parser.h>
-
+#include <kinect_sim/model.h>
+#include <kinect_sim/scene.h>
+#include <kinect_sim/simulation_io.hpp>
 #include <perception_utils/pcl_typedefs.h>
-#include <perception_utils/vfh/vfh_pose_estimator.h>
-
+#include <sbpl/headers.h>
+#include <sbpl_perception/config_parser.h>
+#include <sbpl_perception/graph_state.h>
+#include <sbpl_perception/mpi_utils.h>
+#include <sbpl_perception/object_model.h>
 #include <sbpl_utils/hash_manager/hash_manager.h>
 
-#include <kinect_sim/simulation_io.hpp>
-#include <kinect_sim/scene.h>
-#include <kinect_sim/model.h>
-
-#include <pcl/PolygonMesh.h>
-
+#include <boost/mpi.hpp>
+#include <Eigen/Dense>
+#include <opencv/cv.h>
+#include <opencv2/core/core.hpp>
 #include <pcl/range_image/range_image_planar.h>
-
 #include <pcl/registration/icp.h>
 #include <pcl/registration/icp_nl.h>
 #include <pcl/registration/transformation_estimation_2D.h>
-#include <pcl/registration/transformation_estimation_lm.h>
-#include <pcl/registration/transformation_estimation_svd.h>
-#include <pcl/registration/warp_point_rigid_3d.h>
-
-#include <pcl/search/organized.h>
+// #include <pcl/registration/transformation_estimation_lm.h>
+// #include <pcl/registration/transformation_estimation_svd.h>
+// #include <pcl/registration/warp_point_rigid_3d.h>
+#include <pcl/PolygonMesh.h>
 #include <pcl/search/kdtree.h>
-
+#include <pcl/search/organized.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
 
-#include <sbpl/headers.h>
-
-#include <Eigen/Dense>
-#include <boost/mpi.hpp>
-
-#include <opencv/cv.h>
-#include <opencv2/core/core.hpp>
-
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
+
+struct ModelMetaData {
+  // ID for the model.
+  std::string name;
+  // Path to 3D model.
+  std::string file;
+  // Is model flipped abound z-axis.
+  bool flipped;
+  // Is model symmetric about z-axis.
+  bool symmetric;
+};
+
+struct EnvConfig {
+  // Search resolution.
+  double res, theta_res;
+  // The model-bank.
+  std::vector<ModelMetaData> model_bank;
+};
+
+struct RecognitionInput {
+  // The input point cloud. *MUST* be an organized point cloud.
+  PointCloudPtr cloud;
+  // The IDs of the object models present in the scene.
+  std::vector<std::string> model_names;
+  // Camera pose relative to world origin.
+  Eigen::Isometry3d camera_pose;
+  // Environment bounds.
+  double x_min, x_max, y_min, y_max;
+  double table_height;
+};
 
 struct EnvParams {
   double table_height;
   Eigen::Isometry3d camera_pose;
   double x_min, x_max, y_min, y_max;
   double res, theta_res; // Resolution for x,y and theta
-  int img_width, img_height;
   int goal_state_id, start_state_id;
   int num_objects; // This is the number of objects on the table
   int num_models; // This is the number of models available (can be more or less than number of objects on table
 };
 
-// class EnvObjectRecognition : public DiscreteSpaceInformation {
 class EnvObjectRecognition : public EnvironmentMHA {
  public:
   EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator> &comm);
@@ -73,16 +88,26 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void LoadObjFiles(const std::vector<std::string> &model_files,
                     const std::vector<bool> &model_symmetric,
                     const std::vector<bool> &model_flipped);
+
+  // Load the object models to be used in the search episode. model_bank contains
+  // metadata of *all* models, and model_ids is the list of models that are
+  // present in the current scene.
+  void LoadObjFiles(const std::vector<ModelMetaData> &model_bank,
+                    const std::vector<std::string> &model_names);
+
   void PrintState(int state_id, std::string fname);
   void PrintState(GraphState s, std::string fname);
   void PrintImage(std::string fname,
                   const std::vector<unsigned short> &depth_image);
-  const float *GetDepthImage(GraphState s, std::vector<unsigned short> *depth_image);
+  const float *GetDepthImage(GraphState s,
+                             std::vector<unsigned short> *depth_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
 
   // Initialize environment from config file.
   void Initialize(const std::string &config_file);
+  void Initialize(const EnvConfig &env_config);
+  void SetInput(const RecognitionInput &input);
 
   /** Methods to set the observed depth image**/
   void SetObservation(std::vector<int> object_ids,
@@ -93,24 +118,13 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetTableHeight(double height);
   double GetTableHeight();
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
-  void PrecomputeHeuristics();
 
-  double ComputeScore(const PointCloudPtr cloud);
-
-  double GetICPAdjustedPose(const PointCloudPtr cloud_in, const ContPose &pose_in,
+  double GetICPAdjustedPose(const PointCloudPtr cloud_in,
+                            const ContPose &pose_in,
                             PointCloudPtr &cloud_out, ContPose *pose_out);
 
   // Greedy ICP planner
   GraphState ComputeGreedyICPPoses();
-  GraphState ComputeVFHPoses();
-
-  // Heuristics
-  int GetICPHeuristic(GraphState s);
-  int GetVFHHeuristic(GraphState s);
-  VFHPoseEstimator vfh_pose_estimator_;
-  std::vector<ContPose> vfh_poses_;
-  std::vector<int> vfh_ids_;
-  
 
   void GetSuccs(GraphState source_state, std::vector<GraphState> *succs,
                 std::vector<int> *costs);
@@ -172,21 +186,101 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void ComputeCostsInParallel(const std::vector<CostComputationInput> &input,
                               std::vector<CostComputationOutput> *output, bool lazy);
 
+
+  void PrintValidStates();
+
+  void SetDebugOptions(bool image_debug);
+  void SetDebugDir(const std::string &debug_dir);
+
+  void GetEnvStats(int &succs_rendered, int &succs_valid,
+                   std::string &file_path);
+  void GetGoalPoses(int true_goal_id, std::vector<ContPose> *object_poses);
+
+ private:
+
+  std::vector<ObjectModel> obj_models_;
+  pcl::simulation::Scene::Ptr scene_;
+
+  EnvParams env_params_;
+
+  // Config parser.
+  ConfigParser parser_;
+
+  // Model bank.
+  std::vector<ModelMetaData> model_bank_;
+
+  // The MPI communicator.
+  std::shared_ptr<boost::mpi::communicator> mpi_comm_;
+
+  /**@brief The hash manager**/
+  sbpl_utils::HashManager<GraphState> hash_manager_;
+  /**@brief Mapping from state IDs to states for those states that were changed
+   * after evaluating true cost**/
+  std::unordered_map<int, GraphState> adjusted_states_;
+
+  /**@brief Mapping from State to State ID**/
+  std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
+  std::unordered_map<int, std::vector<int>> succ_cache;
+  std::unordered_map<int, std::vector<int>> cost_cache;
+  std::unordered_map<int, unsigned short> minz_map_;
+  std::unordered_map<int, unsigned short> maxz_map_;
+  std::unordered_map<int, int> g_value_map_;
+  std::unordered_map<int, std::vector<int>>
+                                         counted_pixels_map_; // Keep track of the pixels we have accounted for in cost computation for a given state
+
+  // Maps state hash to depth image.
+  std::unordered_map<GraphState, std::vector<unsigned short>>
+                                                           unadjusted_single_object_depth_image_cache_;
+  std::unordered_map<GraphState, std::vector<unsigned short>>
+                                                           adjusted_single_object_depth_image_cache_;
+  std::unordered_map<GraphState, GraphState> adjusted_single_object_state_cache_;
+
+  // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
+  pcl::search::KdTree<PointT>::Ptr knn;
+  pcl::search::KdTree<PointT>::Ptr projected_knn_;
+  std::vector<int> valid_indices_;
+
+  std::vector<unsigned short> observed_depth_image_;
+  PointCloudPtr observed_cloud_, downsampled_observed_cloud_,
+                observed_organized_cloud_, projected_cloud_;
+
+  bool image_debug_;
+  unsigned short min_observed_depth_, max_observed_depth_;
+
+  Eigen::Matrix4f gl_inverse_transform_;
+  Eigen::Isometry3d cam_to_world_;
+
+  int succs_rendered_;
+
+  void ResetEnvironmentState();
+
+  void GenerateSuccessorStates(const GraphState &source_state,
+                               std::vector<GraphState> *succ_states) const;
+
+  // Returns true if a valid depth image was composed.
+  bool GetComposedDepthImage(const std::vector<unsigned short>
+                             &source_depth_image, const std::vector<unsigned short>
+                             &last_object_depth_image, std::vector<unsigned short> *composed_depth_image);
+  bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state,
+                                 std::vector<unsigned short> *single_object_depth_image, bool after_refinement);
+
   // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
   // of the last added object is adjusted using ICP and the computed state properties.
   int GetCost(const GraphState &source_state, const GraphState &child_state,
-                  const std::vector<unsigned short> &source_depth_image,
-                  const std::vector<int> &parent_counted_pixels, std::vector<int> *child_counted_pixels,
-                  GraphState *adjusted_child_state,
-                  GraphStateProperties *state_properties,
-                  std::vector<unsigned short> *adjusted_child_depth_image,
-                  std::vector<unsigned short> *unadjusted_child_depth_image);
+              const std::vector<unsigned short> &source_depth_image,
+              const std::vector<int> &parent_counted_pixels,
+              std::vector<int> *child_counted_pixels,
+              GraphState *adjusted_child_state,
+              GraphStateProperties *state_properties,
+              std::vector<unsigned short> *adjusted_child_depth_image,
+              std::vector<unsigned short> *unadjusted_child_depth_image);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr
                     partial_rendered_cloud);
   // Cost for points in observed cloud that can be computed based on the rendered cloud.
-  int GetSourceCost(const PointCloudPtr full_rendered_cloud, const ObjectState &last_object, const bool last_level,
+  int GetSourceCost(const PointCloudPtr full_rendered_cloud,
+                    const ObjectState &last_object, const bool last_level,
                     const std::vector<int> &parent_counted_pixels,
                     std::vector<int> *child_counted_pixels);
 
@@ -207,18 +301,17 @@ class EnvObjectRecognition : public EnvironmentMHA {
                   std::vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
                   unsigned short *max_succ_depth);
 
-  bool IsValidPose(GraphState s, int model_id, ContPose p, bool after_refinement) const;
+  bool IsValidPose(GraphState s, int model_id, ContPose p,
+                   bool after_refinement) const;
 
   void LabelEuclideanClusters();
-  PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image);
-  std::vector<unsigned short> GetDepthImageFromPointCloud(const PointCloudPtr &cloud);
+  PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short>
+                                            &depth_image);
+  std::vector<unsigned short> GetDepthImageFromPointCloud(
+    const PointCloudPtr &cloud);
 
-  void PrintValidStates();
-
-  void SetDebugOptions(bool image_debug);
-  void SetDebugDir(const std::string &debug_dir);
-
-  // Not needed
+ // Unused base class methods.
+ public:
   bool InitializeEnv(const char *sEnvFile) {
     return false;
   };
@@ -241,71 +334,5 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintState(int stateID, bool bVerbose, FILE *fOut = NULL) {};
   void PrintEnv_Config(FILE *fOut) {};
 
-  void GetEnvStats(int &succs_rendered, int &succs_valid, std::string &file_path);
-  void GetGoalPoses(int true_goal_id, std::vector<ContPose> *object_poses);
-
- private:
-
-  std::vector<ObjectModel> obj_models_;
-  pcl::simulation::Scene::Ptr scene_;
-
-  EnvParams env_params_;
-
-  // Config parser.
-  ConfigParser parser_;
-
-  // The MPI communicator.
-  std::shared_ptr<boost::mpi::communicator> mpi_comm_;
-
-  /**@brief The hash manager**/
-  sbpl_utils::HashManager<GraphState> hash_manager_;
-  /**@brief Mapping from state IDs to states for those states that were changed
-   * after evaluating true cost**/
-  std::unordered_map<int, GraphState> adjusted_states_;
-
-  /**@brief Mapping from State to State ID**/
-  std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
-  std::unordered_map<int, std::vector<int>> succ_cache;
-  std::unordered_map<int, std::vector<int>> cost_cache;
-  std::unordered_map<int, unsigned short> minz_map_;
-  std::unordered_map<int, unsigned short> maxz_map_;
-  std::unordered_map<int, int> g_value_map_;
-  std::unordered_map<int, std::vector<int>>
-                                         counted_pixels_map_; // Keep track of the pixels we have accounted for in cost computation for a given state
-
-  // Maps state hash to depth image.
-  std::unordered_map<GraphState, std::vector<unsigned short>> unadjusted_single_object_depth_image_cache_;
-  std::unordered_map<GraphState, std::vector<unsigned short>> adjusted_single_object_depth_image_cache_;
-  std::unordered_map<GraphState, GraphState> adjusted_single_object_state_cache_;
-
-  // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
-  pcl::search::KdTree<PointT>::Ptr knn;
-  pcl::search::KdTree<PointT>::Ptr projected_knn_;
-  std::vector<int> valid_indices_;
-
-
-  std::vector<unsigned short> observed_depth_image_;
-  PointCloudPtr observed_cloud_, downsampled_observed_cloud_,
-                observed_organized_cloud_, projected_cloud_;
-  pcl::RangeImagePlanar empty_range_image_;
-
-  GraphState start_state_, goal_state_;
-
-  bool image_debug_;
-  unsigned short min_observed_depth_, max_observed_depth_;
-
-  Eigen::Matrix4f gl_inverse_transform_;
-  Eigen::Isometry3d cam_to_world_;
-
-  std::vector<int> sorted_greedy_icp_ids_;
-  std::vector<double> sorted_greedy_icp_scores_;
-  std::vector<int> cluster_labels_;
-
-  int succs_rendered_;
-
-  void GenerateSuccessorStates(const GraphState &source_state, std::vector<GraphState> *succ_states) const;
-
-  // Returns true if a valid depth image was composed.
-  bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image, const std::vector<unsigned short> &last_object_depth_image, std::vector<unsigned short>* composed_depth_image);
-  bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state, std::vector<unsigned short>* single_object_depth_image, bool after_refinement);
 };
+

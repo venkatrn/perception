@@ -1,5 +1,6 @@
 #include <sbpl_perception/config_parser.h>
 
+#include <boost/filesystem.hpp>
 #include <boost/lexical_cast.hpp>
 
 #include <fstream>
@@ -43,6 +44,8 @@ void ConfigParser::Parse(const string &config_file) {
     const string model_file = boost::lexical_cast<string>(line.c_str());
     cout << "model file: " << model_file << endl;
     model_files.push_back(model_file);
+    boost::filesystem::path p(model_file);
+    model_names.push_back(p.stem().string());
   }
 
   for (int ii = 0; ii < num_models; ++ii) {

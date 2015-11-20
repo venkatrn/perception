@@ -56,7 +56,8 @@ rosbuild_add_library(${PROJECT_NAME}
   src/object_state.cpp
   src/object_model.cpp
   src/search_env.cpp
-  src/config_parser.cpp)
+  src/config_parser.cpp
+  src/object_recognizer.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 rosbuild_link_boost(${PROJECT_NAME} mpi serialization)
