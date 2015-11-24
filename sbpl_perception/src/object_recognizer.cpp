@@ -14,6 +14,7 @@ using std::vector;
 namespace {
 
 constexpr int kMasterRank = 0;
+constexpr int kPlanningFinishedTag = 1;
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
 
@@ -133,6 +134,7 @@ void ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 }
 
 void ObjectRecognizer::RunPlanner() {
+  bool planning_finished = false;
   if (IsMaster()) {
     int goal_id = env_obj_->GetGoalStateID();
     int start_id = env_obj_->GetStartStateID();
@@ -183,8 +185,33 @@ void ObjectRecognizer::RunPlanner() {
     printf("Goal state ID is %d\n", goal_state_id);
     env_obj_->PrintState(goal_state_id,
                         kDebugDir + string("goal_state.png"));
+    planning_finished = true;
+    for (int rank = 1; rank < mpi_world_->size(); ++rank) {
+      mpi_world_->isend(rank, kPlanningFinishedTag, planning_finished);
+    }
+    // This needs to be done so that the slave processors don't stay forever in
+    // ComputeCostsInParallel. 
+    {
+      vector<CostComputationInput> input;
+      vector<CostComputationOutput> output;
+      bool lazy;
+      env_obj_->ComputeCostsInParallel(input, &output, lazy);
+    }
+  } else {
+    while (!planning_finished) {
+      vector<CostComputationInput> input;
+      vector<CostComputationOutput> output;
+      bool lazy;
+      env_obj_->ComputeCostsInParallel(input, &output, lazy);
+      // If master is done, exit loop.
+      mpi_world_->irecv(kMasterRank, kPlanningFinishedTag, planning_finished);
+    }
+  }
+  mpi_world_->barrier();
+  if (IsMaster()) {
     vector<PlannerStats> stats_vector;
     planner_->get_search_stats(&stats_vector);
+
     int succs_rendered, succs_valid;
     string pcd_file_path;
     env_obj_->GetEnvStats(succs_rendered, succs_valid, pcd_file_path);
@@ -192,16 +219,8 @@ void ObjectRecognizer::RunPlanner() {
     cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
     cout << succs_rendered << " " << succs_valid << " "  << stats_vector[0].expands
          << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
-  } else {
-    while (1) {
-      vector<CostComputationInput> input;
-      vector<CostComputationOutput> output;
-      bool lazy;
-      env_obj_->ComputeCostsInParallel(input, &output, lazy);
-    }
+    printf("Finished planning\n");
   }
-
-  mpi_world_->abort(0);
 }
 
 bool ObjectRecognizer::IsMaster() const {
