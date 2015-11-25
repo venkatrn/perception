@@ -159,44 +159,6 @@ EnvObjectRecognition::EnvObjectRecognition(const
 EnvObjectRecognition::~EnvObjectRecognition() {
 }
 
-void EnvObjectRecognition::LoadObjFiles(const vector<string> &model_files,
-                                        const vector<bool> &model_symmetric,
-                                        const vector<bool> &model_flipped) {
-
-  assert(model_files.size() == model_symmetric.size());
-  assert(model_flipped.size() == model_symmetric.size());
-
-  // TODO: assign all env params in a separate method
-  env_params_.num_models = static_cast<int>(model_files.size());
-
-  for (size_t ii = 0; ii < model_files.size(); ++ii) {
-    printf("Object %zu: Symmetry %d\n", ii, static_cast<int>(model_symmetric[ii]));
-  }
-
-  obj_models_.clear();
-
-
-  for (int ii = 0; ii < env_params_.num_models; ++ii) {
-    pcl::PolygonMesh mesh;
-    pcl::io::loadPolygonFile (model_files[ii].c_str(), mesh);
-
-    ObjectModel obj_model(mesh, model_files[ii].c_str(), model_symmetric[ii],
-                          model_flipped[ii]);
-    obj_models_.push_back(obj_model);
-
-    printf("Read %s with %d polygons and %d triangles\n", model_files[ii].c_str(),
-           static_cast<int>(mesh.polygons.size()),
-           static_cast<int>(mesh.cloud.data.size()));
-    printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f,   %f\n",
-           obj_model.min_x(),
-           obj_model.max_x(), obj_model.min_y(), obj_model.max_y(), obj_model.min_z(),
-           obj_model.max_z(), obj_model.GetCircumscribedRadius(),
-           obj_model.GetInscribedRadius());
-    printf("\n");
-
-  }
-}
-
 void EnvObjectRecognition::LoadObjFiles(const vector<ModelMetaData>
                                         &model_bank,
                                         const vector<string> &model_names) {
@@ -242,10 +204,8 @@ void EnvObjectRecognition::LoadObjFiles(const vector<ModelMetaData>
   }
 }
 
-
 bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                        ContPose p, bool after_refinement = false) const {
-
   vector<int> indices;
   vector<float> sqr_dists;
   PointT point;
@@ -1698,6 +1658,8 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   GraphState start_state, goal_state;
 
   hash_manager_.Reset();
+  succs_rendered_ = 0;
+
   const ObjectState special_goal_object_state(-1, false, DiscPose(0, 0, 0));
   goal_state.mutable_object_states().push_back(
     special_goal_object_state); // This state should never be generated during the search
@@ -1809,69 +1771,6 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
   SetWorldResolutionParams(env_params_.res, env_params_.res,
                            env_params_.theta_res, 0.0, 0.0, world_resolution_params);
   DiscretizationManager::Initialize(world_resolution_params);
-
-}
-
-void EnvObjectRecognition::Initialize(const string &config_file) {
-
-  parser_.Parse(config_file);
-
-  LoadObjFiles(parser_.model_files, parser_.model_symmetries,
-               parser_.model_flippings);
-  SetBounds(parser_.min_x, parser_.max_x, parser_.min_y, parser_.max_y);
-  SetTableHeight(parser_.table_height);
-  SetCameraPose(parser_.camera_pose);
-
-  pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
-
-  // Read the input PCD file from disk.
-  if (pcl::io::loadPCDFile<PointT>(parser_.pcd_file_path.c_str(),
-                                   *cloud_in) != 0) {
-    cerr << "Could not find input PCD file!" << endl;
-    return;
-  }
-
-  Eigen::Affine3f cam_to_body;
-  cam_to_body.matrix() << 0, 0, 1, 0,
-                     -1, 0, 0, 0,
-                     0, -1, 0, 0,
-                     0, 0, 0, 1;
-  PointCloudPtr depth_img_cloud(new PointCloud);
-  Eigen::Affine3f transform;
-  transform.matrix() = parser_.camera_pose.matrix().cast<float>();
-  transform = cam_to_body.inverse() * transform.inverse();
-  Eigen::Matrix4f world_to_cam =
-    parser_.camera_pose.matrix().cast<float>().inverse();
-  transformPointCloud(*cloud_in, *depth_img_cloud,
-                      transform);
-
-  vector<unsigned short> depth_image(kNumPixels);
-
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      PointT p = depth_img_cloud->at(jj, ii);
-
-      if (isnan(p.z) || isinf(p.z)) {
-        depth_image[ii * kDepthImageWidth + jj] = 20000;
-      } else {
-        depth_image[ii * kDepthImageWidth + jj] = static_cast<unsigned short>(p.z * 1000.0);
-      }
-    }
-  }
-
-  *observed_organized_cloud_ = *depth_img_cloud;
-
-  if (mpi_comm_->rank() == kMasterRank) {
-    std::stringstream ss;
-    ss.precision(20);
-    ss << kDebugDir + "obs_organized_cloud" << ".pcd";
-    pcl::PCDWriter writer;
-    writer.writeBinary (ss.str()  , *observed_organized_cloud_);
-  }
-
-
-  SetObservation(parser_.num_models, depth_image);
-  PrintValidStates();
 }
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
@@ -2091,11 +1990,9 @@ void EnvObjectRecognition::SetDebugDir(const string &debug_dir) {
   kDebugDir = debug_dir;
 }
 
-void EnvObjectRecognition::GetEnvStats(int &succs_rendered, int &succs_valid,
-                                       string &file_path) {
+void EnvObjectRecognition::GetEnvStats(int &succs_rendered, int &succs_valid) {
   succs_rendered = succs_rendered_;
   succs_valid = hash_manager_.Size() - 1; // Ignore the start state
-  file_path = parser_.pcd_file_path;
 }
 
 void EnvObjectRecognition::GetGoalPoses(int true_goal_id,
@@ -2182,7 +2079,6 @@ bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short>
     composed_depth_image->at(ii) = std::min(source_depth_image[ii],
                                             last_object_depth_image[ii]);
   }
-
   return true;
 }
 

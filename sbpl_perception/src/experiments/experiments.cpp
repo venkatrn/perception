@@ -69,6 +69,7 @@ int main(int argc, char **argv) {
 
   input.cloud = cloud_in;
 
-  object_recognizer.LocalizeObjects(input);
+  vector<ContPose> detected_poses;
+  object_recognizer.LocalizeObjects(input, &detected_poses);
   return 0;
 }

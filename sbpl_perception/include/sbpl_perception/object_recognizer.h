@@ -9,22 +9,29 @@ class ObjectRecognizer {
  public:
   ObjectRecognizer(int argc, char **argv,
                    std::shared_ptr<boost::mpi::communicator> mpi_world);
-  void LocalizeObjects(const RecognitionInput &input);
+  bool LocalizeObjects(const RecognitionInput &input,
+                       std::vector<ContPose> *detected_poses) const;
   // Test localization from ground truth poses.
-  void LocalizeObjects(const RecognitionInput &input,
-                       const std::vector<int> &model_ids, const std::vector<ContPose> &object_poses);
+  bool LocalizeObjects(const RecognitionInput &input,
+                       const std::vector<int> &model_ids,
+                       const std::vector<ContPose> &ground_truth_object_poses,
+                       std::vector<ContPose> *detected_poses) const;
 
   const std::vector<ModelMetaData> &GetModelBank() const {
     return env_config_.model_bank;
   }
+  const std::vector<PlannerStats> &GetLastPlanningEpisodeState() const {
+    return last_planning_stats_;
+  }
  private:
-  std::unique_ptr<EnvObjectRecognition> env_obj_;
-  std::unique_ptr<MHAPlanner> planner_;
+  mutable std::unique_ptr<EnvObjectRecognition> env_obj_;
+  mutable std::unique_ptr<MHAPlanner> planner_;
+  mutable std::vector<PlannerStats> last_planning_stats_;
 
   std::shared_ptr<boost::mpi::communicator> mpi_world_;
 
   EnvConfig env_config_;
 
   bool IsMaster() const;
-  void RunPlanner();
+  bool RunPlanner(std::vector<ContPose> *detected_poses) const;
 };

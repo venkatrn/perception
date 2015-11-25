@@ -33,17 +33,17 @@ namespace serialization {
 template<class Archive>
 void serialize(Archive &ar, ModelMetaData &model_meta_data,
                const unsigned int version) {
-    ar &model_meta_data.name;
-    ar &model_meta_data.file;
-    ar &model_meta_data.flipped;
-    ar &model_meta_data.symmetric;
+  ar &model_meta_data.name;
+  ar &model_meta_data.file;
+  ar &model_meta_data.flipped;
+  ar &model_meta_data.symmetric;
 }
 } // namespace serialization
 } // namespace boost
 
 ObjectRecognizer::ObjectRecognizer(int argc, char **argv,
                                    std::shared_ptr<boost::mpi::communicator> mpi_world) {
-  
+
   mpi_world_ = mpi_world;
 
   vector<ModelMetaData> model_bank;
@@ -105,36 +105,50 @@ ObjectRecognizer::ObjectRecognizer(int argc, char **argv,
   env_obj_.reset(new EnvObjectRecognition(mpi_world_));
   env_obj_->Initialize(env_config_);
   env_obj_->SetDebugOptions(image_debug);
+
   if (IsMaster()) {
     planner_.reset(new MHAPlanner(env_obj_.get(), 2, true));
   }
 }
 
-void ObjectRecognizer::LocalizeObjects(const RecognitionInput &input) {
-  printf("Object recognizer received request to localize %zu objects: \n", input.model_names.size());
+bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
+                                       std::vector<ContPose> *detected_poses) const {
+  printf("Object recognizer received request to localize %zu objects: \n",
+         input.model_names.size());
+
   for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
     printf("Model %zu: %s\n", ii, input.model_names[ii].c_str());
   }
+
   env_obj_->SetInput(input);
   // Wait until all processes are ready for the planning phase.
   mpi_world_->barrier();
-  RunPlanner();
+  const bool plan_success = RunPlanner(detected_poses);
+
+  return plan_success;
 }
 
-void ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
-                                       const std::vector<int> &model_ids, const std::vector<ContPose> &object_poses) {
+bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
+                                       const std::vector<int> &model_ids,
+                                       const std::vector<ContPose> &ground_truth_object_poses,
+                                       std::vector<ContPose> *detected_poses) const {
+  // TODO: refactor interface for simulated scenes.
   env_obj_->LoadObjFiles(env_config_.model_bank, input.model_names);
   env_obj_->SetBounds(input.x_min, input.x_max, input.y_min, input.y_max);
   env_obj_->SetTableHeight(input.table_height);
   env_obj_->SetCameraPose(input.camera_pose);
-  env_obj_->SetObservation(model_ids, object_poses);
+  env_obj_->SetObservation(model_ids, ground_truth_object_poses);
   // Wait until all processes are ready for the planning phase.
   mpi_world_->barrier();
-  RunPlanner();
+  const bool plan_success = RunPlanner(detected_poses);
+  return plan_success;
 }
 
-void ObjectRecognizer::RunPlanner() {
+bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   bool planning_finished = false;
+  bool plan_success = false;
+  detected_poses->clear();
+
   if (IsMaster()) {
     int goal_id = env_obj_->GetGoalStateID();
     int start_id = env_obj_->GetStartStateID();
@@ -170,8 +184,8 @@ void ObjectRecognizer::RunPlanner() {
     int sol_cost;
 
     ROS_INFO("Begin planning");
-    bool plan_success = planner_->replan(&solution_state_ids,
-                                         static_cast<MHAReplanParams>(replan_params), &sol_cost);
+    plan_success = planner_->replan(&solution_state_ids,
+                                    static_cast<MHAReplanParams>(replan_params), &sol_cost);
     ROS_INFO("Done planning");
     ROS_INFO("Size of solution: %d", static_cast<int>(solution_state_ids.size()));
 
@@ -180,17 +194,40 @@ void ObjectRecognizer::RunPlanner() {
     }
 
     assert(solution_state_ids.size() > 1);
+
+    // Obtain the goal poses.
     int goal_state_id = env_obj_->GetBestSuccessorID(
                           solution_state_ids[solution_state_ids.size() - 2]);
     printf("Goal state ID is %d\n", goal_state_id);
     env_obj_->PrintState(goal_state_id,
-                        kDebugDir + string("goal_state.png"));
+                         kDebugDir + string("goal_state.png"));
+    env_obj_->GetGoalPoses(goal_state_id, detected_poses);
+
+    cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;
+    for (const auto &pose : *detected_poses) {
+      cout << pose.x() << " " << pose.y() << " " << env_obj_->GetTableHeight() << " "
+           << pose.yaw() << endl;
+    }
+
+    // Planning episode statistics.
+    vector<PlannerStats> stats_vector;
+    planner_->get_search_stats(&stats_vector);
+    last_planning_stats_ = stats_vector;
+    int succs_rendered, succs_valid;
+    env_obj_->GetEnvStats(succs_rendered, succs_valid);
+
+    cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
+    cout << succs_rendered << " " << succs_valid << " "  << stats_vector[0].expands
+         << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
+
     planning_finished = true;
+
     for (int rank = 1; rank < mpi_world_->size(); ++rank) {
       mpi_world_->isend(rank, kPlanningFinishedTag, planning_finished);
     }
+
     // This needs to be done so that the slave processors don't stay forever in
-    // ComputeCostsInParallel. 
+    // ComputeCostsInParallel.
     {
       vector<CostComputationInput> input;
       vector<CostComputationOutput> output;
@@ -207,23 +244,13 @@ void ObjectRecognizer::RunPlanner() {
       mpi_world_->irecv(kMasterRank, kPlanningFinishedTag, planning_finished);
     }
   }
+
+  broadcast(*mpi_world_, plan_success, kMasterRank);
+  broadcast(*mpi_world_, *detected_poses, kMasterRank);
   mpi_world_->barrier();
-  if (IsMaster()) {
-    vector<PlannerStats> stats_vector;
-    planner_->get_search_stats(&stats_vector);
-
-    int succs_rendered, succs_valid;
-    string pcd_file_path;
-    env_obj_->GetEnvStats(succs_rendered, succs_valid, pcd_file_path);
-
-    cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
-    cout << succs_rendered << " " << succs_valid << " "  << stats_vector[0].expands
-         << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
-    printf("Finished planning\n");
-  }
+  return plan_success;
 }
 
 bool ObjectRecognizer::IsMaster() const {
   return mpi_world_->rank() == kMasterRank;
 }
-

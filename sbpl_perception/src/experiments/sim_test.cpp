@@ -119,10 +119,11 @@ int main(int argc, char **argv) {
   input.camera_pose = camera_pose;
 
   vector<int> model_ids;
-  vector<ContPose> poses;
-  GenerateRandomPoses(input, &model_ids, &poses);
+  vector<ContPose> ground_truth_poses;
+  GenerateRandomPoses(input, &model_ids, &ground_truth_poses);
 
-  object_recognizer.LocalizeObjects(input, model_ids, poses);
+  vector<ContPose> detected_poses;
+  object_recognizer.LocalizeObjects(input, model_ids, ground_truth_poses, &detected_poses);
 
   return 0;
 }

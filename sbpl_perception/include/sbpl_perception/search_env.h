@@ -83,11 +83,8 @@ struct EnvParams {
 
 class EnvObjectRecognition : public EnvironmentMHA {
  public:
-  EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator> &comm);
+  explicit EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator> &comm);
   ~EnvObjectRecognition();
-  void LoadObjFiles(const std::vector<std::string> &model_files,
-                    const std::vector<bool> &model_symmetric,
-                    const std::vector<bool> &model_flipped);
 
   // Load the object models to be used in the search episode. model_bank contains
   // metadata of *all* models, and model_ids is the list of models that are
@@ -104,8 +101,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
 
-  // Initialize environment from config file.
-  void Initialize(const std::string &config_file);
   void Initialize(const EnvConfig &env_config);
   void SetInput(const RecognitionInput &input);
 
@@ -192,8 +187,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetDebugOptions(bool image_debug);
   void SetDebugDir(const std::string &debug_dir);
 
-  void GetEnvStats(int &succs_rendered, int &succs_valid,
-                   std::string &file_path);
+  void GetEnvStats(int &succs_rendered, int &succs_valid);
   void GetGoalPoses(int true_goal_id, std::vector<ContPose> *object_poses);
 
  private:
@@ -258,7 +252,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                                std::vector<GraphState> *succ_states) const;
 
   // Returns true if a valid depth image was composed.
-  bool GetComposedDepthImage(const std::vector<unsigned short>
+  static bool GetComposedDepthImage(const std::vector<unsigned short>
                              &source_depth_image, const std::vector<unsigned short>
                              &last_object_depth_image, std::vector<unsigned short> *composed_depth_image);
   bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state,
@@ -296,7 +290,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // Returns true if parent is occluded by successor. Additionally returns min and max depth for newly rendered pixels
   // when occlusion-free.
-  bool IsOccluded(const std::vector<unsigned short> &parent_depth_image,
+  static bool IsOccluded(const std::vector<unsigned short> &parent_depth_image,
                   const std::vector<unsigned short> &succ_depth_image,
                   std::vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
                   unsigned short *max_succ_depth);
