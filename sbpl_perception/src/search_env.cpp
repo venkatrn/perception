@@ -414,8 +414,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
                                              output_unit.cost;
 
       // Cache the depth image only for single object renderings, *only* if valid.
-      // NOTE: The hask key is computed on the *unadjusted* child state.
-      // TODO: We need to be caching the unadjusted depth image!!
+      // NOTE: The hash key is computed on the *unadjusted* child state.
       if (source_state.NumObjects() == 0) {
         // depth_image_cache_[candidate_succ_ids[ii]] = output_unit.depth_image;
         adjusted_single_object_depth_image_cache_[cost_computation_input[ii].child_state]
@@ -977,7 +976,8 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   //   writer.writeBinary (ss3.str()  , *succ_cloud);
   // }
 
-  *final_depth_image = new_obj_depth_image;
+  GetComposedDepthImage(source_depth_image, adjusted_child_state->object_states()->back(),
+                        final_depth_image);
   return total_cost;
 }
 
@@ -1811,17 +1811,18 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   //              te->setWarpFunction (warp_fcn);
   // icp.setTransformationEstimation(te);
 
-  // Set the max correspondence distance to 5cm (e.g., correspondences with higher distances will be ignored)
-  icp.setMaxCorrespondenceDistance (env_params_.res / 2); //TODO: properly
+  // TODO: make all of the following algorithm parameters and place in a config file.
+  // Set the max correspondence distance (e.g., correspondences with higher distances will be ignored)
+  icp.setMaxCorrespondenceDistance(env_params_.res / 2);
   // Set the maximum number of iterations (criterion 1)
-  icp.setMaximumIterations (4);
+  icp.setMaximumIterations(10);
   // Set the transformation epsilon (criterion 2)
-  // icp.setTransformationEpsilon (1e-8);
+  icp.setTransformationEpsilon(1e-8);
   // Set the euclidean distance difference epsilon (criterion 3)
-  icp.setEuclideanFitnessEpsilon (1e-5);
+  icp.setEuclideanFitnessEpsilon(kSensorResolution);  // 1e-5
 
   icp.align(*cloud_out);
-  double score = 100.0;//TODO
+  double score = 100.0;
 
   if (icp.hasConverged()) {
     score = icp.getFitnessScore();

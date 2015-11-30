@@ -8,7 +8,6 @@
 #include <ros/package.h>
 #include <ros/ros.h>
 #include <sbpl/headers.h>
-#include <sbpl_perception/search_env.h>
 #include <sbpl_perception/object_recognizer.h>
 
 #include <chrono>
@@ -16,6 +15,10 @@
 #include <random>
 
 using namespace std;
+
+namespace {
+  constexpr int kMasterRank = 0;
+}
 
 void GenerateRandomPoses(const RecognitionInput &input,
                          std::vector<int> *model_ids, std::vector<ContPose> *object_poses) {
@@ -25,7 +28,9 @@ void GenerateRandomPoses(const RecognitionInput &input,
   // unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
   // unsigned seed = -1912274402;
   // unsigned seed = 1754182800
-  unsigned seed = -1912274402;
+  unsigned seed = -838481029; 
+  
+  // unsigned seed = -1912274402;
   printf("Random seed: %d\n", seed);
   // Good seeds.
   // 5 objects stacked one behind another
@@ -118,12 +123,23 @@ int main(int argc, char **argv) {
   input.table_height = table_height;
   input.camera_pose = camera_pose;
 
+  const int kNumTests = 1;
+
+  for (int ii = 0; ii < kNumTests; ++ii) {
   vector<int> model_ids;
   vector<ContPose> ground_truth_poses;
-  GenerateRandomPoses(input, &model_ids, &ground_truth_poses);
+
+  if (world->rank() == kMasterRank) {
+    GenerateRandomPoses(input, &model_ids, &ground_truth_poses);
+  }
+  broadcast(*world, model_ids, kMasterRank);
+  broadcast(*world, ground_truth_poses, kMasterRank);
+  world->barrier();
 
   vector<ContPose> detected_poses;
   object_recognizer.LocalizeObjects(input, model_ids, ground_truth_poses, &detected_poses);
 
+  // TODO: Do something with detected poses (compute error metric etc.)
+  }
   return 0;
 }

@@ -132,6 +132,13 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
                                        const std::vector<int> &model_ids,
                                        const std::vector<ContPose> &ground_truth_object_poses,
                                        std::vector<ContPose> *detected_poses) const {
+  printf("Object recognizer received request to localize %zu objects: \n",
+         model_ids.size());
+
+  for (size_t ii = 0; ii < model_ids.size(); ++ii) {
+    printf("Model %zu: %d\n", ii, model_ids[ii]);
+  }
+
   // TODO: refactor interface for simulated scenes.
   env_obj_->LoadObjFiles(env_config_.model_bank, input.model_names);
   env_obj_->SetBounds(input.x_min, input.x_max, input.y_min, input.y_max);
@@ -165,13 +172,13 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
 
     MHAReplanParams replan_params(60.0);
     replan_params.max_time = 60.0;
-    replan_params.initial_eps = 1.0;
-    replan_params.final_eps = 1.0;
+    replan_params.initial_eps = 3;
+    replan_params.final_eps = 3;
     replan_params.dec_eps = 0.2;
     replan_params.return_first_solution =
       true; // Setting this to true also means planner will ignore max time limit.
     replan_params.repair_time = -1;
-    replan_params.inflation_eps = 5; //10000000.0
+    replan_params.inflation_eps = 3; //10000000.0
     replan_params.anchor_eps = 1.0;
     replan_params.use_anchor = true;
     replan_params.meta_search_type =

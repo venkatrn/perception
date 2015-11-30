@@ -6,15 +6,15 @@
       false, 
       true], 
 
-      [clorox,
-      $(find sbpl_perception)/data/RAM/cad_models/clorox.ply,
-      false,
-      false],
-
-      [odwalla_jug,
-      $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply,
-      false,
-      false],
+      <!-- [clorox, -->
+      <!-- $(find sbpl_perception)/data/RAM/cad_models/clorox.ply, -->
+      <!-- false, -->
+      <!-- false], -->
+      <!--  -->
+      <!-- [odwalla_jug, -->
+      <!-- $(find sbpl_perception)/data/RAM/cad_models/odwalla_jug.ply, -->
+      <!-- false, -->
+      <!-- false], -->
 
       [orange_juice_jug,
       $(find sbpl_perception)/data/RAM/cad_models/orange_juice_jug.ply,

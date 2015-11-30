@@ -11,7 +11,6 @@
 #include <sbpl/headers.h>
 #include <sbpl_perception/config_parser.h>
 #include <sbpl_perception/object_recognizer.h>
-#include <sbpl_perception/search_env.h>
 
 #include <pcl/io/pcd_io.h>
 
