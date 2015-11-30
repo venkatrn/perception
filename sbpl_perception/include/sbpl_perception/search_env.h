@@ -83,7 +83,8 @@ struct EnvParams {
 
 class EnvObjectRecognition : public EnvironmentMHA {
  public:
-  explicit EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator> &comm);
+  explicit EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator>
+                                &comm);
   ~EnvObjectRecognition();
 
   // Load the object models to be used in the search episode. model_bank contains
@@ -253,8 +254,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // Returns true if a valid depth image was composed.
   static bool GetComposedDepthImage(const std::vector<unsigned short>
-                             &source_depth_image, const std::vector<unsigned short>
-                             &last_object_depth_image, std::vector<unsigned short> *composed_depth_image);
+                                    &source_depth_image, const std::vector<unsigned short>
+                                    &last_object_depth_image, std::vector<unsigned short> *composed_depth_image);
   bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state,
                                  std::vector<unsigned short> *single_object_depth_image, bool after_refinement);
 
@@ -291,9 +292,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Returns true if parent is occluded by successor. Additionally returns min and max depth for newly rendered pixels
   // when occlusion-free.
   static bool IsOccluded(const std::vector<unsigned short> &parent_depth_image,
-                  const std::vector<unsigned short> &succ_depth_image,
-                  std::vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
-                  unsigned short *max_succ_depth);
+                         const std::vector<unsigned short> &succ_depth_image,
+                         std::vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
+                         unsigned short *max_succ_depth);
 
   bool IsValidPose(GraphState s, int model_id, ContPose p,
                    bool after_refinement) const;
@@ -304,7 +305,14 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<unsigned short> GetDepthImageFromPointCloud(
     const PointCloudPtr &cloud);
 
- // Unused base class methods.
+  // Sets a pixel of input_depth_image to max_range if the corresponding pixel
+  // in masking_depth_image occludes the pixel in input_depth_image. Otherwise,
+  // the value is retained.
+  static std::vector<unsigned short> ApplyOcclusionMask(const
+                                                        std::vector<unsigned short> input_depth_image,
+                                                        const
+                                                        std::vector<unsigned short> masking_depth_image);
+  // Unused base class methods.
  public:
   bool InitializeEnv(const char *sEnvFile) {
     return false;
@@ -329,4 +337,3 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintEnv_Config(FILE *fOut) {};
 
 };
-

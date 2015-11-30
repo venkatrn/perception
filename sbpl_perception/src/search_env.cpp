@@ -46,6 +46,11 @@ constexpr int kDepthImageHeight = 480;
 constexpr int kDepthImageWidth = 640;
 constexpr int kNumPixels = kDepthImageWidth * kDepthImageHeight;
 
+// The max-range (no return) value in a depth image produced by
+// the kinect. Note that the kinect values are of type unsigned short, and the
+// units are mm, not meter.
+constexpr unsigned short kKinectMaxDepth = 20000;
+
 // const double kSensorResolution = 0.01 / 2;//0.01
 constexpr double kSensorResolution = 0.003;
 constexpr double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
@@ -81,7 +86,7 @@ void ColorizeDepthImage(const cv::Mat &depth_image,
     for (int jj = 0; jj < kDepthImageWidth; ++jj) {
       const unsigned short depth = row[jj];
 
-      if (depth > max_depth || depth == 20000) {
+      if (depth > max_depth || depth == kKinectMaxDepth) {
         normalized_depth_image.at<uchar>(ii, jj) = 0;
       } else if (depth < min_depth) {
         normalized_depth_image.at<uchar>(ii, jj) = 255;
@@ -115,7 +120,7 @@ int GetNumValidPixels(const vector<unsigned short> &depth_image) {
 
   // TODO: lambdaize.
   for (int jj = 0; jj < kNumPixels; ++jj) {
-    if (depth_image[jj] != 20000) {
+    if (depth_image[jj] != kKinectMaxDepth) {
       ++num_valid_pixels;
     }
   }
@@ -398,6 +403,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
         hash_manager_.UpdateState(output_unit.adjusted_state);
       }
     }
+
     // candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(cost_computation_input[ii].child_state);
 
     if (invalid_state) {
@@ -423,9 +429,11 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
         unadjusted_single_object_depth_image_cache_[cost_computation_input[ii].child_state]
           =
             output_unit.unadjusted_depth_image;
-        adjusted_single_object_state_cache_[cost_computation_input[ii].child_state] = output_unit.adjusted_state;
-        assert(output_unit.adjusted_state.object_states().size()> 0);
-        assert(adjusted_single_object_state_cache_[cost_computation_input[ii].child_state].object_states().size()> 0);
+        adjusted_single_object_state_cache_[cost_computation_input[ii].child_state] =
+          output_unit.adjusted_state;
+        assert(output_unit.adjusted_state.object_states().size() > 0);
+        assert(adjusted_single_object_state_cache_[cost_computation_input[ii].child_state].object_states().size()
+               > 0);
       }
     }
   }
@@ -660,20 +668,25 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
     input_unit.child_id = candidate_succ_ids[ii];
     input_unit.source_depth_image = source_depth_image;
     input_unit.source_counted_pixels = counted_pixels_map_[source_state_id];
-    
-    const ObjectState &last_object_state = candidate_succs[ii].object_states().back();
+
+    const ObjectState &last_object_state =
+      candidate_succs[ii].object_states().back();
     GraphState single_object_graph_state;
     single_object_graph_state.AppendObject(last_object_state);
 
     const bool valid_state = GetSingleObjectDepthImage(single_object_graph_state,
-                              &input_unit.unadjusted_last_object_depth_image, false);
+                                                       &input_unit.unadjusted_last_object_depth_image, false);
+
     if (!valid_state) {
       continue;
     }
+
     GetSingleObjectDepthImage(single_object_graph_state,
                               &input_unit.adjusted_last_object_depth_image, true);
-    assert(adjusted_single_object_state_cache_.find(single_object_graph_state) != adjusted_single_object_state_cache_.end());
-    input_unit.adjusted_last_object_state = adjusted_single_object_state_cache_[single_object_graph_state];
+    assert(adjusted_single_object_state_cache_.find(single_object_graph_state) !=
+           adjusted_single_object_state_cache_.end());
+    input_unit.adjusted_last_object_state =
+      adjusted_single_object_state_cache_[single_object_graph_state];
   }
 
   vector<CostComputationOutput> cost_computation_output;
@@ -891,7 +904,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   }
 
   vector<unsigned short> new_obj_depth_image(kDepthImageWidth *
-                                             kDepthImageHeight, 20000);
+                                             kDepthImageHeight, kKinectMaxDepth);
 
   // Do ICP alignment on object *only* if it has been occluded by an existing
   // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
@@ -927,16 +940,40 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
       return -1;
     }
 
-    // TODO: Remove points that may be occluded by other objects
-    // in the scene.
+    // The first operation removes self occluding points, and the second one
+    // removes points occluded by other objects in the scene.
     new_obj_depth_image = GetDepthImageFromPointCloud(cloud_out);
+    
+    vector<int> new_pixel_indices_unused;
+    unsigned short succ_min_depth_unused, succ_max_depth_unused;
+    if (IsOccluded(source_depth_image, new_obj_depth_image, &new_pixel_indices_unused,
+                   &succ_min_depth_unused,
+                   &succ_max_depth_unused)) {
+      return -1;
+    }
+    new_obj_depth_image = ApplyOcclusionMask(new_obj_depth_image,
+                                             source_depth_image);
 
   } else {
     new_obj_depth_image = adjusted_last_object_depth_image;
     int last_idx = child_state.NumObjects() - 1;
     assert(last_idx >= 0);
     assert(adjusted_last_object_state.object_states().size() > 0);
-    adjusted_child_state->mutable_object_states()[last_idx] = adjusted_last_object_state.object_states().back();
+
+    const auto &last_object = adjusted_last_object_state.object_states().back();
+    adjusted_child_state->mutable_object_states()[last_idx] =
+      last_object;
+    if (!IsValidPose(source_state, last_object_id,
+                     last_object.cont_pose(), true)) {
+      return -1;
+    }
+    vector<int> new_pixel_indices_unused;
+    unsigned short succ_min_depth_unused, succ_max_depth_unused;
+    if (IsOccluded(source_depth_image, new_obj_depth_image, &new_pixel_indices_unused,
+                   &succ_min_depth_unused,
+                   &succ_max_depth_unused)) {
+      return -1;
+    }
   }
 
   cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
@@ -976,7 +1013,8 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   //   writer.writeBinary (ss3.str()  , *succ_cloud);
   // }
 
-  GetComposedDepthImage(source_depth_image, adjusted_child_state->object_states()->back(),
+  GetComposedDepthImage(source_depth_image,
+                        new_obj_depth_image,
                         final_depth_image);
   return total_cost;
 }
@@ -992,7 +1030,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   assert(child_state.NumObjects() > 0);
 
   *adjusted_child_state = child_state;
-  child_properties->last_max_depth = 20000;
+  child_properties->last_max_depth = kKinectMaxDepth;
   child_properties->last_min_depth = 0;
 
   const auto &last_object = child_state.object_states().back();
@@ -1027,7 +1065,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
       int i_in = (kDepthImageHeight - 1 - y) * kDepthImageWidth + x
                  ; // flip up down (buffer index)
 
-      if (new_obj_depth_image[i] != 20000 && source_depth_image[i] == 20000) {
+      if (new_obj_depth_image[i] != kKinectMaxDepth && source_depth_image[i] == kKinectMaxDepth) {
         new_pixel_buffer[i_in] = succ_depth_buffer[i_in];
       } else {
         new_pixel_buffer[i_in] = 1.0; // max range
@@ -1083,7 +1121,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
       int i_in = (kDepthImageHeight - 1 - y) * kDepthImageWidth + x
                  ; // flip up down (buffer index)
 
-      if (depth_image[i] != 20000 && source_depth_image[i] == 20000) {
+      if (depth_image[i] != kKinectMaxDepth && source_depth_image[i] == kKinectMaxDepth) {
         new_pixel_buffer[i_in] = succ_depth_buffer[i_in];
       } else {
         new_pixel_buffer[i_in] = 1.0; // max range
@@ -1142,43 +1180,43 @@ bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
   assert(static_cast<int>(succ_depth_image.size()) == kNumPixels);
 
   new_pixel_indices->clear();
-  *min_succ_depth = 20000;
+  *min_succ_depth = kKinectMaxDepth;
   *max_succ_depth = 0;
 
   bool is_occluded = false;
 
   for (int jj = 0; jj < kNumPixels; ++jj) {
 
-    if (succ_depth_image[jj] != 20000 &&
-        parent_depth_image[jj] == 20000) {
+    if (succ_depth_image[jj] != kKinectMaxDepth &&
+        parent_depth_image[jj] == kKinectMaxDepth) {
       new_pixel_indices->push_back(jj);
 
       // Find mininum depth of new pixels
-      if (succ_depth_image[jj] != 20000 && succ_depth_image[jj] < *min_succ_depth) {
+      if (succ_depth_image[jj] != kKinectMaxDepth && succ_depth_image[jj] < *min_succ_depth) {
         *min_succ_depth = succ_depth_image[jj];
       }
 
       // Find maximum depth of new pixels
-      if (succ_depth_image[jj] != 20000 && succ_depth_image[jj] > *max_succ_depth) {
+      if (succ_depth_image[jj] != kKinectMaxDepth && succ_depth_image[jj] > *max_succ_depth) {
         *max_succ_depth = succ_depth_image[jj];
       }
     }
 
     // Occlusion
-    if (succ_depth_image[jj] != 20000 && parent_depth_image[jj] != 20000 &&
+    if (succ_depth_image[jj] != kKinectMaxDepth && parent_depth_image[jj] != kKinectMaxDepth &&
         succ_depth_image[jj] < parent_depth_image[jj]) {
       is_occluded = true;
       break;
     }
 
-    // if (succ_depth_image[jj] == 20000 && observed_depth_image_[jj] != 20000) {
+    // if (succ_depth_image[jj] == kKinectMaxDepth && observed_depth_image_[jj] != kKinectMaxDepth) {
     //   obs_pixels.push_back(jj);
     // }
   }
 
   if (is_occluded) {
     new_pixel_indices->clear();
-    *min_succ_depth = 20000;
+    *min_succ_depth = kKinectMaxDepth;
     *max_succ_depth = 0;
   }
 
@@ -1314,7 +1352,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
 
   for (int ii = 0; ii < kNumPixels; ++ii) {
     // Skip if empty pixel
-    if (depth_image[ii] == 20000) {
+    if (depth_image[ii] == kKinectMaxDepth) {
       continue;
     }
 
@@ -1348,7 +1386,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
 
 vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(
   const PointCloudPtr &cloud) {
-  vector<unsigned short> depth_image(kNumPixels, 20000);
+  vector<unsigned short> depth_image(kNumPixels, kKinectMaxDepth);
 
   for (int ii = 0; ii < cloud->size(); ++ii) {
     PointT point = cloud->points[ii];
@@ -1456,7 +1494,7 @@ void EnvObjectRecognition::PrintImage(string fname,
     for (int jj = 0; jj < kDepthImageWidth; ++jj) {
       int idx = ii * kDepthImageWidth + jj;
 
-      if (depth_image[idx] > max_observed_depth_ || depth_image[idx] == 20000) {
+      if (depth_image[idx] > max_observed_depth_ || depth_image[idx] == kKinectMaxDepth) {
         image.at<uchar>(ii, jj) = 0;
       } else if (depth_image[idx] < min_observed_depth_) {
         image.at<uchar>(ii, jj) = 255;
@@ -1562,7 +1600,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   env_params_.num_objects = num_objects;
 
   // Compute the range in observed image
-  unsigned short observed_min_depth = 20000;
+  unsigned short observed_min_depth = kKinectMaxDepth;
   unsigned short observed_max_depth = 0;
 
   for (int ii = 0; ii < kNumPixels; ++ii) {
@@ -1570,7 +1608,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
       observed_min_depth = observed_depth_image_[ii];
     }
 
-    if (observed_depth_image_[ii] != 20000 &&
+    if (observed_depth_image_[ii] != kKinectMaxDepth &&
         observed_depth_image_[ii] > observed_max_depth) {
       observed_max_depth = observed_depth_image_[ii];
     }
@@ -1614,14 +1652,14 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   projected_knn_.reset(new pcl::search::KdTree<PointT>(true));
   projected_knn_->setInputCloud(projected_cloud_);
 
-  min_observed_depth_ = 20000;
+  min_observed_depth_ = kKinectMaxDepth;
   max_observed_depth_ = 0;
 
   for (int ii = 0; ii < kDepthImageHeight; ++ii) {
     for (int jj = 0; jj < kDepthImageWidth; ++jj) {
       int idx = ii * kDepthImageWidth + jj;
 
-      if (observed_depth_image_[idx] == 20000) {
+      if (observed_depth_image_[idx] == kKinectMaxDepth) {
         continue;
       }
 
@@ -1700,7 +1738,8 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
 
   for (size_t ii = 0; ii < object_ids.size(); ++ii) {
     if (object_ids[ii] >= env_params_.num_models) {
-      printf("ERROR: Invalid object ID %d when setting ground truth\n", object_ids[ii]);
+      printf("ERROR: Invalid object ID %d when setting ground truth\n",
+             object_ids[ii]);
     }
 
     s.AppendObject(ObjectState(object_ids[ii],
@@ -1715,7 +1754,7 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
   SetObservation(object_ids.size(), depth_image);
 }
 
-void EnvObjectRecognition::SetInput(const RecognitionInput& input) {
+void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
 
   LoadObjFiles(model_bank_, input.model_names);
   SetBounds(input.x_min, input.x_max, input.y_min, input.y_max);
@@ -1743,9 +1782,10 @@ void EnvObjectRecognition::SetInput(const RecognitionInput& input) {
       PointT p = depth_img_cloud->at(jj, ii);
 
       if (isnan(p.z) || isinf(p.z)) {
-        depth_image[ii * kDepthImageWidth + jj] = 20000;
+        depth_image[ii * kDepthImageWidth + jj] = kKinectMaxDepth;
       } else {
-        depth_image[ii * kDepthImageWidth + jj] = static_cast<unsigned short>(p.z * 1000.0);
+        depth_image[ii * kDepthImageWidth + jj] = static_cast<unsigned short>
+                                                  (p.z * 1000.0);
       }
     }
   }
@@ -1759,6 +1799,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput& input) {
     pcl::PCDWriter writer;
     writer.writeBinary (ss.str()  , *observed_organized_cloud_);
   }
+
   SetObservation(input.model_names.size(), depth_image);
 }
 
@@ -1854,6 +1895,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     // writer.writeBinary (ss2.str()  , *cloud_out);
     // i++;
   }
+
   return score;
 }
 
@@ -1927,13 +1969,16 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
 
             double icp_fitness_score = GetICPAdjustedPose(cloud_in, p_in,
                                                           cloud_aligned, &p_out);
+
             // Check *after* icp alignment
             if (!IsValidPose(committed_state, model_id, p_out)) {
               continue;
             }
+
             const auto old_state = succ_state.object_states()[0];
             succ_state.mutable_object_states()[0] = ObjectState(old_state.id(),
                                                                 old_state.symmetric(), p_out);
+
             if (image_debug_) {
               string fname = kDebugDir + "succ_" + to_string(succ_id) + ".png";
               PrintState(succ_state, fname);
@@ -2071,7 +2116,7 @@ bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short>
                                                  vector<unsigned short> *composed_depth_image) {
 
   composed_depth_image->clear();
-  composed_depth_image->resize(source_depth_image.size(), 20000);
+  composed_depth_image->resize(source_depth_image.size(), kKinectMaxDepth);
   assert(source_depth_image.size() == last_object_depth_image.size());
 
   #pragma omp parallel for
@@ -2080,6 +2125,7 @@ bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short>
     composed_depth_image->at(ii) = std::min(source_depth_image[ii],
                                             last_object_depth_image[ii]);
   }
+
   return true;
 }
 
@@ -2106,5 +2152,17 @@ bool EnvObjectRecognition::GetSingleObjectDepthImage(const GraphState
   return true;
 }
 
+vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
+  const vector<unsigned short> input_depth_image,
+  const vector<unsigned short> masking_depth_image) {
+  vector<unsigned short> masked_depth_image(kNumPixels, kKinectMaxDepth);
+
+  for (size_t ii = 0; ii < kNumPixels; ++ii) {
+    masked_depth_image[ii] = masking_depth_image[ii] > input_depth_image[ii] ?
+                             input_depth_image[ii] : kKinectMaxDepth;
+  }
+
+  return masked_depth_image;
+}
 
 
