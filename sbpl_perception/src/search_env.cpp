@@ -39,17 +39,12 @@ using namespace perception_utils;
 using namespace pcl::simulation;
 using namespace Eigen;
 
+using sbpl_perception::kDepthImageHeight;
+using sbpl_perception::kDepthImageWidth;
+using sbpl_perception::kNumPixels;
+using sbpl_perception::kKinectMaxDepth;
+
 namespace {
-
-// Depth image parameters (TODO: read in from config file).
-constexpr int kDepthImageHeight = 480;
-constexpr int kDepthImageWidth = 640;
-constexpr int kNumPixels = kDepthImageWidth * kDepthImageHeight;
-
-// The max-range (no return) value in a depth image produced by
-// the kinect. Note that the kinect values are of type unsigned short, and the
-// units are mm, not meter.
-constexpr unsigned short kKinectMaxDepth = 20000;
 
 // const double kSensorResolution = 0.01 / 2;//0.01
 constexpr double kSensorResolution = 0.003;
@@ -68,49 +63,6 @@ constexpr bool kUseDepthSensitiveCost = false;
 string kDebugDir = ros::package::getPath("sbpl_perception") +
                    "/visualization/";
 constexpr int kMasterRank = 0;
-
-// Colorize depth image, given the max and min depths. Type is assumed to be
-// unsigned short (CV_16UC1) as typical of a kinect sensor.
-void ColorizeDepthImage(const cv::Mat &depth_image,
-                        cv::Mat &colored_depth_image,
-                        unsigned short min_depth,
-                        unsigned short max_depth) {
-  const double range = double(max_depth - min_depth);
-
-  static cv::Mat normalized_depth_image;
-  normalized_depth_image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
-
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    auto row = depth_image.ptr<unsigned short>(ii);
-
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      const unsigned short depth = row[jj];
-
-      if (depth > max_depth || depth == kKinectMaxDepth) {
-        normalized_depth_image.at<uchar>(ii, jj) = 0;
-      } else if (depth < min_depth) {
-        normalized_depth_image.at<uchar>(ii, jj) = 255;
-      } else {
-        normalized_depth_image.at<uchar>(ii, jj) = static_cast<uchar>(255.0 - double(
-                                                                        depth - min_depth) * 255.0 / range);
-      }
-    }
-  }
-
-  cv::applyColorMap(normalized_depth_image, colored_depth_image,
-                    cv::COLORMAP_JET);
-
-  // Convert background to black to make pretty.
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      if (normalized_depth_image.at<uchar>(ii, jj) == 0) {
-        colored_depth_image.at<cv::Vec3b>(ii, jj)[0] = 0;
-        colored_depth_image.at<cv::Vec3b>(ii, jj)[1] = 0;
-        colored_depth_image.at<cv::Vec3b>(ii, jj)[2] = 0;
-      }
-    }
-  }
-}
 
 
 // Count the number of valid pixels in a depth image.

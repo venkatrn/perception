@@ -17,14 +17,6 @@ constexpr int kMasterRank = 0;
 constexpr int kPlanningFinishedTag = 1;
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
-
-void SetModelMetaData(const string &name, const string &file,
-                      const bool flipped, const bool symmetric, ModelMetaData *model_meta_data) {
-  model_meta_data->name = name;
-  model_meta_data->file = file;
-  model_meta_data->flipped = flipped;
-  model_meta_data->symmetric = symmetric;
-}
 }  // namespace
 
 namespace boost {

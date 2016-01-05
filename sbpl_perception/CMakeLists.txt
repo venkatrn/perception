@@ -57,7 +57,9 @@ rosbuild_add_library(${PROJECT_NAME}
   src/object_model.cpp
   src/search_env.cpp
   src/config_parser.cpp
-  src/object_recognizer.cpp)
+  src/object_recognizer.cpp
+  src/utils/utils.cpp
+  src/utils/dataset_generator.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 rosbuild_link_boost(${PROJECT_NAME} mpi serialization)
@@ -75,6 +77,9 @@ target_link_libraries(sim_test libvtkCommon.so libvtkFiltering.so libvtkRenderin
   libvtkGraphics.so)
 rosbuild_link_boost(sim_test mpi serialization)
 rosbuild_add_openmp_flags(sim_test)
+
+rosbuild_add_executable(generate_dataset src/utils/generate_dataset.cpp)
+target_link_libraries(generate_dataset ${PROJECT_NAME})
 
 # rosbuild_add_executable(mpi_test src/experiments/search_mpi_test.cpp)
 # rosbuild_link_boost(mpi_test mpi serialization)

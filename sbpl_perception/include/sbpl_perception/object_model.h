@@ -25,6 +25,9 @@ class ObjectModel {
   const pcl::PolygonMesh &mesh() const {
     return mesh_;
   }
+  std::string name() const {
+    return name_;
+  }
   bool symmetric() const {
     return symmetric_;
   }

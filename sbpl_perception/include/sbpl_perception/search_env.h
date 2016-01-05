@@ -16,6 +16,7 @@
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/mpi_utils.h>
 #include <sbpl_perception/object_model.h>
+#include <sbpl_perception/utils/utils.h>
 #include <sbpl_utils/hash_manager/hash_manager.h>
 
 #include <boost/mpi.hpp>
@@ -80,6 +81,15 @@ struct EnvParams {
   int num_objects; // This is the number of objects on the table
   int num_models; // This is the number of models available (can be more or less than number of objects on table
 };
+
+
+inline void SetModelMetaData(const std::string &name, const std::string &file,
+                      const bool flipped, const bool symmetric, ModelMetaData *model_meta_data) {
+  model_meta_data->name = name;
+  model_meta_data->file = file;
+  model_meta_data->flipped = flipped;
+  model_meta_data->symmetric = symmetric;
+}
 
 class EnvObjectRecognition : public EnvironmentMHA {
  public:
