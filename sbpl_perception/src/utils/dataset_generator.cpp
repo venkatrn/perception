@@ -7,6 +7,8 @@
 
 #include <ros/ros.h>
 
+#include <boost/filesystem.hpp>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
@@ -15,13 +17,11 @@ using namespace pcl::simulation;
 using namespace Eigen;
 
 namespace {
-// Utility to find bounding box of largest blob in the image.
-cv::Rect FindBoundingBox(const cv::Mat &im_rgb) {
+// Utility to find bounding box of largest blob in the depth image.
+cv::Rect FindBoundingBox(const cv::Mat &im_depth) {
 
-   cv::Mat im_gray;
-   cv::cvtColor(im_rgb, im_gray, CV_RGB2GRAY);
-   cv::Mat im_bw;
-   cv::threshold(im_gray, im_bw, 10.0, 255.0, CV_THRESH_BINARY);
+  cv::Mat im_bw;
+  im_bw = im_depth < sbpl_perception::kKinectMaxDepth;
 
   int largest_area = 0;
   int largest_contour_index = 0;
@@ -33,7 +33,8 @@ cv::Rect FindBoundingBox(const cv::Mat &im_rgb) {
                    CV_CHAIN_APPROX_SIMPLE);
 
   cv::Rect bounding_rect;
-  for (int ii = 0; ii < contours.size(); ++ii) {
+
+  for (int ii = 0; ii < static_cast<int>(contours.size()); ++ii) {
     const double area = cv::contourArea(contours[ii], false);
 
     if (area > largest_area) {
@@ -42,11 +43,12 @@ cv::Rect FindBoundingBox(const cv::Mat &im_rgb) {
       bounding_rect = cv::boundingRect(contours[ii]);
     }
   }
-  return bounding_rect;
 
-  // drawContours( matImage, contours, largest_contour_index, Scalar(255), CV_FILLED, 8, hierarchy ); // Draw the largest contour using previously stored index.
+  // drawContours(im_rgb, contours, largest_contour_index, Scalar(255), CV_FILLED, 8, hierarchy);
+
+  return bounding_rect;
 }
-}
+}  // namespace
 
 namespace sbpl_perception {
 DatasetGenerator::DatasetGenerator(int argc, char **argv) {
@@ -166,8 +168,16 @@ vector<unsigned short> DatasetGenerator::GetDepthImage(const
 }
 
 void DatasetGenerator::GenerateCylindersDataset(double min_radius,
-                                                double max_radius, double delta_radius, double height,
-                                                double delta_yaw, double delta_height, const string &output_dir) {
+                                                double max_radius,
+                                                double delta_radius, double height,
+                                                double delta_yaw, double delta_height,
+                                                const string &output_dir_str) {
+
+  // Create the output directory if it doesn't exist.
+  boost::filesystem::path output_dir(output_dir_str);
+  if (!boost::filesystem::is_directory(output_dir)) {
+    boost::filesystem::create_directory(output_dir);
+  }
 
   const int num_poses = 2 * M_PI / static_cast<double>(delta_yaw);
 
@@ -176,6 +186,7 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
 
   // Generate depth images for each object individually. We won't consider
   // multi-object combinations here.
+  int model_num = 0;
   for (const auto &object_model : object_models_) {
     vector<ObjectModel> models_in_scene = {object_model};
     int num_images = 0;
@@ -197,23 +208,35 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
           static cv::Mat c_image;
           ColorizeDepthImage(cv_depth_image, c_image, 0, 3000);
 
-          cv::Rect bounding_rect = FindBoundingBox(c_image);
+          const cv::Rect bounding_rect = FindBoundingBox(cv_depth_image);
 
-          cv::RNG rng(12345);
-          cv::Scalar color = cv::Scalar(rng.uniform(0, 255), rng.uniform(0, 255),
-                                        rng.uniform(0, 255));
+          cv::Scalar color = cv::Scalar(0, 255, 0);
           cv::rectangle(c_image, bounding_rect.tl(), bounding_rect.br(), color, 2,
                         8, 0 );
-          cv::imshow("depth image", c_image);
+          cv::imshow("Depth Image", c_image);
           cv::waitKey(1);
 
+          // Write image to disk.
+          string image_name = std::to_string(model_num) + "_" + std::to_string(num_images) + ".png";
+          boost::filesystem::path image_path = output_dir / image_name;
+          // TODO: figure out how to best representate no-return values for
+          // depth images.
+          cv::imwrite(image_path.native(), c_image);
+          
           num_images++;
 
+          // If this is a rotationally symmetric object, just one camera pose
+          // is sufficient.
+          if (object_model.symmetric()) {
+            break;
+          }
         }
       }
     }
 
-    printf("Generated %d images for object %s\n", num_images, object_model.name().c_str());
+    printf("Generated %d images for object %s\n", num_images,
+           object_model.name().c_str());
+    model_num++;
   }
 }
 }  // namespace

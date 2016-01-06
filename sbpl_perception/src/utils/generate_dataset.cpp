@@ -1,6 +1,7 @@
 #include <sbpl_perception/utils/dataset_generator.h>
 
 using namespace sbpl_perception;
+using namespace std;
 
 int main(int argc, char **argv) {
 
@@ -12,6 +13,9 @@ int main(int argc, char **argv) {
   const double height = 2.0;
   const double delta_yaw = 22.5 * M_PI / 180.0;
   const double delta_height = 0.25;
-  dataset_generator.GenerateCylindersDataset(min_radius, max_radius, delta_radius, height, delta_yaw, delta_height, std::string("temp"));
+  const string output_dir = "/tmp/training_images/";
+  dataset_generator.GenerateCylindersDataset(min_radius, max_radius,
+                                             delta_radius, height, delta_yaw, delta_height, output_dir);
   return 0;
 }
+

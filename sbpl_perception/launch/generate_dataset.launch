@@ -1,0 +1,13 @@
+<launch>
+  <master auto="start"/>
+  <param name="/use_sim_time" value="true"/>
+
+  <arg name="debug" default="false" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix" value="gdb --ex run --args" />
+
+  <!--Specify which model bank to use-->
+  <!-- <include file="$(find sbpl_perception)/config/sim_household_objects.xml"/> -->
+  <include file="$(find sbpl_perception)/config/household_objects.xml"/>
+  <node pkg="sbpl_perception" type="generate_dataset" name="generate_dataset" output="screen" respawn="false"/>
+</launch>
