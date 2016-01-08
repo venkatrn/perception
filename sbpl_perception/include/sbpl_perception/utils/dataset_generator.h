@@ -4,6 +4,10 @@
 
 #include <vector>
 
+#include <boost/filesystem.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
 namespace sbpl_perception {
 
 class DatasetGenerator {
@@ -20,6 +24,7 @@ class DatasetGenerator {
                                 const std::string &output_dir);
   void GenerateViewSphereDataset(const std::string &output_dir);
  private:
+  boost::filesystem::path output_dir_;
   pcl::simulation::SimExample::Ptr kinect_simulator_;
   std::vector<ObjectModel> object_models_;
 
@@ -36,7 +41,15 @@ class DatasetGenerator {
                          double halo_dz, int n_poses,
                          std::vector<Eigen::Isometry3d, Eigen::aligned_allocator<Eigen::Isometry3d>>
                          *poses);
+
+  // Prepare dataset structure.
+  void PrepareDatasetFolders(const std::string &output_dir_str);
+
+  // Utility to write image and bounding box annotations to disk. Assumes that
+  // PrepareDatasetFolders has been called already.
+  void WriteToDisk(const std::string &name, const cv::Mat &image,
+                   const std::vector<cv::Rect> &bboxes, const std::vector<int> &class_ids);
 };
-}
+}  // namespace
 
 

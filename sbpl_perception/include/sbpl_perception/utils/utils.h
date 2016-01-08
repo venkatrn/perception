@@ -23,4 +23,11 @@ void ColorizeDepthImage(const cv::Mat &depth_image,
                         cv::Mat &colored_depth_image,
                         unsigned short min_depth,
                         unsigned short max_depth);
+
+// Rescale the depth image to [0,255], with no-returns set to 0.
+// Type is assumed to be unsigned short (CV_16UC1) as typical of a kinect sensor.
+void RescaleDepthImage(const cv::Mat &depth_image,
+                       cv::Mat &rescaled_depth_image,
+                        unsigned short min_depth,
+                        unsigned short max_depth);
 }  // namespace

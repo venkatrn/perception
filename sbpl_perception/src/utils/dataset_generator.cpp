@@ -7,16 +7,20 @@
 
 #include <ros/ros.h>
 
-#include <boost/filesystem.hpp>
-
-#include <opencv2/core/core.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-
 using namespace std;
 using namespace pcl::simulation;
 using namespace Eigen;
 
 namespace {
+
+const string kAnnotationsFolderName = "Annotations";
+const string kImagesFolderName = "Images";
+
+// All depth image pixels with value equal to or greater than this number (UINT
+// 16, mm as default for MS Kinect) will be treated as no-return values when
+// rescaling the depth image to [0,255].
+constexpr unsigned short kRescalingMaxDepth = 5000;
+
 // Utility to find bounding box of largest blob in the depth image.
 cv::Rect FindBoundingBox(const cv::Mat &im_depth) {
 
@@ -48,11 +52,11 @@ cv::Rect FindBoundingBox(const cv::Mat &im_depth) {
 
   return bounding_rect;
 }
+
 }  // namespace
 
 namespace sbpl_perception {
-DatasetGenerator::DatasetGenerator(int argc, char **argv) {
-
+DatasetGenerator::DatasetGenerator(int argc, char **argv) : output_dir_("") {
 
   char **dummy_argv;
   dummy_argv = new char *[2];
@@ -173,11 +177,7 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
                                                 double delta_yaw, double delta_height,
                                                 const string &output_dir_str) {
 
-  // Create the output directory if it doesn't exist.
-  boost::filesystem::path output_dir(output_dir_str);
-  if (!boost::filesystem::is_directory(output_dir)) {
-    boost::filesystem::create_directory(output_dir);
-  }
+  PrepareDatasetFolders(output_dir_str);
 
   const int num_poses = 2 * M_PI / static_cast<double>(delta_yaw);
 
@@ -187,6 +187,7 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
   // Generate depth images for each object individually. We won't consider
   // multi-object combinations here.
   int model_num = 0;
+
   for (const auto &object_model : object_models_) {
     vector<ObjectModel> models_in_scene = {object_model};
     int num_images = 0;
@@ -216,13 +217,15 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
           cv::imshow("Depth Image", c_image);
           cv::waitKey(1);
 
-          // Write image to disk.
-          string image_name = std::to_string(model_num) + "_" + std::to_string(num_images) + ".png";
-          boost::filesystem::path image_path = output_dir / image_name;
-          // TODO: figure out how to best representate no-return values for
-          // depth images.
-          cv::imwrite(image_path.native(), c_image);
-          
+          // Write training sample to disk.
+          string name = std::to_string(model_num) + "_" + std::to_string(num_images);
+          vector<cv::Rect> bboxes = {bounding_rect};
+          vector<int> class_ids = {model_num};
+          static cv::Mat rescaled_depth_image;
+          RescaleDepthImage(cv_depth_image, rescaled_depth_image, 0, kRescalingMaxDepth);
+
+          WriteToDisk(name, rescaled_depth_image, bboxes, class_ids);
+
           num_images++;
 
           // If this is a rotationally symmetric object, just one camera pose
@@ -239,4 +242,64 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
     model_num++;
   }
 }
+
+void DatasetGenerator::PrepareDatasetFolders(const string &output_dir_str) {
+  // Create the output directory if it doesn't exist.
+  output_dir_ = output_dir_str;
+  boost::filesystem::path images_dir = output_dir_ / kImagesFolderName;
+  boost::filesystem::path annotations_dir = output_dir_ / kAnnotationsFolderName;
+
+  if (!boost::filesystem::is_directory(output_dir_)) {
+    boost::filesystem::create_directory(output_dir_);
+  }
+
+  if (!boost::filesystem::is_directory(images_dir)) {
+    boost::filesystem::create_directory(images_dir);
+  }
+
+  if (!boost::filesystem::is_directory(annotations_dir)) {
+    boost::filesystem::create_directory(annotations_dir);
+  }
+}
+
+
+void DatasetGenerator::WriteToDisk(const string &name, const cv::Mat &image,
+                                   const vector<cv::Rect> &bboxes, const vector<int> &class_ids) {
+  assert(output_dir_.native() != "");
+  assert(bboxes.size() == class_ids.size());
+
+
+  boost::filesystem::path image_path = output_dir_ / kImagesFolderName / (name + std::string(".png"));
+  boost::filesystem::path annotation_path = output_dir_ /
+                                            kAnnotationsFolderName / (name + std::string(".txt"));
+
+  // Write image.
+  // TODO: figure out how to best representate no-return values for
+  // depth images.
+  cv::imwrite(image_path.native(), image);
+
+  // Write annotation file:
+  // # objects
+  // one line for each object's class
+  // one line for each object's bbox
+
+  ofstream fs;
+  fs.open(annotation_path.c_str());
+
+  fs << bboxes.size() << "\n";
+
+  for (int class_id : class_ids) {
+    fs << class_id << "\n";
+  }
+
+  // NOTE: bbox is saved as xmin ymin xmax ymax, where X and Y are in OpenCV
+  // convention.
+  for (const auto &bbox : bboxes) {
+    fs << bbox.tl().x << " " << bbox.tl().y << " "
+       << bbox.br().x << " " << bbox.br().y << "\n";
+  }
+
+  fs.close();
+}
 }  // namespace
+
