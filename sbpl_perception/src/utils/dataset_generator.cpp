@@ -7,6 +7,8 @@
 
 #include <ros/ros.h>
 
+#include <iostream>
+
 using namespace std;
 using namespace pcl::simulation;
 using namespace Eigen;
@@ -15,6 +17,8 @@ namespace {
 
 const string kAnnotationsFolderName = "Annotations";
 const string kImagesFolderName = "Images";
+const string kImageSetsFolderName = "ImageSets";
+const string kImageSetsAllImagesFileName = "all_images";
 
 // All depth image pixels with value equal to or greater than this number (UINT
 // 16, mm as default for MS Kinect) will be treated as no-return values when
@@ -102,7 +106,7 @@ DatasetGenerator::DatasetGenerator(int argc, char **argv) : output_dir_("") {
   for (const auto &model_meta_data : model_bank) {
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFile (model_meta_data.file.c_str(), mesh);
-    ObjectModel obj_model(mesh, model_meta_data.file.c_str(),
+    ObjectModel obj_model(mesh, model_meta_data.name,
                           model_meta_data.symmetric,
                           model_meta_data.flipped);
     object_models_.push_back(obj_model);
@@ -212,18 +216,19 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
           const cv::Rect bounding_rect = FindBoundingBox(cv_depth_image);
 
           cv::Scalar color = cv::Scalar(0, 255, 0);
-          cv::rectangle(c_image, bounding_rect.tl(), bounding_rect.br(), color, 2,
-                        8, 0 );
+          // cv::rectangle(c_image, bounding_rect.tl(), bounding_rect.br(), color, 2,
+          //               8, 0 );
           cv::imshow("Depth Image", c_image);
           cv::waitKey(1);
 
           // Write training sample to disk.
-          string name = std::to_string(model_num) + "_" + std::to_string(num_images);
+          string name = object_model.name() + "_" + std::to_string(num_images);
           vector<cv::Rect> bboxes = {bounding_rect};
-          vector<int> class_ids = {model_num};
+          vector<string> class_ids = {object_model.name()};
           static cv::Mat rescaled_depth_image;
           RescaleDepthImage(cv_depth_image, rescaled_depth_image, 0, kRescalingMaxDepth);
 
+          // WriteToDisk(name, rescaled_depth_image, bboxes, class_ids);
           WriteToDisk(name, rescaled_depth_image, bboxes, class_ids);
 
           num_images++;
@@ -248,6 +253,7 @@ void DatasetGenerator::PrepareDatasetFolders(const string &output_dir_str) {
   output_dir_ = output_dir_str;
   boost::filesystem::path images_dir = output_dir_ / kImagesFolderName;
   boost::filesystem::path annotations_dir = output_dir_ / kAnnotationsFolderName;
+  boost::filesystem::path imagesets_dir = output_dir_ / kImageSetsFolderName;
 
   if (!boost::filesystem::is_directory(output_dir_)) {
     boost::filesystem::create_directory(output_dir_);
@@ -260,11 +266,21 @@ void DatasetGenerator::PrepareDatasetFolders(const string &output_dir_str) {
   if (!boost::filesystem::is_directory(annotations_dir)) {
     boost::filesystem::create_directory(annotations_dir);
   }
+
+  if (!boost::filesystem::is_directory(imagesets_dir)) {
+    boost::filesystem::create_directory(imagesets_dir);
+  }
+
+  // Clear the all_images index file if it already exists.
+  boost::filesystem::path imagesets_all_path = output_dir_ /
+                                            kImageSetsFolderName / (kImageSetsAllImagesFileName + std::string(".txt"));
+  ofstream fs;
+  fs.open(imagesets_all_path.c_str());
+  fs.close();
 }
 
-
 void DatasetGenerator::WriteToDisk(const string &name, const cv::Mat &image,
-                                   const vector<cv::Rect> &bboxes, const vector<int> &class_ids) {
+                                   const vector<cv::Rect> &bboxes, const vector<string> &class_ids) {
   assert(output_dir_.native() != "");
   assert(bboxes.size() == class_ids.size());
 
@@ -272,6 +288,8 @@ void DatasetGenerator::WriteToDisk(const string &name, const cv::Mat &image,
   boost::filesystem::path image_path = output_dir_ / kImagesFolderName / (name + std::string(".png"));
   boost::filesystem::path annotation_path = output_dir_ /
                                             kAnnotationsFolderName / (name + std::string(".txt"));
+  boost::filesystem::path imagesets_all_path = output_dir_ /
+                                            kImageSetsFolderName / (kImageSetsAllImagesFileName + std::string(".txt"));
 
   // Write image.
   // TODO: figure out how to best representate no-return values for
@@ -288,7 +306,7 @@ void DatasetGenerator::WriteToDisk(const string &name, const cv::Mat &image,
 
   fs << bboxes.size() << "\n";
 
-  for (int class_id : class_ids) {
+  for (const string &class_id : class_ids) {
     fs << class_id << "\n";
   }
 
@@ -299,6 +317,11 @@ void DatasetGenerator::WriteToDisk(const string &name, const cv::Mat &image,
        << bbox.br().x << " " << bbox.br().y << "\n";
   }
 
+  fs.close();
+
+  // Append to ImageSets
+  fs.open(imagesets_all_path.c_str(), ios::out | ios::app);
+  fs << name << "\n";
   fs.close();
 }
 }  // namespace

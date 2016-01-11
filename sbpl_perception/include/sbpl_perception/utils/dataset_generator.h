@@ -48,7 +48,7 @@ class DatasetGenerator {
   // Utility to write image and bounding box annotations to disk. Assumes that
   // PrepareDatasetFolders has been called already.
   void WriteToDisk(const std::string &name, const cv::Mat &image,
-                   const std::vector<cv::Rect> &bboxes, const std::vector<int> &class_ids);
+                   const std::vector<cv::Rect> &bboxes, const std::vector<std::string> &class_ids);
 };
 }  // namespace
 

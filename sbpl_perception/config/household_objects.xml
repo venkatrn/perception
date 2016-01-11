@@ -1,10 +1,130 @@
 <launch>
   <rosparam param="model_bank" subst_value="True">
+
     [
-      [glass,
-      $(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply,
+
+      <!--Format-->
+      <!--
+      [name,
+      file_descriptor,
+      flipped (up-side down in the images wrt to the model),
+      symmetric (rotationally symmetric about Z-axis)]  
+      -->
+
+      [glass_1,
+      $(find sbpl_perception)/data/RAM/cad_models/000.921.13.dec.ply,
+      true, 
+      true], 
+
+      [glass_2,
+      $(find sbpl_perception)/data/RAM/cad_models/001.172.98.dec.ply,
       false, 
       true], 
+
+      [glass_3,
+      $(find sbpl_perception)/data/RAM/cad_models/200.580.66.ply,
+      true, 
+      true], 
+
+      [glass_4,
+      $(find sbpl_perception)/data/RAM/cad_models/300.834.71.ply,
+      true, 
+      true], 
+
+      [glass_5,
+      $(find sbpl_perception)/data/RAM/cad_models/301.290.30.ply,
+      true, 
+      true], 
+
+      [glass_6,
+      $(find sbpl_perception)/data/RAM/cad_models/500.312.83.dec.ply,
+      true, 
+      true], 
+
+      [glass_7,
+      $(find sbpl_perception)/data/RAM/cad_models/800.921.09.ply,
+      true, 
+      true], 
+
+      [glass_8,
+      $(find sbpl_perception)/data/RAM/cad_models/801.348.21.dec.ply,
+      true, 
+      true], 
+
+      [wine_glass_1,
+      $(find sbpl_perception)/data/RAM/cad_models/201.327.78.ply,
+      true, 
+      true], 
+
+      [wine_glass_2,
+      $(find sbpl_perception)/data/RAM/cad_models/300.151.23.ply,
+      true, 
+      true], 
+
+      [wine_glass_3,
+      $(find sbpl_perception)/data/RAM/cad_models/700.580.64.ply,
+      false, 
+      true], 
+
+      [wine_glass_4,
+      $(find sbpl_perception)/data/RAM/cad_models/701.330.68.dec.ply,
+      false, 
+      true], 
+
+      [wine_glass_5,
+      $(find sbpl_perception)/data/RAM/cad_models/800.919.49.dec.ply,
+      true, 
+      true], 
+
+      [wine_glass_6,
+      $(find sbpl_perception)/data/RAM/cad_models/963.111.00.dec.ply,
+      true, 
+      true], 
+
+      [cup_1,
+      $(find sbpl_perception)/data/RAM/cad_models/100.919.00-cup.ply,
+      true, 
+      false], 
+
+      [cup_2,
+      $(find sbpl_perception)/data/RAM/cad_models/100.922.16.ply,
+      false, 
+      false], 
+
+      [cup_3,
+      $(find sbpl_perception)/data/RAM/cad_models/101.328.92.ply,
+      false, 
+      false], 
+
+      [bowl_1,
+      $(find sbpl_perception)/data/RAM/cad_models/200.572.55.ply,
+      true, 
+      true], 
+
+      [pitcher_1,
+      $(find sbpl_perception)/data/RAM/cad_models/242.09.6219-pitcher.ply,
+      false, 
+      false], 
+
+      [kettle,
+      $(find sbpl_perception)/data/RAM/cad_models/600.832.62.ply,
+      false, 
+      false], 
+
+      [all_detergent,
+      $(find sbpl_perception)/data/RAM/cad_models/all.ply,
+      false, 
+      false], 
+
+      [all_detergent_small,
+      $(find sbpl_perception)/data/RAM/cad_models/all-small.ply,
+      false, 
+      false], 
+
+      [brita_pitcher,
+      $(find sbpl_perception)/data/RAM/cad_models/Brita_water_filter_pitcher_6cup_x2.ply,
+      false, 
+      false], 
 
       [clorox,
       $(find sbpl_perception)/data/RAM/cad_models/clorox.ply,
@@ -31,13 +151,43 @@
       false,
       false],
 
+      [peroxide,
+      $(find sbpl_perception)/data/RAM/cad_models/peroxide.ply,
+      false, 
+      true], 
+
       [pur_water_pitcher_filter,
       $(find sbpl_perception)/data/RAM/cad_models/pur_water_pitcher_filter.ply,
       false,
       false],
 
+      [red_mug,
+      $(find sbpl_perception)/data/RAM/cad_models/red_mug.ply,
+      false,
+      false],
+
+      [simple_green,
+      $(find sbpl_perception)/data/RAM/cad_models/simple_green.ply,
+      false,
+      false],
+
       [suave-3in1,
       $(find sbpl_perception)/data/RAM/cad_models/suave-3in1.ply,
+      false,
+      true],
+
+      [tide,
+      $(find sbpl_perception)/data/RAM/cad_models/tide.ply,
+      false,
+      false],
+
+      [tilex_spray,
+      $(find sbpl_perception)/data/RAM/cad_models/tilex_spray_bottle.ply,
+      false,
+      false],
+
+      [vf_paper_bowl,
+      $(find sbpl_perception)/data/RAM/cad_models/vf_paper_bowl.ply,
       false,
       true],
     ]
