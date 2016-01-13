@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
   const double delta_yaw = 12 * M_PI / 180.0;
   const double delta_height = 0.25;
   
-  const string output_dir = "/tmp/WillowDataset/";
+  const string output_dir = "/usr0/home/venkatrn/WillowDataset/";
   dataset_generator.GenerateCylindersDataset(min_radius, max_radius,
                                              delta_radius, height, delta_yaw, delta_height, output_dir);
   return 0;

@@ -7,6 +7,7 @@
 
 #include <ros/ros.h>
 
+#include <chrono>
 #include <iostream>
 
 using namespace std;
@@ -20,13 +21,16 @@ const string kImagesFolderName = "Images";
 const string kImageSetsFolderName = "ImageSets";
 const string kImageSetsAllImagesFileName = "all_images";
 
-// All depth image pixels with value equal to or greater than this number (UINT
-// 16, mm as default for MS Kinect) will be treated as no-return values when
-// rescaling the depth image to [0,255].
-constexpr unsigned short kRescalingMaxDepth = 5000;
+// Percent of valid points in the image that should be set to no-return when
+// adding speckle noise.
+const int kSpeckleNoisePercent = 15;
+const int kSpeckleNoiseRadius = 1;  // pixels
+}  // namespace
+
+namespace sbpl_perception {
 
 // Utility to find bounding box of largest blob in the depth image.
-cv::Rect FindBoundingBox(const cv::Mat &im_depth) {
+cv::Rect DatasetGenerator::FindLargestBlobBBox(const cv::Mat &im_depth) {
 
   cv::Mat im_bw;
   im_bw = im_depth < sbpl_perception::kKinectMaxDepth;
@@ -52,14 +56,52 @@ cv::Rect FindBoundingBox(const cv::Mat &im_depth) {
     }
   }
 
-  // drawContours(im_rgb, contours, largest_contour_index, Scalar(255), CV_FILLED, 8, hierarchy);
-
   return bounding_rect;
 }
 
-}  // namespace
+void DatasetGenerator::AddSpeckleNoiseToDepthImage(const cv::Mat &input,
+                                                   cv::Mat &output, double percent, int noise_radius) {
+  assert(percent >= 0 && percent <= 100);
 
-namespace sbpl_perception {
+  // Find all the valid points in the depth image.
+  auto valid_points = GetValidPointsInBoundingBox(input, cv::Rect(cv::Point(0,
+                                                                            0), cv::Point(kDepthImageWidth, kDepthImageHeight)));
+  int num_random_points = percent * static_cast<double>(valid_points.size()) /
+                          100.0;
+  std::random_shuffle(valid_points.begin(), valid_points.end());
+
+  output = input.clone();
+
+  for (int ii = 0; ii < num_random_points; ++ii) {
+    // output.at<unsigned short>(valid_points[ii]) = kKinectMaxDepth;
+    const cv::Point center(valid_points[ii]);
+    cv::circle(output, center, noise_radius, cv::Scalar(kKinectMaxDepth),
+               CV_FILLED);
+  }
+}
+
+// Each occlusion is a circle of radius equal to the smaller of (height, width)
+// of the object's bounding box.
+void DatasetGenerator::AddOcclusionToDepthImage(const cv::Mat &input,
+                                                cv::Mat &output) {
+  // Find all the valid points in the depth image.
+  cv::Rect bbox = FindLargestBlobBBox(input);
+
+  auto valid_points = GetValidPointsInBoundingBox(input, bbox);
+
+  std::uniform_int_distribution<int> distribution(0,
+                                                  static_cast<int>(valid_points.size()));
+
+  unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+  std::default_random_engine generator(seed);
+  const int random_idx = distribution(generator);
+  const cv::Point center(valid_points[random_idx]);
+  const int radius = static_cast<int>(std::min(bbox.height, bbox.width) / 3.0);
+
+  output = input.clone();
+  cv::circle(output, center, radius, cv::Scalar(kKinectMaxDepth), CV_FILLED);
+}
+
 DatasetGenerator::DatasetGenerator(int argc, char **argv) : output_dir_("") {
 
   char **dummy_argv;
@@ -195,6 +237,7 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
   for (const auto &object_model : object_models_) {
     vector<ObjectModel> models_in_scene = {object_model};
     int num_images = 0;
+    int image_id = 0;
 
     for (double radius = min_radius; radius <= max_radius;
          radius += delta_radius) {
@@ -207,32 +250,47 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
         for (const auto &camera_pose : camera_poses) {
           vector<unsigned short> depth_image = GetDepthImage(models_in_scene,
                                                              camera_pose);
-          cv::Mat cv_depth_image;
+          static cv::Mat cv_depth_image;
           cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1,
                                    depth_image.data());
-          static cv::Mat c_image;
-          ColorizeDepthImage(cv_depth_image, c_image, 0, 3000);
 
-          const cv::Rect bounding_rect = FindBoundingBox(cv_depth_image);
+          // Add noise and occlusion.
+          // NOTE: the order matters (false, true) since I am overwriting
+          // cv_depth_image.
+          vector<bool> noise_mode = {false, true};
 
-          cv::Scalar color = cv::Scalar(0, 255, 0);
-          // cv::rectangle(c_image, bounding_rect.tl(), bounding_rect.br(), color, 2,
-          //               8, 0 );
-          cv::imshow("Depth Image", c_image);
-          cv::waitKey(1);
+          for (const bool add_noise : noise_mode) {
+            if (add_noise) {
+              AddOcclusionToDepthImage(cv_depth_image, cv_depth_image);
+              AddSpeckleNoiseToDepthImage(cv_depth_image, cv_depth_image,
+                                          kSpeckleNoisePercent, kSpeckleNoiseRadius);
+            }
 
-          // Write training sample to disk.
-          string name = object_model.name() + "_" + std::to_string(num_images);
-          vector<cv::Rect> bboxes = {bounding_rect};
-          vector<string> class_ids = {object_model.name()};
-          static cv::Mat rescaled_depth_image;
-          RescaleDepthImage(cv_depth_image, rescaled_depth_image, 0, kRescalingMaxDepth);
+            const cv::Rect bounding_rect = FindLargestBlobBBox(cv_depth_image);
 
-          // WriteToDisk(name, rescaled_depth_image, bboxes, class_ids);
-          WriteToDisk(name, rescaled_depth_image, bboxes, class_ids);
+            // static cv::Mat c_image;
+            // ColorizeDepthImage(cv_depth_image, c_image, 0, 3000);
+            // cv::Scalar color = cv::Scalar(0, 255, 0);
+            // cv::rectangle(c_image, bounding_rect.tl(), bounding_rect.br(), color, 2,
+            // 8, 0 );
 
-          num_images++;
+            // Write training sample to disk.
+            string noise_suffix = add_noise ? "_noisy" : "";
+            string name = object_model.name() + "_" + std::to_string(
+                            image_id) + noise_suffix;
+            vector<cv::Rect> bboxes = {bounding_rect};
+            vector<string> class_ids = {object_model.name()};
+            static cv::Mat encoded_depth_image;
+            EncodeDepthImage(cv_depth_image, encoded_depth_image);
 
+            cv::imshow("Depth Image", encoded_depth_image);
+            cv::waitKey(1);
+
+            // WriteToDisk(name, encoded_depth_image, bboxes, class_ids);
+            WriteToDisk(name, encoded_depth_image, bboxes, class_ids);
+            num_images++;
+          }
+          image_id++;
           // If this is a rotationally symmetric object, just one camera pose
           // is sufficient.
           if (object_model.symmetric()) {
@@ -273,7 +331,7 @@ void DatasetGenerator::PrepareDatasetFolders(const string &output_dir_str) {
 
   // Clear the all_images index file if it already exists.
   boost::filesystem::path imagesets_all_path = output_dir_ /
-                                            kImageSetsFolderName / (kImageSetsAllImagesFileName + std::string(".txt"));
+                                               kImageSetsFolderName / (kImageSetsAllImagesFileName + std::string(".txt"));
   ofstream fs;
   fs.open(imagesets_all_path.c_str());
   fs.close();
@@ -285,11 +343,12 @@ void DatasetGenerator::WriteToDisk(const string &name, const cv::Mat &image,
   assert(bboxes.size() == class_ids.size());
 
 
-  boost::filesystem::path image_path = output_dir_ / kImagesFolderName / (name + std::string(".png"));
+  boost::filesystem::path image_path = output_dir_ / kImagesFolderName /
+                                       (name + std::string(".png"));
   boost::filesystem::path annotation_path = output_dir_ /
                                             kAnnotationsFolderName / (name + std::string(".txt"));
   boost::filesystem::path imagesets_all_path = output_dir_ /
-                                            kImageSetsFolderName / (kImageSetsAllImagesFileName + std::string(".txt"));
+                                               kImageSetsFolderName / (kImageSetsAllImagesFileName + std::string(".txt"));
 
   // Write image.
   // TODO: figure out how to best representate no-return values for
@@ -325,4 +384,5 @@ void DatasetGenerator::WriteToDisk(const string &name, const cv::Mat &image,
   fs.close();
 }
 }  // namespace
+
 

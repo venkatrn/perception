@@ -51,6 +51,7 @@ include_directories(MPI_INCLUDE_PATH)
 #common commands for building c++ executables and libraries
 rosbuild_add_boost_directories()
 rosbuild_add_library(${PROJECT_NAME}
+  src/rcnn_heuristic.cpp
   src/discretization_manager.cpp
   src/graph_state.cpp
   src/object_state.cpp
@@ -70,6 +71,13 @@ target_link_libraries(real_test libvtkCommon.so libvtkFiltering.so libvtkRenderi
   libvtkGraphics.so)
 rosbuild_link_boost(real_test mpi serialization)
 rosbuild_add_openmp_flags(real_test)
+
+rosbuild_add_executable(heuristic_test src/experiments/heuristic_test.cpp)
+target_link_libraries(heuristic_test ${PROJECT_NAME})
+target_link_libraries(heuristic_test libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  libvtkGraphics.so)
+rosbuild_link_boost(heuristic_test mpi serialization)
+rosbuild_add_openmp_flags(heuristic_test)
 
 rosbuild_add_executable(sim_test src/experiments/sim_test.cpp)
 target_link_libraries(sim_test ${PROJECT_NAME})

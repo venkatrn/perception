@@ -895,14 +895,17 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     // The first operation removes self occluding points, and the second one
     // removes points occluded by other objects in the scene.
     new_obj_depth_image = GetDepthImageFromPointCloud(cloud_out);
-    
+
     vector<int> new_pixel_indices_unused;
     unsigned short succ_min_depth_unused, succ_max_depth_unused;
-    if (IsOccluded(source_depth_image, new_obj_depth_image, &new_pixel_indices_unused,
+
+    if (IsOccluded(source_depth_image, new_obj_depth_image,
+                   &new_pixel_indices_unused,
                    &succ_min_depth_unused,
                    &succ_max_depth_unused)) {
       return -1;
     }
+
     new_obj_depth_image = ApplyOcclusionMask(new_obj_depth_image,
                                              source_depth_image);
 
@@ -915,13 +918,17 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     const auto &last_object = adjusted_last_object_state.object_states().back();
     adjusted_child_state->mutable_object_states()[last_idx] =
       last_object;
+
     if (!IsValidPose(source_state, last_object_id,
                      last_object.cont_pose(), true)) {
       return -1;
     }
+
     vector<int> new_pixel_indices_unused;
     unsigned short succ_min_depth_unused, succ_max_depth_unused;
-    if (IsOccluded(source_depth_image, new_obj_depth_image, &new_pixel_indices_unused,
+
+    if (IsOccluded(source_depth_image, new_obj_depth_image,
+                   &new_pixel_indices_unused,
                    &succ_min_depth_unused,
                    &succ_max_depth_unused)) {
       return -1;
@@ -1017,7 +1024,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
       int i_in = (kDepthImageHeight - 1 - y) * kDepthImageWidth + x
                  ; // flip up down (buffer index)
 
-      if (new_obj_depth_image[i] != kKinectMaxDepth && source_depth_image[i] == kKinectMaxDepth) {
+      if (new_obj_depth_image[i] != kKinectMaxDepth &&
+          source_depth_image[i] == kKinectMaxDepth) {
         new_pixel_buffer[i_in] = succ_depth_buffer[i_in];
       } else {
         new_pixel_buffer[i_in] = 1.0; // max range
@@ -1073,7 +1081,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
       int i_in = (kDepthImageHeight - 1 - y) * kDepthImageWidth + x
                  ; // flip up down (buffer index)
 
-      if (depth_image[i] != kKinectMaxDepth && source_depth_image[i] == kKinectMaxDepth) {
+      if (depth_image[i] != kKinectMaxDepth &&
+          source_depth_image[i] == kKinectMaxDepth) {
         new_pixel_buffer[i_in] = succ_depth_buffer[i_in];
       } else {
         new_pixel_buffer[i_in] = 1.0; // max range
@@ -1144,18 +1153,21 @@ bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
       new_pixel_indices->push_back(jj);
 
       // Find mininum depth of new pixels
-      if (succ_depth_image[jj] != kKinectMaxDepth && succ_depth_image[jj] < *min_succ_depth) {
+      if (succ_depth_image[jj] != kKinectMaxDepth &&
+          succ_depth_image[jj] < *min_succ_depth) {
         *min_succ_depth = succ_depth_image[jj];
       }
 
       // Find maximum depth of new pixels
-      if (succ_depth_image[jj] != kKinectMaxDepth && succ_depth_image[jj] > *max_succ_depth) {
+      if (succ_depth_image[jj] != kKinectMaxDepth &&
+          succ_depth_image[jj] > *max_succ_depth) {
         *max_succ_depth = succ_depth_image[jj];
       }
     }
 
     // Occlusion
-    if (succ_depth_image[jj] != kKinectMaxDepth && parent_depth_image[jj] != kKinectMaxDepth &&
+    if (succ_depth_image[jj] != kKinectMaxDepth &&
+        parent_depth_image[jj] != kKinectMaxDepth &&
         succ_depth_image[jj] < parent_depth_image[jj]) {
       is_occluded = true;
       break;
@@ -1446,7 +1458,8 @@ void EnvObjectRecognition::PrintImage(string fname,
     for (int jj = 0; jj < kDepthImageWidth; ++jj) {
       int idx = ii * kDepthImageWidth + jj;
 
-      if (depth_image[idx] > max_observed_depth_ || depth_image[idx] == kKinectMaxDepth) {
+      if (depth_image[idx] > max_observed_depth_ ||
+          depth_image[idx] == kKinectMaxDepth) {
         image.at<uchar>(ii, jj) = 0;
       } else if (depth_image[idx] < min_observed_depth_) {
         image.at<uchar>(ii, jj) = 255;
@@ -1727,20 +1740,8 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   transformPointCloud(*input.cloud, *depth_img_cloud,
                       transform);
 
-  vector<unsigned short> depth_image(kNumPixels);
-
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      PointT p = depth_img_cloud->at(jj, ii);
-
-      if (isnan(p.z) || isinf(p.z)) {
-        depth_image[ii * kDepthImageWidth + jj] = kKinectMaxDepth;
-      } else {
-        depth_image[ii * kDepthImageWidth + jj] = static_cast<unsigned short>
-                                                  (p.z * 1000.0);
-      }
-    }
-  }
+  vector<unsigned short> depth_image =
+    sbpl_perception::OrganizedPointCloudToKinectDepthImage(depth_img_cloud);
 
   *observed_organized_cloud_ = *depth_img_cloud;
 
@@ -2116,5 +2117,6 @@ vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
 
   return masked_depth_image;
 }
+
 
 

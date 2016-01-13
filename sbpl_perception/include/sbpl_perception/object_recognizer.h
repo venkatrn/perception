@@ -20,11 +20,15 @@ class ObjectRecognizer {
   const std::vector<ModelMetaData> &GetModelBank() const {
     return env_config_.model_bank;
   }
-  const std::vector<PlannerStats> &GetLastPlanningEpisodeState() const {
+  const std::vector<PlannerStats> &GetLastPlanningEpisodeStats() const {
     return last_planning_stats_;
   }
+  
+  std::shared_ptr<EnvObjectRecognition> GetMutableEnvironment() {
+    return env_obj_;
+  }
  private:
-  mutable std::unique_ptr<EnvObjectRecognition> env_obj_;
+  mutable std::shared_ptr<EnvObjectRecognition> env_obj_;
   mutable std::unique_ptr<MHAPlanner> planner_;
   mutable std::vector<PlannerStats> last_planning_stats_;
 

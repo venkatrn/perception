@@ -42,34 +42,14 @@
 #include <unordered_map>
 #include <vector>
 
-struct ModelMetaData {
-  // ID for the model.
-  std::string name;
-  // Path to 3D model.
-  std::string file;
-  // Is model flipped abound z-axis.
-  bool flipped;
-  // Is model symmetric about z-axis.
-  bool symmetric;
-};
+using sbpl_perception::RecognitionInput;
+using sbpl_perception::ModelMetaData;
 
 struct EnvConfig {
   // Search resolution.
   double res, theta_res;
   // The model-bank.
   std::vector<ModelMetaData> model_bank;
-};
-
-struct RecognitionInput {
-  // The input point cloud. *MUST* be an organized point cloud.
-  PointCloudPtr cloud;
-  // The IDs of the object models present in the scene.
-  std::vector<std::string> model_names;
-  // Camera pose relative to world origin.
-  Eigen::Isometry3d camera_pose;
-  // Environment bounds.
-  double x_min, x_max, y_min, y_max;
-  double table_height;
 };
 
 struct EnvParams {
@@ -81,15 +61,6 @@ struct EnvParams {
   int num_objects; // This is the number of objects on the table
   int num_models; // This is the number of models available (can be more or less than number of objects on table
 };
-
-
-inline void SetModelMetaData(const std::string &name, const std::string &file,
-                      const bool flipped, const bool symmetric, ModelMetaData *model_meta_data) {
-  model_meta_data->name = name;
-  model_meta_data->file = file;
-  model_meta_data->flipped = flipped;
-  model_meta_data->symmetric = symmetric;
-}
 
 class EnvObjectRecognition : public EnvironmentMHA {
  public:

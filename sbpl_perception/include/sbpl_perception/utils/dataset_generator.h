@@ -1,7 +1,10 @@
 #pragma once
 
-#include <sbpl_perception/search_env.h>
+#include <sbpl_perception/object_model.h>
+#include <kinect_sim/simulation_io.hpp>
 
+#include <random>
+#include <string>
 #include <vector>
 
 #include <boost/filesystem.hpp>
@@ -23,10 +26,17 @@ class DatasetGenerator {
                                 double delta_radius, double height, double delta_yaw, double delta_height,
                                 const std::string &output_dir);
   void GenerateViewSphereDataset(const std::string &output_dir);
+
+  // A bunch of useful static member functions.
+  static cv::Rect FindLargestBlobBBox(const cv::Mat &im_depth);
+  static void AddOcclusionToDepthImage(const cv::Mat &input, cv::Mat &output);
+  static void AddSpeckleNoiseToDepthImage(const cv::Mat &input, cv::Mat &output, double percent, int noise_radius);
+
  private:
   boost::filesystem::path output_dir_;
   pcl::simulation::SimExample::Ptr kinect_simulator_;
   std::vector<ObjectModel> object_models_;
+
 
   std::vector<unsigned short> GetDepthImage(const std::vector<ObjectModel>
                                             &models_in_scene, const Eigen::Isometry3d &camera_pose);
@@ -50,6 +60,5 @@ class DatasetGenerator {
   void WriteToDisk(const std::string &name, const cv::Mat &image,
                    const std::vector<cv::Rect> &bboxes, const std::vector<std::string> &class_ids);
 };
+
 }  // namespace
-
-
