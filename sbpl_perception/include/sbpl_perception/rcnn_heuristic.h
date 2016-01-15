@@ -21,6 +21,8 @@ struct Detection {
 
 class RCNNHeuristic {
  public:
+  typedef std::vector<std::function<int(const GraphState &state)>> Heuristics;
+  typedef std::unordered_map<std::string, std::vector<Detection>> DetectionsMap;
   RCNNHeuristic(const RecognitionInput &input,
                 const pcl::simulation::SimExample::Ptr kinect_simulator);
   double GetGoalHeuristic(const GraphState &state) const;
@@ -34,10 +36,22 @@ class RCNNHeuristic {
   cv::Mat input_depth_image_;
   cv::Mat encoded_depth_image_;
   // A list of detections for each class.
-  std::unordered_map<std::string, std::vector<Detection>> detections_dict_;
+  DetectionsMap detections_dict_;
 
   // Find ROIs in the image by projecting 3D bounding boxes to the image.
   void ComputeROIsFromClusters();
+
+  Heuristics CreateHeuristicsFromDetections(const DetectionsMap &detections);
+  
+  // A list of heuristics: each detected bounding box (assuming thesholding and
+  // NMS is already done) is a heuristic for the search.
+  Heuristics heuristics_;
+
+  static int GenericDetectionHeuristic(const GraphState& state, const std::string &object_id, const ContPose &detected_pose);
+
+  // Convert a bounding box to a continuous pose by taking the centroid of
+  // table-projected points within the point cloud, and setting the yaw to zero.
+  ContPose GetPoseFromBBox(const cv::Mat &depth_image, const cv::Rect bbox);
+
 };
 } // namespace
-

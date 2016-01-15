@@ -130,4 +130,28 @@ vector<cv::Point> GetValidPointsInBoundingBox(const cv::Mat &depth_image, const 
   }
   return valid_points;
 }
+
+int PCLIndexToVectorIndex(int pcl_index) {
+  return pcl_index;
+}
+
+int VectorIndexToPCLIndex(int vector_index) {
+  return vector_index;
+}
+
+int OpenCVIndexToVectorIndex(int x, int y) {
+  return y * kDepthImageWidth + x;
+}
+
+int OpenCVIndexToPCLIndex(int x, int y) {
+  return VectorIndexToPCLIndex(OpenCVIndexToVectorIndex(x,y));
+}
+
+void VectorIndexToOpenCVIndex(int vector_index, int *x, int *y) {
+  *x = vector_index % kDepthImageWidth;
+  *y = vector_index / kDepthImageWidth;
+}
+void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y) {
+  VectorIndexToOpenCVIndex(PCLIndexToVectorIndex(pcl_index), x, y);
+}
 }  // namespace 

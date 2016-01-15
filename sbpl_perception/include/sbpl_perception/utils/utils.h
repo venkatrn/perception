@@ -4,6 +4,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/contrib/contrib.hpp>
 #include <perception_utils/pcl_typedefs.h>
+#include <sbpl_perception/object_state.h>
 
 #include <string>
 
@@ -74,4 +75,22 @@ std::vector<cv::Point> GetValidPointsInBoundingBox(const cv::Mat &depth_image, c
 // Converts an organized point cloud (assumed to be in meters) to a kinect depth image in the UINT16
 // format (millimeters), using the special value of kKinectMaxDepth for no-returns.
 std::vector<unsigned short> OrganizedPointCloudToKinectDepthImage(const PointCloudPtr depth_img_cloud);
-}  // namespace
+
+// Various index conversions.
+// Rememeber OpenCV point (x,y) corresponds to (col,row).
+// Vectorized depth image and PCL organized cloud share the same index.
+// All indices are 0-based.
+
+// Convert PCL organized point cloud index to vectorized depth image index.
+int PCLIndexToVectorIndex(int pcl_index);
+int VectorIndexToPCLIndex(int vector_index);
+// Convert OpenCV (x,y) index to PCL organized point cloud index.
+int OpenCVIndexToPCLIndex(int x, int y);
+// Convert OpenCV (x,y) index to vectorized depth image index.
+int OpenCVIndexToVectorIndex(int x, int y);
+// Convert vectorized depth image index to OpenCV (x,y) index.
+void VectorIndexToOpenCVIndex(int vector_index, int *x, int *y);
+// Convert PCL organized point cloud index to OpenCV (x,y) index.
+void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y);
+}
+// namespace

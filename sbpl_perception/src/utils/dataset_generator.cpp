@@ -247,29 +247,38 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
         GenerateHaloPoses(focus_center, radius, z, num_poses, &camera_poses);
 
 
+        bool symmetric_object = false;
         for (const auto &camera_pose : camera_poses) {
           vector<unsigned short> depth_image = GetDepthImage(models_in_scene,
                                                              camera_pose);
           static cv::Mat cv_depth_image;
-          cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1,
-                                   depth_image.data());
+          // Don't keep re-rendering if object is rotationally symmetric.
+          if (!symmetric_object) {
+            cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1,
+                                     depth_image.data());
+          }
+          // If this is a rotationally symmetric object, just one camera pose
+          // is sufficient, however we will create duplicates so that #training
+          // images per class is balanced.
+          symmetric_object = object_model.symmetric();
+          const cv::Rect bounding_rect = FindLargestBlobBBox(cv_depth_image);
 
           // Add noise and occlusion.
-          // NOTE: the order matters (false, true) since I am overwriting
-          // cv_depth_image.
           vector<bool> noise_mode = {false, true};
 
           for (const bool add_noise : noise_mode) {
+            static cv::Mat modified_depth_image;
+            cv_depth_image.copyTo(modified_depth_image);
+
             if (add_noise) {
-              AddOcclusionToDepthImage(cv_depth_image, cv_depth_image);
-              AddSpeckleNoiseToDepthImage(cv_depth_image, cv_depth_image,
+              AddOcclusionToDepthImage(cv_depth_image, modified_depth_image);
+              AddSpeckleNoiseToDepthImage(modified_depth_image, modified_depth_image,
                                           kSpeckleNoisePercent, kSpeckleNoiseRadius);
             }
 
-            const cv::Rect bounding_rect = FindLargestBlobBBox(cv_depth_image);
 
             // static cv::Mat c_image;
-            // ColorizeDepthImage(cv_depth_image, c_image, 0, 3000);
+            // ColorizeDepthImage(modified_depth_image, c_image, 0, 3000);
             // cv::Scalar color = cv::Scalar(0, 255, 0);
             // cv::rectangle(c_image, bounding_rect.tl(), bounding_rect.br(), color, 2,
             // 8, 0 );
@@ -281,7 +290,7 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
             vector<cv::Rect> bboxes = {bounding_rect};
             vector<string> class_ids = {object_model.name()};
             static cv::Mat encoded_depth_image;
-            EncodeDepthImage(cv_depth_image, encoded_depth_image);
+            EncodeDepthImage(modified_depth_image, encoded_depth_image);
 
             cv::imshow("Depth Image", encoded_depth_image);
             cv::waitKey(1);
@@ -291,11 +300,6 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
             num_images++;
           }
           image_id++;
-          // If this is a rotationally symmetric object, just one camera pose
-          // is sufficient.
-          if (object_model.symmetric()) {
-            break;
-          }
         }
       }
     }
