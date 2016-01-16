@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sbpl_perception/utils/utils.h>
+
 #include <Eigen/Geometry>
 
 #include <string>
@@ -21,5 +23,7 @@ class ConfigParser {
   double min_y, max_y;
   double table_height;
   Eigen::Isometry3d camera_pose;
+
+  std::vector<std::string> ConvertModelNamesInFileToIDs(const sbpl_perception::ModelBank &bank);
 };
 

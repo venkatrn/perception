@@ -97,3 +97,17 @@ void ConfigParser::Parse(const string &config_file) {
   fs.close();
   cout << "camera: " << endl << camera_pose.matrix() << endl;
 }
+
+std::vector<std::string> ConfigParser::ConvertModelNamesInFileToIDs(const sbpl_perception::ModelBank &bank) {
+  std::vector<std::string> model_ids;
+  for (const std::string &name : model_names) {
+    for (const auto &model : bank) {
+      if (model.file.find(name) != std::string::npos) {
+        model_ids.push_back(model.name);
+        break;
+      }
+    }
+  }
+  assert(model_ids.size() == model_names.size());
+  return model_ids;
+}

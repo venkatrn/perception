@@ -51,7 +51,7 @@ include_directories(MPI_INCLUDE_PATH)
 #common commands for building c++ executables and libraries
 rosbuild_add_boost_directories()
 rosbuild_add_library(${PROJECT_NAME}
-  src/rcnn_heuristic.cpp
+  src/rcnn_heuristic_factory.cpp
   src/discretization_manager.cpp
   src/graph_state.cpp
   src/object_state.cpp

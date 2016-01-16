@@ -11,7 +11,7 @@
 #include <sbpl/headers.h>
 #include <sbpl_perception/config_parser.h>
 #include <sbpl_perception/object_recognizer.h>
-#include <sbpl_perception/rcnn_heuristic.h>
+#include <sbpl_perception/rcnn_heuristic_factory.h>
 
 #include <pcl/io/pcd_io.h>
 
@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
   ObjectRecognizer object_recognizer(argc, argv, world);
 
   string config_file;
+
   if (world->rank() == kMasterRank) {
     ros::init(argc, argv, "experiments");
     ros::NodeHandle nh;
@@ -57,21 +58,25 @@ int main(int argc, char **argv) {
   input.y_max = parser.max_y;
   input.table_height = parser.table_height;
   input.camera_pose = parser.camera_pose;
-  input.model_names = parser.model_names;
+  input.model_names = parser.ConvertModelNamesInFileToIDs(
+                        object_recognizer.GetModelBank());
 
   // Objects for storing the point clouds.
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
+
   // Read the input PCD file from disk.
   if (pcl::io::loadPCDFile<PointT>(parser.pcd_file_path.c_str(),
                                    *cloud_in) != 0) {
     cerr << "Could not find input PCD file!" << endl;
     return -1;
   }
+
   input.cloud = cloud_in;
 
   auto env_obj = object_recognizer.GetMutableEnvironment();
-  RCNNHeuristic rcnn_heuristic(input, env_obj->kinect_simulator_);
-  rcnn_heuristic.ComputeROIsFromClusters();
+  RCNNHeuristicFactory rcnn_heuristic_factory(input, env_obj->kinect_simulator_);
+  Heuristics heuristics = rcnn_heuristic_factory.GetHeuristics();
+  // rcnn_heuristic_factory.ComputeROIsFromClusters();
 
   return 0;
 }

@@ -4,8 +4,10 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/contrib/contrib.hpp>
 #include <perception_utils/pcl_typedefs.h>
+#include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/object_state.h>
 
+#include <functional>
 #include <string>
 
 namespace sbpl_perception {
@@ -77,10 +79,9 @@ std::vector<cv::Point> GetValidPointsInBoundingBox(const cv::Mat &depth_image, c
 std::vector<unsigned short> OrganizedPointCloudToKinectDepthImage(const PointCloudPtr depth_img_cloud);
 
 // Various index conversions.
-// Rememeber OpenCV point (x,y) corresponds to (col,row).
 // Vectorized depth image and PCL organized cloud share the same index.
 // All indices are 0-based.
-
+// Rememeber OpenCV point (x,y) corresponds to (col,row).
 // Convert PCL organized point cloud index to vectorized depth image index.
 int PCLIndexToVectorIndex(int pcl_index);
 int VectorIndexToPCLIndex(int vector_index);
@@ -92,5 +93,10 @@ int OpenCVIndexToVectorIndex(int x, int y);
 void VectorIndexToOpenCVIndex(int vector_index, int *x, int *y);
 // Convert PCL organized point cloud index to OpenCV (x,y) index.
 void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y);
+
+
+typedef std::function<int(const GraphState &state)> Heuristic;
+typedef std::vector<Heuristic> Heuristics;
+typedef std::vector<ModelMetaData> ModelBank;
 }
 // namespace

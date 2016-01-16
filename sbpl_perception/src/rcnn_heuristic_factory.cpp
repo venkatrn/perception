@@ -1,4 +1,4 @@
-#include <sbpl_perception/rcnn_heuristic.h>
+#include <sbpl_perception/rcnn_heuristic_factory.h>
 
 #include <perception_utils/perception_utils.h>
 #include <ros/package.h>
@@ -26,14 +26,14 @@ const string kTempBBoxFileName = ros::package::getPath("sbpl_perception") +
 const string kInputImagePath = ros::package::getPath("sbpl_perception") +
                                "/visualization/cnn_input_image.png" ;
 const double kHeuristicScaling = 10000.0;
-const double kNormalVariance = 0.2 * 0.2; // m^2
+const double kNormalVariance =  0.4 * 0.4; // m^2
 const double kLargeHeuristic = 2.0 * kHeuristicScaling /
                                (kNormalVariance *kNormalVariance  * 2.0 * M_PI);
 } // namespace
 
 namespace sbpl_perception {
-RCNNHeuristic::RCNNHeuristic(const RecognitionInput &input,
-                             const pcl::simulation::SimExample::Ptr kinect_simulator) : recognition_input_
+RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input,
+                                           const pcl::simulation::SimExample::Ptr kinect_simulator) : recognition_input_
   (input),
   kinect_simulator_(kinect_simulator) {
 
@@ -53,25 +53,22 @@ RCNNHeuristic::RCNNHeuristic(const RecognitionInput &input,
                        depth_img_cloud);
   input_depth_image_ = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1,
                                depth_image.data());
-  static cv::Mat encoded_depth_image;
-  // EncodeDepthImage(input_depth_image_, encoded_depth_image_);
-  RescaleDepthImage(input_depth_image_, encoded_depth_image_, 0,
-                    kRescalingMaxDepth);
+  // Because the data is transient.
+  input_depth_image_ = input_depth_image_.clone();
+  EncodeDepthImage(input_depth_image_, encoded_depth_image_);
+  // RescaleDepthImage(input_depth_image_, encoded_depth_image_, 0,
+  //                   kRescalingMaxDepth);
   RunRCNN(encoded_depth_image_);
 }
 
-double RCNNHeuristic::GetGoalHeuristic(const GraphState &state) const {
-  return 0;
-}
-
-void RCNNHeuristic::RunRCNN(const cv::Mat &input_encoded_depth_image) {
+void RCNNHeuristicFactory::RunRCNN(const cv::Mat &input_encoded_depth_image) {
   cv::imwrite(kInputImagePath, input_encoded_depth_image);
-  string command = kPyFasterRCNNBinary
-                   + " --cpu"
-                   + " --input " + kInputImagePath
-                   + " --output" + kTempBBoxFileName;
-
-  system(command.c_str());
+  // string command = kPyFasterRCNNBinary
+  //                  + " --cpu"
+  //                  + " --input " + kInputImagePath
+  //                  + " --output" + kTempBBoxFileName;
+  //
+  // system(command.c_str());
 
   // Now read and parse the bbox output file.
   ifstream bbox_file;
@@ -84,17 +81,23 @@ void RCNNHeuristic::RunRCNN(const cv::Mat &input_encoded_depth_image) {
   double ymin = 0;
   double ymax = 0;
 
+  int num_detections = 0;
+
   while (bbox_file >> class_name && bbox_file >> score && bbox_file >> xmin &&
          bbox_file >> ymin && bbox_file >> xmax && bbox_file >> ymax) {
     const cv::Rect bbox(cv::Point(xmin, ymin), cv::Point(xmax, ymax));
     detections_dict_[class_name].emplace_back(bbox,
                                               score);
+    num_detections++;
   }
 
   bbox_file.close();
+  printf("Read %d detections\n", num_detections);
+
+  heuristics_ = CreateHeuristicsFromDetections(detections_dict_);
 }
 
-void RCNNHeuristic::ComputeROIsFromClusters() {
+void RCNNHeuristicFactory::ComputeROIsFromClusters() {
   std::vector<PointCloudPtr> cluster_clouds;
   std::vector<pcl::PointIndices> cluster_indices;
   // An image where every pixel stores the cluster index.
@@ -151,48 +154,65 @@ void RCNNHeuristic::ComputeROIsFromClusters() {
   cv::waitKey(0);
 
   // Create a separate image for each bbox and display.
-  static cv::Mat new_image;
-  static cv::Mat mask;
+  cv::Mat new_image;
+  cv::Mat mask;
+  cv::Mat encoded_roi;
+  new_image.create(kDepthImageHeight, kDepthImageWidth, CV_16UC1);
   mask.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+  encoded_roi.create(kDepthImageHeight, kDepthImageWidth, CV_8UC3);
 
   for (size_t ii = 0; ii < cv_clusters.size(); ++ii) {
     const auto cv_cluster = cv_clusters[ii];
     const auto bbox = bounding_rects[ii];
     mask.setTo(cv::Scalar(255));
-    new_image = encoded_depth_image_.clone();
+    new_image = input_depth_image_.clone();
+    // encoded_roi.setTo(cv::Scalar(0,0,0));
     cv::drawContours(mask, cv_clusters, ii, 0, CV_FILLED);
-    new_image.setTo(cv::Scalar(0), mask);
-    cv::imshow("CNN Input Image", new_image);
+    new_image.setTo(cv::Scalar(kKinectMaxDepth), mask);
+    EncodeDepthImage(new_image, encoded_roi);
+    cv::imshow("CNN Input Image", encoded_roi);
     cv::waitKey(0);
     string fname = kDebugDir + "cnn_input_" + to_string(ii) + ".png";
-    cv::imwrite(fname.c_str(), new_image);
+    cv::imwrite(fname.c_str(), encoded_roi);
   }
 }
 
-RCNNHeuristic::Heuristics RCNNHeuristic::CreateHeuristicsFromDetections(
-  const RCNNHeuristic::DetectionsMap &detections_map) {
+Heuristics RCNNHeuristicFactory::CreateHeuristicsFromDetections(
+  const RCNNHeuristicFactory::DetectionsMap &detections_map) const {
   Heuristics heuristics;
 
   for (const auto &item : detections_map) {
     const string &object_id = item.first;
     const auto &detections = item.second;
 
+    int instance_num = 1;
     for (const auto &detection : detections) {
       ContPose detected_pose = GetPoseFromBBox(input_depth_image_, detection.bbox);
-      const auto heuristic = std::bind(GenericDetectionHeuristic, std::placeholders::_1, object_id,
-                                       detected_pose);
+      const auto heuristic = std::bind(
+                               &RCNNHeuristicFactory::GenericDetectionHeuristic, this,
+                               std::placeholders::_1, object_id,
+                               detected_pose);
       heuristics.push_back(heuristic);
+
+      cv::Mat raster;
+      RasterizeHeuristic(heuristic, raster);
+      string fname = kDebugDir + "heur_" + object_id + "_" + to_string(instance_num) + ".png";
+      cv::imwrite(fname, raster);
+      ++instance_num;
     }
   }
   return heuristics;
 }
 
-int RCNNHeuristic::GenericDetectionHeuristic(const GraphState &state,
-                                             const std::string &object_id, const ContPose &detected_pose) {
+int RCNNHeuristicFactory::GenericDetectionHeuristic(const GraphState &state,
+                                                    const std::string &detected_object_id, const ContPose &detected_pose) const {
   const ObjectState &last_object = state.object_states().back();
 
-  //TODO: fix types
-  if (to_string(last_object.id()) != object_id) {
+  //TODO: make ObjectState::id the same as ObjectModel::name
+  const string object_id = recognition_input_.model_names[last_object.id()];
+  printf("Obj: %s\n", object_id.c_str());
+
+  if (object_id != detected_object_id) {
     return kLargeHeuristic;
   }
 
@@ -200,10 +220,12 @@ int RCNNHeuristic::GenericDetectionHeuristic(const GraphState &state,
   boost::math::normal y_distribution(detected_pose.y(), kNormalVariance);
 
   // Heuristic should use the discrete pose.
-  const double test_x = DiscretizationManager::DiscXToContX(
-                          last_object.disc_pose().x());
-  const double test_y = DiscretizationManager::DiscYToContY(
-                          last_object.disc_pose().y());
+  // const double test_x = DiscretizationManager::DiscXToContX(
+  //                         last_object.disc_pose().x());
+  // const double test_y = DiscretizationManager::DiscYToContY(
+  //                         last_object.disc_pose().y());
+  const double test_x = last_object.cont_pose().x();
+  const double test_y = last_object.cont_pose().y();
   // NOTE: we can ignore collision with existing objects in the state because
   // the successor generation will take care of that.
   const int scaled_pdf = static_cast<int>(boost::math::pdf(x_distribution,
@@ -211,12 +233,14 @@ int RCNNHeuristic::GenericDetectionHeuristic(const GraphState &state,
   return scaled_pdf;
 }
 
-ContPose RCNNHeuristic::GetPoseFromBBox(const cv::Mat &depth_image,
-                                        const cv::Rect bbox) {
-  const vector<cv::Point> points_in_bbox = GetValidPointsInBoundingBox(depth_image, bbox);
+ContPose RCNNHeuristicFactory::GetPoseFromBBox(const cv::Mat &depth_image,
+                                               const cv::Rect bbox) const {
+  const vector<cv::Point> points_in_bbox = GetValidPointsInBoundingBox(
+                                             depth_image, bbox);
   int num_points = 0;
   Eigen::Vector3d projected_centroid;
   projected_centroid << 0, 0, 0;
+
   for (const auto &point : points_in_bbox) {
     int pcl_index = OpenCVIndexToPCLIndex(point.x, point.y);
     PointT world_point = recognition_input_.cloud->points[pcl_index];
@@ -225,8 +249,92 @@ ContPose RCNNHeuristic::GetPoseFromBBox(const cv::Mat &depth_image,
     projected_centroid += world_point_eig;
     num_points++;
   }
+
   projected_centroid = projected_centroid / num_points;
   const ContPose pose(projected_centroid[0], projected_centroid[1], 0);
   return pose;
 }
+
+void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
+                                              cv::Mat &raster) const {
+  const double kRasterStep = 0.01;
+
+  // First determine which object this heuristic is for.
+  int matching_model_num = -1;
+
+  for (size_t model_num = 0; model_num < recognition_input_.model_names.size();
+       ++model_num) {
+
+    GraphState state;
+    ObjectState object_state(model_num, false, ContPose(0, 0, 0));
+    state.AppendObject(object_state);
+    const int heuristic_value = heuristic(state);
+
+    if (heuristic_value >= kLargeHeuristic - 1) {
+      continue;
+    }
+
+    matching_model_num = static_cast<int>(model_num);
+    break;
+  }
+
+  assert(matching_model_num != -1);
+
+  static cv::Mat heur_vals;
+  heur_vals.create(kDepthImageHeight, kDepthImageWidth, CV_64FC1);
+  heur_vals.setTo(0);
+
+  for (double x = recognition_input_.x_min; x <= recognition_input_.x_max;
+       x += kRasterStep) {
+    for (double y = recognition_input_.y_min; y <= recognition_input_.y_max;
+         y += kRasterStep) {
+      GraphState state;
+      ObjectState object_state(matching_model_num, false, ContPose(x, y, 0));
+      state.AppendObject(object_state);
+      const int heuristic_value = heuristic(state);
+      Eigen::Vector3f world_point(x, y, recognition_input_.table_height);
+      int cv_col = 0;
+      int cv_row = 0;
+      float range = 0.0;
+      kinect_simulator_->rl_->getCameraCoordinate(recognition_input_.camera_pose,
+                                                  world_point, cv_col,
+                                                  cv_row,
+                                                  range);
+      // TODO: move this to getCameraCoordinate.
+      cv_row = kDepthImageHeight - 1 - cv_row;
+
+      if (cv_row < 0 || cv_row >= kDepthImageHeight || cv_col < 0 ||
+          cv_col >= kDepthImageWidth) {
+        continue;
+      }
+
+      printf("Val: %d (%d %d)\n", heuristic_value, cv_row, cv_col);
+      // Add uniform non-zero floor to the heuristic values so the table stands out.
+      const double kHeuristicFloor = 1.0;
+      heur_vals.at<double>(cv_row,
+                           cv_col) = kHeuristicFloor + static_cast<double>(heuristic_value);
+    }
+  }
+
+  // const double normalizer = std::max(1.0, cv::sum(raster)[0]);
+  // printf("Normalizer: %f\n", normalizer);
+  cv::normalize(heur_vals, heur_vals, 0, 255, cv::NORM_MINMAX);
+  heur_vals.convertTo(heur_vals, CV_8UC1);
+  // raster = raster * 255.0 / normalizer;
+  cv::applyColorMap(heur_vals, raster, cv::COLORMAP_JET);
+
+  // Convert background to black to make pretty.
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      if (heur_vals.at<char>(ii, jj) == 0) {
+        raster.at<cv::Vec3b>(ii, jj)[0] = 0;
+        raster.at<cv::Vec3b>(ii, jj)[1] = 0;
+        raster.at<cv::Vec3b>(ii, jj)[2] = 0;
+      }
+    }
+  }
+}
 } // namespace
+
+
+
