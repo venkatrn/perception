@@ -72,7 +72,11 @@ void RescaleDepthImage(const cv::Mat &depth_image,
                       cv::Mat &rescaled_depth_image,
                       unsigned short min_depth, unsigned short max_depth);
 
+// Return the number of valid (i.e, not a no-return) points within the bounding
+// box.
 std::vector<cv::Point> GetValidPointsInBoundingBox(const cv::Mat &depth_image, const cv::Rect &bbox); 
+
+int GetNumValidPixels(const std::vector<unsigned short> &depth_image);
 
 // Converts an organized point cloud (assumed to be in meters) to a kinect depth image in the UINT16
 // format (millimeters), using the special value of kKinectMaxDepth for no-returns.

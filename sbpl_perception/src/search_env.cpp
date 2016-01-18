@@ -39,11 +39,6 @@ using namespace perception_utils;
 using namespace pcl::simulation;
 using namespace Eigen;
 
-using sbpl_perception::kDepthImageHeight;
-using sbpl_perception::kDepthImageWidth;
-using sbpl_perception::kNumPixels;
-using sbpl_perception::kKinectMaxDepth;
-
 namespace {
 
 // const double kSensorResolution = 0.01 / 2;//0.01
@@ -64,24 +59,9 @@ string kDebugDir = ros::package::getPath("sbpl_perception") +
                    "/visualization/";
 constexpr int kMasterRank = 0;
 
-
-// Count the number of valid pixels in a depth image.
-int GetNumValidPixels(const vector<unsigned short> &depth_image) {
-  assert(static_cast<int>(depth_image.size()) == kNumPixels);
-  int num_valid_pixels = 0;
-
-  // TODO: lambdaize.
-  for (int jj = 0; jj < kNumPixels; ++jj) {
-    if (depth_image[jj] != kKinectMaxDepth) {
-      ++num_valid_pixels;
-    }
-  }
-
-  return num_valid_pixels;
-}
-
 }  // namespace
 
+namespace sbpl_perception {
 
 EnvObjectRecognition::EnvObjectRecognition(const
                                            std::shared_ptr<boost::mpi::communicator> &comm) :
@@ -566,7 +546,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   }
 
   // Ditto for penultimate state.
-  if (source_state.NumObjects() == env_params_.num_objects - 1) {
+  if (static_cast<int>(source_state.NumObjects()) == env_params_.num_objects - 1) {
     GetSuccs(source_state_id, succ_ids, costs);
     true_costs->resize(succ_ids->size(), true);
     return;
@@ -784,21 +764,35 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id,
   return output_unit.cost;
 }
 
+int EnvObjectRecognition::NumHeuristics() const {
+  return (2 + static_cast<int>(rcnn_heuristics_.size()));
+}
+
 int EnvObjectRecognition::GetGoalHeuristic(int state_id) {
   return 0;
 }
 
 int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
+  if (state_id == env_params_.start_state_id) {
+    return 0;
+  }
 
   if (state_id == env_params_.goal_state_id) {
     return 0;
   }
 
   GraphState s = hash_manager_.GetState(state_id);
+  if (adjusted_states_.find(state_id) != adjusted_states_.end()) {
+    s = adjusted_states_[state_id];
+  } else {
+    s = hash_manager_.GetState(state_id);
+  }
 
   int num_objects_left = env_params_.num_objects - s.NumObjects();
   int depth_first_heur = num_objects_left;
   // printf("State %d: %d %d\n", state_id, icp_heur, depth_first_heur);
+  
+  assert(q_id < NumHeuristics());
 
   switch (q_id) {
   case 0:
@@ -806,14 +800,22 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
 
   case 1:
     return depth_first_heur;
+  
+  default: {
+        if (q_id == 3) {
+          auto last_obj_pose = s.object_states().back().cont_pose();
+          printf("H for state %d at (%f %f): %d\n", state_id, last_obj_pose.x(), last_obj_pose.y(), rcnn_heuristics_[q_id-2](s));
+        }
+    return rcnn_heuristics_[q_id - 2](s);
+           }
 
-  case 2: {
-    // return static_cast<int>(1000 * minz_map_[state_id]);
-    return kNumPixels - static_cast<int>(counted_pixels_map_[state_id].size());
-  }
+  // case 2: {
+  //   // return static_cast<int>(1000 * minz_map_[state_id]);
+  //   return kNumPixels - static_cast<int>(counted_pixels_map_[state_id].size());
+  // }
 
-  default:
-    return 0;
+  // default:
+  //   return 0;
   }
 }
 
@@ -835,7 +837,6 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   ContPose child_pose = last_object.cont_pose();
   int last_object_id = last_object.id();
 
-  const float *succ_depth_buffer;
   ContPose pose_in(child_pose.x(), child_pose.y(), child_pose.yaw()),
            pose_out(child_pose.x(), child_pose.y(), child_pose.yaw());
   PointCloudPtr cloud_in(new PointCloud);
@@ -861,7 +862,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   // Do ICP alignment on object *only* if it has been occluded by an existing
   // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
 
-  if (new_pixel_indices.size() != GetNumValidPixels(
+  if (static_cast<int>(new_pixel_indices.size()) != GetNumValidPixels(
         unadjusted_last_object_depth_image)) {
 
     for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
@@ -1352,7 +1353,7 @@ vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(
   const PointCloudPtr &cloud) {
   vector<unsigned short> depth_image(kNumPixels, kKinectMaxDepth);
 
-  for (int ii = 0; ii < cloud->size(); ++ii) {
+  for (size_t ii = 0; ii < cloud->size(); ++ii) {
     PointT point = cloud->points[ii];
     Eigen::Vector3f world_point(point.x, point.y, point.z);
     int u = 0;
@@ -1485,6 +1486,10 @@ void EnvObjectRecognition::PrintImage(string fname,
   }
 
   cv::imwrite(fname.c_str(), c_image);
+  if(fname.find("expansion") != string::npos) {
+    cv::imshow("expansions", c_image);
+    cv::waitKey(10);
+  }
   //http://docs.opencv.org/modules/contrib/doc/facerec/colormaps.html
 }
 
@@ -1754,6 +1759,12 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   }
 
   SetObservation(input.model_names.size(), depth_image);
+
+  // Precompute RCNN heuristics.
+  rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input, kinect_simulator_));
+  rcnn_heuristics_ = rcnn_heuristic_factory_->GetHeuristics();
+
+  cv::namedWindow("expansions");
 }
 
 void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
@@ -1811,7 +1822,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   // Set the maximum number of iterations (criterion 1)
   icp.setMaximumIterations(10);
   // Set the transformation epsilon (criterion 2)
-  icp.setTransformationEpsilon(1e-8);
+  icp.setTransformationEpsilon(1e-8); //1e-8
   // Set the euclidean distance difference epsilon (criterion 3)
   icp.setEuclideanFitnessEpsilon(kSensorResolution);  // 1e-5
 
@@ -2006,10 +2017,10 @@ void EnvObjectRecognition::GetGoalPoses(int true_goal_id,
     goal_state = hash_manager_.GetState(true_goal_id);
   }
 
-  assert(goal_state.NumObjects() == env_params_.num_objects);
+  assert(static_cast<int>(goal_state.NumObjects()) == env_params_.num_objects);
   object_poses->resize(env_params_.num_objects);
 
-  for (size_t ii = 0; ii < env_params_.num_objects; ++ii) {
+  for (int ii = 0; ii < env_params_.num_objects; ++ii) {
     auto it = std::find_if(goal_state.object_states().begin(),
     goal_state.object_states().end(), [ii](const ObjectState & object_state) {
       return object_state.id() == ii;
@@ -2110,13 +2121,14 @@ vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
   const vector<unsigned short> masking_depth_image) {
   vector<unsigned short> masked_depth_image(kNumPixels, kKinectMaxDepth);
 
-  for (size_t ii = 0; ii < kNumPixels; ++ii) {
+  for (int ii = 0; ii < kNumPixels; ++ii) {
     masked_depth_image[ii] = masking_depth_image[ii] > input_depth_image[ii] ?
                              input_depth_image[ii] : kKinectMaxDepth;
   }
 
   return masked_depth_image;
 }
+}  // namespace
 
 
 

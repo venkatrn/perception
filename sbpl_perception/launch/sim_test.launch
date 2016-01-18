@@ -16,6 +16,7 @@
   <!-- <node pkg="sbpl_perception" type="sim_test" name="sim_test" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
     <node pkg="sbpl_perception" type="sim_test" name="sim_test" output="screen" launch-prefix="mpirun -n 8" respawn="false">
       <rosparam command="load" file="$(find sbpl_perception)/config/env_config.yaml" />
+      <rosparam command="load" file="$(find sbpl_perception)/config/planner_config.yaml" />
       <param name="image_debug" value="$(arg image_debug)"/>
     </node>
   </launch>

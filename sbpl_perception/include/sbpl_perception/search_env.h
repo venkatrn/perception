@@ -16,6 +16,7 @@
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/mpi_utils.h>
 #include <sbpl_perception/object_model.h>
+#include <sbpl_perception/rcnn_heuristic_factory.h>
 #include <sbpl_perception/utils/utils.h>
 #include <sbpl_utils/hash_manager/hash_manager.h>
 
@@ -42,8 +43,7 @@
 #include <unordered_map>
 #include <vector>
 
-using sbpl_perception::RecognitionInput;
-using sbpl_perception::ModelMetaData;
+namespace sbpl_perception {
 
 struct EnvConfig {
   // Search resolution.
@@ -171,6 +171,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   void GetEnvStats(int &succs_rendered, int &succs_valid);
   void GetGoalPoses(int true_goal_id, std::vector<ContPose> *object_poses);
+
+  int NumHeuristics() const;
+
+  // TODO: Make these private
+  std::unique_ptr<RCNNHeuristicFactory> rcnn_heuristic_factory_;
+  Heuristics rcnn_heuristics_;
 
  private:
 
@@ -318,3 +324,4 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintEnv_Config(FILE *fOut) {};
 
 };
+} // namespace

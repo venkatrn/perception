@@ -4,6 +4,7 @@
 #include <sbpl_perception/utils/utils.h>
 #include <kinect_sim/simulation_io.hpp>
 
+#include <boost/filesystem.hpp>
 #include <opencv2/core/core.hpp>
 
 #include <unordered_map>
@@ -24,10 +25,16 @@ class RCNNHeuristicFactory {
   typedef std::unordered_map<std::string, std::vector<Detection>> DetectionsMap;
 
   RCNNHeuristicFactory(const RecognitionInput &input,
-                const pcl::simulation::SimExample::Ptr kinect_simulator);
+                       const pcl::simulation::SimExample::Ptr kinect_simulator);
   const Heuristics &GetHeuristics() const {
     return heuristics_;
   }
+
+  void LoadHeuristicsFromDisk(const boost::filesystem::path
+                              &base_dir);
+
+  // Find ROIs in the image by projecting 3D bounding boxes to the image.
+  void SaveROIsToDisk(const boost::filesystem::path &base_dir);
 
  private:
   void RunRCNN(const cv::Mat &input_encoded_depth_image);
@@ -38,21 +45,23 @@ class RCNNHeuristicFactory {
   // A list of detections for each class.
   DetectionsMap detections_dict_;
 
-  // Find ROIs in the image by projecting 3D bounding boxes to the image.
-  void ComputeROIsFromClusters();
 
-  Heuristics CreateHeuristicsFromDetections(const DetectionsMap &detections) const;
-  
+  Heuristics CreateHeuristicsFromDetections(const DetectionsMap &detections)
+  const;
+
   // A list of heuristics: each detected bounding box (assuming thesholding and
   // NMS is already done) is a heuristic for the search.
   Heuristics heuristics_;
 
-  int GenericDetectionHeuristic(const GraphState& state, const std::string &object_id, const ContPose &detected_pose) const;
+  int GenericDetectionHeuristic(const GraphState &state,
+                                const std::string &object_id, const ContPose &detected_pose) const;
 
   // Convert a bounding box to a continuous pose by taking the centroid of
   // table-projected points within the point cloud, and setting the yaw to zero.
-  ContPose GetPoseFromBBox(const cv::Mat &depth_image, const cv::Rect bbox) const;
+  ContPose GetPoseFromBBox(const cv::Mat &depth_image,
+                           const cv::Rect bbox) const;
 
   void RasterizeHeuristic(const Heuristic &heuristic, cv::Mat &raster) const;
 };
 } // namespace
+

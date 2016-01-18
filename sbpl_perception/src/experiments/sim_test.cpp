@@ -15,6 +15,7 @@
 #include <random>
 
 using namespace std;
+using namespace sbpl_perception;
 
 namespace {
   constexpr int kMasterRank = 0;

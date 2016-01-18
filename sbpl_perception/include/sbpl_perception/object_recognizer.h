@@ -5,6 +5,7 @@
 
 #include <memory>
 
+namespace sbpl_perception {
 class ObjectRecognizer {
  public:
   ObjectRecognizer(int argc, char **argv,
@@ -34,8 +35,11 @@ class ObjectRecognizer {
 
   std::shared_ptr<boost::mpi::communicator> mpi_world_;
 
+  MHAReplanParams planner_params_;
+
   EnvConfig env_config_;
 
   bool IsMaster() const;
   bool RunPlanner(std::vector<ContPose> *detected_poses) const;
 };
+}  // namespace

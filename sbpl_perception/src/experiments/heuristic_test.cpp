@@ -26,8 +26,7 @@ using namespace sbpl_perception;
 // slaves simply aid in computing successor costs in parallel.
 const int kMasterRank = 0;
 
-const string kDebugDir = ros::package::getPath("sbpl_perception") +
-                         "/visualization/";
+const string kProjectDir = ros::package::getPath("sbpl_perception");
 
 int main(int argc, char **argv) {
   boost::mpi::environment env(argc, argv);
@@ -75,8 +74,12 @@ int main(int argc, char **argv) {
 
   auto env_obj = object_recognizer.GetMutableEnvironment();
   RCNNHeuristicFactory rcnn_heuristic_factory(input, env_obj->kinect_simulator_);
-  Heuristics heuristics = rcnn_heuristic_factory.GetHeuristics();
-  // rcnn_heuristic_factory.ComputeROIsFromClusters();
 
+  // Save ROIs and bboxes to disk.
+  boost::filesystem::path output_dir(kProjectDir + "/heuristics");
+  rcnn_heuristic_factory.SaveROIsToDisk(output_dir);
+  rcnn_heuristic_factory.LoadHeuristicsFromDisk(output_dir);
+  
+  // Heuristics heuristics = rcnn_heuristic_factory.GetHeuristics();
   return 0;
 }

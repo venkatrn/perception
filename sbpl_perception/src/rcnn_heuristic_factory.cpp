@@ -5,7 +5,6 @@
 #include <sbpl_perception/discretization_manager.h>
 #include <sbpl_perception/object_state.h>
 
-#include <boost/filesystem.hpp>
 #include <boost/math/distributions/normal.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
@@ -25,10 +24,15 @@ const string kTempBBoxFileName = ros::package::getPath("sbpl_perception") +
                                  "/visualization/bbox_outputs.txt" ;
 const string kInputImagePath = ros::package::getPath("sbpl_perception") +
                                "/visualization/cnn_input_image.png" ;
-const double kHeuristicScaling = 10000.0;
+const double kHeuristicScaling = 1000.0;
 const double kNormalVariance =  0.4 * 0.4; // m^2
 const double kLargeHeuristic = 2.0 * kHeuristicScaling /
                                (kNormalVariance *kNormalVariance  * 2.0 * M_PI);
+
+// Minimum confidence for an RCNN detection to be considered as a heuristic.
+// TODO: we might want to look at the score relative to the best for this
+// bounding box.
+const double kMinimumRCNNConfidence = 0.05;
 } // namespace
 
 namespace sbpl_perception {
@@ -58,7 +62,7 @@ RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input,
   EncodeDepthImage(input_depth_image_, encoded_depth_image_);
   // RescaleDepthImage(input_depth_image_, encoded_depth_image_, 0,
   //                   kRescalingMaxDepth);
-  RunRCNN(encoded_depth_image_);
+  // RunRCNN(encoded_depth_image_);
 }
 
 void RCNNHeuristicFactory::RunRCNN(const cv::Mat &input_encoded_depth_image) {
@@ -97,7 +101,129 @@ void RCNNHeuristicFactory::RunRCNN(const cv::Mat &input_encoded_depth_image) {
   heuristics_ = CreateHeuristicsFromDetections(detections_dict_);
 }
 
-void RCNNHeuristicFactory::ComputeROIsFromClusters() {
+void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
+                                                  &base_dir) {
+
+  if (!boost::filesystem::is_directory(base_dir)) {
+    printf("Base directory %s does not exist. Unable to load heuristics from disk\n",
+           base_dir.c_str());
+    return;
+  }
+
+  //loop over all ply files in the data directry and calculate vfh features
+  boost::filesystem::directory_iterator dir_itr(base_dir), dir_end;
+
+  int num_rois = 0;
+
+
+  for (dir_itr; dir_itr != dir_end; ++dir_itr) {
+
+    if (!boost::filesystem::is_regular_file(dir_itr->path())) {
+      continue;
+    }
+
+    // CNN detection outputs are written to a txt file names roi_x_det.txt,
+    // where x is the ROI number.
+    size_t match_pos = dir_itr->path().native().find("det");
+
+    if (match_pos == string::npos) {
+      continue;
+    }
+
+    string bbox_filename = dir_itr->path().native();
+    bbox_filename.replace(match_pos, 3, "bbox");
+
+    ++num_rois;
+
+    // Read the ROI.
+    ifstream bbox_file;
+    bbox_file.open(bbox_filename.c_str(), std::ios::in);
+    if (!bbox_file) {
+      printf("Error opening bounding box file %s\n", bbox_filename.c_str());
+      return;
+    }
+
+    double xmin = 0;
+    double xmax = 0;
+    double ymin = 0;
+    double ymax = 0;
+    bbox_file >> xmin >> ymin >> xmax >> ymax;
+    const cv::Rect roi_bbox(cv::Point(xmin, ymin), cv::Point(xmax, ymax));
+    bbox_file.close();
+
+    // Read the RCNN detections from file.
+    string class_name;
+    double score = 0;
+
+    ifstream det_file;
+    det_file.open(dir_itr->path().c_str(), std::ios::in);
+    if (!det_file) {
+      printf("Error opening detections file %s\n", bbox_filename.c_str());
+      return;
+    }
+
+    DetectionsMap all_detections;
+
+    while (det_file >> class_name && det_file >> score && det_file >> xmin &&
+           det_file >> ymin && det_file >> xmax && det_file >> ymax) {
+      // If this model is not in the scene, ignore.
+      if (find(recognition_input_.model_names.begin(),
+               recognition_input_.model_names.end(),
+               class_name) == recognition_input_.model_names.end()) {
+        printf("Mismatch %s\n", class_name.c_str());
+        continue;
+      }
+
+      // If the score is too low, ignore.
+
+      if (score < kMinimumRCNNConfidence) {
+        continue;
+      }
+
+      all_detections[class_name].emplace_back(roi_bbox,
+                                              score);
+    }
+
+    // Do NMS for this ROI.
+    for (const auto &item : all_detections) {
+      const vector<Detection> &detections = item.second;
+      auto max_it = std::max_element(detections.begin(),
+      detections.end(), [](const Detection &det1, const Detection &det2) {
+        return det1.score > det2.score;
+      });
+      assert(max_it != detections.end());
+      detections_dict_[item.first].push_back(*max_it);
+    }
+
+    det_file.close();
+  }
+
+
+  printf("----------------------------------- \n");
+  printf("RCNN Detections used for Heuristics:\n");
+
+  for (const auto &item : detections_dict_) {
+    printf("------%s------\n", item.first.c_str());
+
+    for (const auto &detection : item.second) {
+      printf("     %f:  %d %d %d %d \n", detection.score, detection.bbox.tl().x, detection.bbox.tl().y, detection.bbox.br().x,
+             detection.bbox.br().y);
+    }
+  }
+
+  printf("----------------------------------- \n");
+
+  heuristics_ = CreateHeuristicsFromDetections(detections_dict_);
+}
+
+void RCNNHeuristicFactory::SaveROIsToDisk(const boost::filesystem::path
+                                          &base_dir) {
+
+
+  if (!boost::filesystem::is_directory(base_dir)) {
+    boost::filesystem::create_directory(base_dir);
+  }
+
   std::vector<PointCloudPtr> cluster_clouds;
   std::vector<pcl::PointIndices> cluster_indices;
   // An image where every pixel stores the cluster index.
@@ -135,7 +261,7 @@ void RCNNHeuristicFactory::ComputeROIsFromClusters() {
 
   static cv::Mat c_image;
   cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
-  string fname = kDebugDir + "cluster_labels.png";
+  string fname = base_dir.native() + "/cluster_labels.png";
   // cv::imwrite(fname.c_str(), c_image);
 
   // Find the bounding box for each cluster and display it on the image.
@@ -150,8 +276,8 @@ void RCNNHeuristicFactory::ComputeROIsFromClusters() {
                   8, 0 );
   }
 
-  cv::imshow("Projected ROIs", c_image);
-  cv::waitKey(0);
+  // cv::imshow("Projected ROIs", c_image);
+  // cv::waitKey(1000);
 
   // Create a separate image for each bbox and display.
   cv::Mat new_image;
@@ -166,14 +292,24 @@ void RCNNHeuristicFactory::ComputeROIsFromClusters() {
     const auto bbox = bounding_rects[ii];
     mask.setTo(cv::Scalar(255));
     new_image = input_depth_image_.clone();
-    // encoded_roi.setTo(cv::Scalar(0,0,0));
     cv::drawContours(mask, cv_clusters, ii, 0, CV_FILLED);
     new_image.setTo(cv::Scalar(kKinectMaxDepth), mask);
     EncodeDepthImage(new_image, encoded_roi);
-    cv::imshow("CNN Input Image", encoded_roi);
-    cv::waitKey(0);
-    string fname = kDebugDir + "cnn_input_" + to_string(ii) + ".png";
-    cv::imwrite(fname.c_str(), encoded_roi);
+    // cv::imshow("CNN Input Image", encoded_roi);
+    // cv::waitKey(1000);
+
+    // Write the projected ROI to disk.
+    string im_fname = base_dir.native() + "/roi_" + to_string(ii) + ".png";
+    cv::imwrite(im_fname.c_str(), encoded_roi);
+
+    // Write bounding box to file.
+    string bbox_fname = base_dir.native() + "/roi_" + to_string(ii) + "_bbox.txt";
+    std::ofstream bbox_file;
+    bbox_file.open(bbox_fname.c_str());
+    const auto &rect = bounding_rects[ii];
+    bbox_file << rect.tl().x << " " << rect.tl().y << " "
+              << rect.br().x << " " << rect.br().y;
+    bbox_file.close();
   }
 }
 
@@ -186,31 +322,42 @@ Heuristics RCNNHeuristicFactory::CreateHeuristicsFromDetections(
     const auto &detections = item.second;
 
     int instance_num = 1;
+
     for (const auto &detection : detections) {
       ContPose detected_pose = GetPoseFromBBox(input_depth_image_, detection.bbox);
+
+
       const auto heuristic = std::bind(
                                &RCNNHeuristicFactory::GenericDetectionHeuristic, this,
                                std::placeholders::_1, object_id,
                                detected_pose);
       heuristics.push_back(heuristic);
+      printf("Created heuristic for %s at %f %f\n", object_id.c_str(),
+             detected_pose.x(), detected_pose.y());
 
       cv::Mat raster;
       RasterizeHeuristic(heuristic, raster);
-      string fname = kDebugDir + "heur_" + object_id + "_" + to_string(instance_num) + ".png";
+      string fname = kDebugDir + "heur_" + object_id + "_" + to_string(
+                       instance_num) + ".png";
       cv::imwrite(fname, raster);
       ++instance_num;
     }
   }
+
   return heuristics;
 }
 
 int RCNNHeuristicFactory::GenericDetectionHeuristic(const GraphState &state,
                                                     const std::string &detected_object_id, const ContPose &detected_pose) const {
+
+  if (state.object_states().size() == 0) {
+    return kLargeHeuristic;
+  }
+
   const ObjectState &last_object = state.object_states().back();
 
   //TODO: make ObjectState::id the same as ObjectModel::name
   const string object_id = recognition_input_.model_names[last_object.id()];
-  printf("Obj: %s\n", object_id.c_str());
 
   if (object_id != detected_object_id) {
     return kLargeHeuristic;
@@ -230,7 +377,15 @@ int RCNNHeuristicFactory::GenericDetectionHeuristic(const GraphState &state,
   // the successor generation will take care of that.
   const int scaled_pdf = static_cast<int>(boost::math::pdf(x_distribution,
                                                            test_x) * boost::math::pdf(y_distribution, test_y) * kHeuristicScaling);
-  return scaled_pdf;
+
+  // TODO: relate ROI dimensions to heuristic plateau.
+  if (fabs(test_x - detected_pose.x()) < 0.1 &&
+      fabs(test_y - detected_pose.y()) < 0.1) {
+    return 0;
+  }
+
+  // Heuristic and probability must be inversely correlated.
+  return kLargeHeuristic - scaled_pdf;
 }
 
 ContPose RCNNHeuristicFactory::GetPoseFromBBox(const cv::Mat &depth_image,
@@ -308,16 +463,13 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
         continue;
       }
 
-      printf("Val: %d (%d %d)\n", heuristic_value, cv_row, cv_col);
-      // Add uniform non-zero floor to the heuristic values so the table stands out.
+      // Add uniform non-zero floor to the heuristic values for visualization.
       const double kHeuristicFloor = 1.0;
       heur_vals.at<double>(cv_row,
-                           cv_col) = kHeuristicFloor + static_cast<double>(heuristic_value);
+                           cv_col) = kLargeHeuristic - static_cast<double>(heuristic_value);
     }
   }
 
-  // const double normalizer = std::max(1.0, cv::sum(raster)[0]);
-  // printf("Normalizer: %f\n", normalizer);
   cv::normalize(heur_vals, heur_vals, 0, 255, cv::NORM_MINMAX);
   heur_vals.convertTo(heur_vals, CV_8UC1);
   // raster = raster * 255.0 / normalizer;
@@ -335,6 +487,3 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
   }
 }
 } // namespace
-
-
-

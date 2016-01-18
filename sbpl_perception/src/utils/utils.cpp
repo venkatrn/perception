@@ -131,6 +131,20 @@ vector<cv::Point> GetValidPointsInBoundingBox(const cv::Mat &depth_image, const 
   return valid_points;
 }
 
+int GetNumValidPixels(const vector<unsigned short> &depth_image) {
+  assert(static_cast<int>(depth_image.size()) == kNumPixels);
+  int num_valid_pixels = 0;
+
+  // TODO: lambdaize.
+  for (int jj = 0; jj < kNumPixels; ++jj) {
+    if (depth_image[jj] != kKinectMaxDepth) {
+      ++num_valid_pixels;
+    }
+  }
+  return num_valid_pixels;
+}
+
+
 int PCLIndexToVectorIndex(int pcl_index) {
   return pcl_index;
 }

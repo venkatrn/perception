@@ -13,6 +13,7 @@ set(ROS_BUILD_TYPE Debug)
 set(CMAKE_CXX_FLAGS "-std=c++0x")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
+set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 
 
 rosbuild_init()

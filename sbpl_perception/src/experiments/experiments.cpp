@@ -19,6 +19,7 @@
 #include <random>
 
 using namespace std;
+using namespace sbpl_perception;
 
 // Process ID of the master processor. This does all the planning work, and the
 // slaves simply aid in computing successor costs in parallel.
@@ -56,6 +57,8 @@ int main(int argc, char **argv) {
   input.table_height = parser.table_height;
   input.camera_pose = parser.camera_pose;
   input.model_names = parser.model_names;
+  input.model_names = parser.ConvertModelNamesInFileToIDs(
+                        object_recognizer.GetModelBank());
 
   // Objects for storing the point clouds.
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);

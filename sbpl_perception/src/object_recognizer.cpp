@@ -23,7 +23,7 @@ namespace boost {
 namespace serialization {
 
 template<class Archive>
-void serialize(Archive &ar, ModelMetaData &model_meta_data,
+void serialize(Archive &ar, sbpl_perception::ModelMetaData &model_meta_data,
                const unsigned int version) {
   ar &model_meta_data.name;
   ar &model_meta_data.file;
@@ -33,8 +33,9 @@ void serialize(Archive &ar, ModelMetaData &model_meta_data,
 } // namespace serialization
 } // namespace boost
 
+namespace sbpl_perception {
 ObjectRecognizer::ObjectRecognizer(int argc, char **argv,
-                                   std::shared_ptr<boost::mpi::communicator> mpi_world) {
+                                   std::shared_ptr<boost::mpi::communicator> mpi_world) : planner_params_(0.0) {
 
   mpi_world_ = mpi_world;
 
@@ -47,6 +48,11 @@ ObjectRecognizer::ObjectRecognizer(int argc, char **argv,
     ros::init(argc, argv, "object_recognizer");
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
+
+    ///////////////////////////////////////////////////////////////////////
+    // NOTE: Do not modify any default params here. Make all changes in the
+    // appropriate yaml config files. They will override these ones.
+    ///////////////////////////////////////////////////////////////////////
 
     private_nh.param("image_debug", image_debug, false);
 
@@ -78,6 +84,27 @@ ObjectRecognizer::ObjectRecognizer(int argc, char **argv,
       printf("%s: %s, %d, %d\n", model_meta_data.name.c_str(),
              model_meta_data.file.c_str(), model_meta_data.flipped,
              model_meta_data.symmetric);
+
+      // Load planner config params.
+      private_nh.param("inflation_epsilon", planner_params_.inflation_eps, 10.0);
+      private_nh.param("max_planning_time", planner_params_.max_time, 60.0);
+      // If true, planner will ignore time limit until a first solution is
+      // found. For anytime search, planner terminates with first solution.
+      private_nh.param("first_solution", planner_params_.return_first_solution,
+                       true);
+      private_nh.param("use_lazy", planner_params_.use_lazy,
+                       true);
+      planner_params_.meta_search_type =
+        mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
+      planner_params_.planner_type = mha_planner::PlannerType::SMHA;
+      planner_params_.mha_type =
+        mha_planner::MHAType::FOCAL;
+      planner_params_.final_eps = planner_params_.inflation_eps;
+      planner_params_.dec_eps = 0.2;
+      planner_params_.repair_time = -1;
+      // Unused
+      // planner_params_.anchor_eps = 1.0;
+      // planner_params_.use_anchor = true;
     }
   }
 
@@ -98,9 +125,6 @@ ObjectRecognizer::ObjectRecognizer(int argc, char **argv,
   env_obj_->Initialize(env_config_);
   env_obj_->SetDebugOptions(image_debug);
 
-  if (IsMaster()) {
-    planner_.reset(new MHAPlanner(env_obj_.get(), 2, true));
-  }
 }
 
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
@@ -149,6 +173,12 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   detected_poses->clear();
 
   if (IsMaster()) {
+
+    // We'll reset the planner always since num_heuristics could vary between
+    // requests.
+    planner_.reset(new MHAPlanner(env_obj_.get(), env_obj_->NumHeuristics(),
+                                  true));
+
     int goal_id = env_obj_->GetGoalStateID();
     int start_id = env_obj_->GetStartStateID();
 
@@ -162,31 +192,20 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       throw std::runtime_error("failed to set goal state");
     }
 
-    MHAReplanParams replan_params(60.0);
-    replan_params.max_time = 60.0;
-    replan_params.initial_eps = 3;
-    replan_params.final_eps = 3;
-    replan_params.dec_eps = 0.2;
-    replan_params.return_first_solution =
-      true; // Setting this to true also means planner will ignore max time limit.
-    replan_params.repair_time = -1;
-    replan_params.inflation_eps = 3; //10000000.0
-    replan_params.anchor_eps = 1.0;
-    replan_params.use_anchor = true;
-    replan_params.meta_search_type =
-      mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
-    replan_params.planner_type = mha_planner::PlannerType::SMHA;
-    replan_params.mha_type =
-      mha_planner::MHAType::FOCAL;
-
     vector<int> solution_state_ids;
     int sol_cost;
 
     ROS_INFO("Begin planning");
     plan_success = planner_->replan(&solution_state_ids,
-                                    static_cast<MHAReplanParams>(replan_params), &sol_cost);
+                                    static_cast<MHAReplanParams>(planner_params_), &sol_cost);
     ROS_INFO("Done planning");
-    ROS_INFO("Size of solution: %d", static_cast<int>(solution_state_ids.size()));
+
+    if (plan_success) {
+      ROS_INFO("Size of solution: %d", static_cast<int>(solution_state_ids.size()));
+    } else {
+      ROS_INFO("No solution found");
+      return false;
+    }
 
     for (size_t ii = 0; ii < solution_state_ids.size(); ++ii) {
       printf("%d: %d\n", static_cast<int>(ii), solution_state_ids[ii]);
@@ -203,6 +222,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
     env_obj_->GetGoalPoses(goal_state_id, detected_poses);
 
     cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;
+
     for (const auto &pose : *detected_poses) {
       cout << pose.x() << " " << pose.y() << " " << env_obj_->GetTableHeight() << " "
            << pose.yaw() << endl;
@@ -216,6 +236,8 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
     env_obj_->GetEnvStats(succs_rendered, succs_valid);
 
     cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
+    cout << endl << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
+         << "Cost" << endl;
     cout << succs_rendered << " " << succs_valid << " "  << stats_vector[0].expands
          << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
 
@@ -253,3 +275,8 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
 bool ObjectRecognizer::IsMaster() const {
   return mpi_world_->rank() == kMasterRank;
 }
+}  // namespace
+
+
+
+
