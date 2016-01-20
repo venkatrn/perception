@@ -53,6 +53,12 @@ struct ModelMetaData {
   bool symmetric;
 };
 
+// A container for environment statistics.
+struct EnvStats {
+  int scenes_rendered;
+  int scenes_valid;
+};
+
 void SetModelMetaData(const std::string &name, const std::string &file,
                       const bool flipped, const bool symmetric, ModelMetaData *model_meta_data);
 

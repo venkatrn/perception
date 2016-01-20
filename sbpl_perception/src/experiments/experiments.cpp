@@ -32,15 +32,14 @@ int main(int argc, char **argv) {
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
-  ObjectRecognizer object_recognizer(argc, argv, world);
 
   string config_file;
   if (world->rank() == kMasterRank) {
-    ros::init(argc, argv, "experiments");
-    ros::NodeHandle nh;
-    ros::NodeHandle private_nh("~");
-    private_nh.param("config_file", config_file, std::string(""));
+    ros::init(argc, argv, "real_test");
+    ros::NodeHandle nh("~");
+    nh.param("config_file", config_file, std::string(""));
   }
+  ObjectRecognizer object_recognizer(world);
 
   // All processes should wait until master has loaded params.
   world->barrier();

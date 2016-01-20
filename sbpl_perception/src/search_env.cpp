@@ -55,7 +55,7 @@ constexpr int kMinimumNeighborPointsForValidPose =
 // indicator(pixel explained).
 constexpr bool kUseDepthSensitiveCost = false;
 
-string kDebugDir = ros::package::getPath("sbpl_perception") +
+string debug_dir_ = ros::package::getPath("sbpl_perception") +
                    "/visualization/";
 constexpr int kMasterRank = 0;
 
@@ -66,8 +66,7 @@ namespace sbpl_perception {
 EnvObjectRecognition::EnvObjectRecognition(const
                                            std::shared_ptr<boost::mpi::communicator> &comm) :
   mpi_comm_(comm),
-  image_debug_(false),
-  succs_rendered_(0) {
+  image_debug_(false), env_stats_{0,0} {
 
   // OpenGL requires argc and argv
   char **argv;
@@ -233,7 +232,7 @@ void EnvObjectRecognition::LabelEuclideanClusters() {
 
   static cv::Mat c_image;
   cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
-  string fname = kDebugDir + "cluster_labels.png";
+  string fname = debug_dir_ + "cluster_labels.png";
   cv::imwrite(fname.c_str(), c_image);
 }
 
@@ -275,7 +274,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   printf("Expanding state: %d with %zu objects\n",
          source_state_id,
          source_state.NumObjects());
-  string fname = kDebugDir + "expansion_" + to_string(source_state_id) + ".png";
+  string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
   PrintState(source_state_id, fname);
 
   vector<int> candidate_succ_ids, candidate_costs;
@@ -283,7 +282,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   GenerateSuccessorStates(source_state, &candidate_succs);
 
-  succs_rendered_ += static_cast<int>(candidate_succs.size());
+  env_stats_.scenes_rendered += static_cast<int>(candidate_succs.size());
 
   // We don't need IDs for the candidate succs at all.
   candidate_succ_ids.resize(candidate_succs.size(), 0);
@@ -391,7 +390,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     if (image_debug_) {
       std::stringstream ss;
       ss.precision(20);
-      ss << kDebugDir + "succ_" << candidate_succ_ids[ii] << ".png";
+      ss << debug_dir_ + "succ_" << candidate_succ_ids[ii] << ".png";
       PrintImage(ss.str(), output_unit.depth_image);
       printf("State %d,       %d      %d      %d      %d\n", candidate_succ_ids[ii],
              output_unit.state_properties.target_cost,
@@ -403,7 +402,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       //                                      output_unit.depth_image);
       // std::stringstream cloud_ss;
       // cloud_ss.precision(20);
-      // cloud_ss << kDebugDir + "cloud_" << candidate_succ_ids[ii] << ".pcd";
+      // cloud_ss << debug_dir_ + "cloud_" << candidate_succ_ids[ii] << ".pcd";
       // pcl::PCDWriter writer;
       // writer.writeBinary (cloud_ss.str()  , *gravity_aligned_point_cloud);
     }
@@ -423,7 +422,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   // ROS_INFO("Expanding state: %d with %d objects and %d successors",
   //          source_state_id,
   //          source_state.object_ids.size(), costs->size());
-  // string fname = kDebugDir + "expansion_" + to_string(source_state_id) + ".png";
+  // string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
   // PrintState(source_state_id, fname);
 }
 
@@ -573,7 +572,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   printf("Lazily expanding state: %d with %zu objects\n",
          source_state_id,
          source_state.NumObjects());
-  string fname = kDebugDir + "expansion_" + to_string(source_state_id) + ".png";
+  string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
   PrintState(source_state_id, fname);
 
   vector<int> candidate_succ_ids;
@@ -581,7 +580,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
 
   GenerateSuccessorStates(source_state, &candidate_succs);
 
-  succs_rendered_ += static_cast<int>(candidate_succs.size());
+  env_stats_.scenes_rendered += static_cast<int>(candidate_succs.size());
 
   // We don't need IDs for the candidate succs at all.
   candidate_succ_ids.resize(candidate_succs.size(), 0);
@@ -649,7 +648,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
     if (image_debug_) {
       std::stringstream ss;
       ss.precision(20);
-      ss << kDebugDir + "succ_" << candidate_succ_ids[ii] << ".png";
+      ss << debug_dir_ + "succ_" << candidate_succ_ids[ii] << ".png";
       PrintImage(ss.str(), output_unit.depth_image);
       // printf("State %d,       %d\n", candidate_succ_ids[ii],
       //        output_unit.cost);
@@ -663,7 +662,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
       //                                      output_unit.depth_image);
       // std::stringstream cloud_ss;
       // cloud_ss.precision(20);
-      // cloud_ss << kDebugDir + "cloud_" << candidate_succ_ids[ii] << ".pcd";
+      // cloud_ss << debug_dir_ + "cloud_" << candidate_succ_ids[ii] << ".pcd";
       // pcl::PCDWriter writer;
       // writer.writeBinary (cloud_ss.str()  , *gravity_aligned_point_cloud);
     }
@@ -685,7 +684,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   // ROS_INFO("Expanding state: %d with %d objects and %d successors",
   //          source_state_id,
   //          source_state.object_ids.size(), costs->size());
-  // string fname = kDebugDir + "expansion_" + to_string(source_state_id) + ".png";
+  // string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
   // PrintState(source_state_id, fname);
 }
 
@@ -741,7 +740,7 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id,
   if (image_debug_) {
     std::stringstream ss;
     ss.precision(20);
-    ss << kDebugDir + "succ_" << child_state_id << ".png";
+    ss << debug_dir_ + "succ_" << child_state_id << ".png";
     PrintImage(ss.str(), output_unit.depth_image);
     printf("State %d,       %d      %d      %d      %d\n", child_state_id,
            output_unit.state_properties.target_cost,
@@ -753,7 +752,7 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id,
     //                                      output_unit.depth_image);
     // std::stringstream cloud_ss;
     // cloud_ss.precision(20);
-    // cloud_ss << kDebugDir + "cloud_" << modified_state_id << ".pcd";
+    // cloud_ss << debug_dir_ + "cloud_" << modified_state_id << ".pcd";
     // pcl::PCDWriter writer;
     // writer.writeBinary (cloud_ss.str()  , *gravity_aligned_point_cloud);
   }
@@ -956,7 +955,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
 
   // std::stringstream cloud_ss;
   // cloud_ss.precision(20);
-  // cloud_ss << kDebugDir + "cloud_" << rand() << ".pcd";
+  // cloud_ss << debug_dir_ + "cloud_" << rand() << ".pcd";
   // pcl::PCDWriter writer;
   // writer.writeBinary (cloud_ss.str()  , *cloud_in);
 
@@ -964,9 +963,9 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   //   std::stringstream ss1, ss2, ss3;
   //   ss1.precision(20);
   //   ss2.precision(20);
-  //   ss1 << kDebugDir + "cloud_" << child_id << ".pcd";
-  //   ss2 << kDebugDir + "cloud_aligned_" << child_id << ".pcd";
-  //   ss3 << kDebugDir + "cloud_succ_" << child_id << ".pcd";
+  //   ss1 << debug_dir_ + "cloud_" << child_id << ".pcd";
+  //   ss2 << debug_dir_ + "cloud_aligned_" << child_id << ".pcd";
+  //   ss3 << debug_dir_ + "cloud_succ_" << child_id << ".pcd";
   //   pcl::PCDWriter writer;
   //   writer.writeBinary (ss1.str()  , *cloud_in);
   //   writer.writeBinary (ss2.str()  , *cloud_out);
@@ -1113,7 +1112,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   // std::stringstream cloud_ss;
   // cloud_ss.precision(20);
-  // cloud_ss << kDebugDir + "cloud_" << rand() << ".pcd";
+  // cloud_ss << debug_dir_ + "cloud_" << rand() << ".pcd";
   // pcl::PCDWriter writer;
   // writer.writeBinary (cloud_ss.str()  , *succ_cloud);
 
@@ -1121,9 +1120,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   //   std::stringstream ss1, ss2, ss3;
   //   ss1.precision(20);
   //   ss2.precision(20);
-  //   ss1 << kDebugDir + "cloud_" << child_id << ".pcd";
-  //   ss2 << kDebugDir + "cloud_aligned_" << child_id << ".pcd";
-  //   ss3 << kDebugDir + "cloud_succ_" << child_id << ".pcd";
+  //   ss1 << debug_dir_ + "cloud_" << child_id << ".pcd";
+  //   ss2 << debug_dir_ + "cloud_aligned_" << child_id << ".pcd";
+  //   ss3 << debug_dir_ + "cloud_succ_" << child_id << ".pcd";
   //   pcl::PCDWriter writer;
   //   writer.writeBinary (ss1.str()  , *cloud_in);
   //   writer.writeBinary (ss2.str()  , *cloud_out);
@@ -1416,7 +1415,7 @@ void EnvObjectRecognition::PrintValidStates() {
     if (mpi_comm_->rank() == kMasterRank) {
       std::stringstream ss;
       ss.precision(20);
-      ss << kDebugDir + "valid_cloud_" << ii << ".pcd";
+      ss << debug_dir_ + "valid_cloud_" << ii << ".pcd";
       writer.writeBinary (ss.str(), *cloud);
     }
   }
@@ -1591,7 +1590,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   if (mpi_comm_->rank() == kMasterRank) {
     std::stringstream ss;
     ss.precision(20);
-    ss << kDebugDir + "test_cloud.pcd";
+    ss << debug_dir_ + "test_cloud.pcd";
     pcl::PCDWriter writer;
     writer.writeBinary (ss.str()  , *gravity_aligned_point_cloud);
   }
@@ -1603,7 +1602,10 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   knn.reset(new pcl::search::KdTree<PointT>(true));
   knn->setInputCloud(observed_cloud_);
-  LabelEuclideanClusters();
+
+  if (mpi_comm_->rank() == kMasterRank) {
+    LabelEuclideanClusters();
+  }
 
   // Project point cloud to table.
   *projected_cloud_ = *observed_cloud_;
@@ -1646,17 +1648,17 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   if (mpi_comm_->rank() == kMasterRank) {
     std::stringstream ss;
     ss.precision(20);
-    ss << kDebugDir + "obs_cloud" << ".pcd";
+    ss << debug_dir_ + "obs_cloud" << ".pcd";
     pcl::PCDWriter writer;
     writer.writeBinary (ss.str()  , *observed_cloud_);
-    PrintImage(kDebugDir + string("ground_truth.png"), observed_depth_image_);
+    PrintImage(debug_dir_ + string("ground_truth.png"), observed_depth_image_);
   }
 
 
   if (mpi_comm_->rank() == kMasterRank) {
     std::stringstream ss;
     ss.precision(20);
-    ss << kDebugDir + "projected_cloud" << ".pcd";
+    ss << debug_dir_ + "projected_cloud" << ".pcd";
     pcl::PCDWriter writer;
     writer.writeBinary (ss.str()  , *projected_cloud_);
   }
@@ -1666,7 +1668,8 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   GraphState start_state, goal_state;
 
   hash_manager_.Reset();
-  succs_rendered_ = 0;
+  env_stats_.scenes_rendered = 0;
+  env_stats_.scenes_valid = 0;
 
   const ObjectState special_goal_object_state(-1, false, DiscPose(0, 0, 0));
   goal_state.mutable_object_states().push_back(
@@ -1753,7 +1756,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   if (mpi_comm_->rank() == kMasterRank) {
     std::stringstream ss;
     ss.precision(20);
-    ss << kDebugDir + "obs_organized_cloud" << ".pcd";
+    ss << debug_dir_ + "obs_organized_cloud" << ".pcd";
     pcl::PCDWriter writer;
     writer.writeBinary (ss.str()  , *observed_organized_cloud_);
   }
@@ -1852,8 +1855,8 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     // std::stringstream ss1, ss2;
     // ss1.precision(20);
     // ss2.precision(20);
-    // ss1 << kDebugDir + "sim_cloud_" << i << ".pcd";
-    // ss2 << kDebugDir + "sim_cloud_aligned_" << i << ".pcd";
+    // ss1 << debug_dir_ + "sim_cloud_" << i << ".pcd";
+    // ss2 << debug_dir_ + "sim_cloud_aligned_" << i << ".pcd";
     // pcl::PCDWriter writer;
     // writer.writeBinary (ss1.str()  , *cloud_in);
     // writer.writeBinary (ss2.str()  , *cloud_out);
@@ -1944,7 +1947,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
                                                                 old_state.symmetric(), p_out);
 
             if (image_debug_) {
-              string fname = kDebugDir + "succ_" + to_string(succ_id) + ".png";
+              string fname = debug_dir_ + "succ_" + to_string(succ_id) + ".png";
               PrintState(succ_state, fname);
               printf("%d: %f\n", succ_id, icp_fitness_score);
             }
@@ -1987,7 +1990,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
     return state1.id() < state2.id();
   });
 
-  string fname = kDebugDir + "greedy_state.png";
+  string fname = debug_dir_ + "greedy_state.png";
   PrintState(greedy_state, fname);
   return greedy_state;
 }
@@ -1997,12 +2000,12 @@ void EnvObjectRecognition::SetDebugOptions(bool image_debug) {
 }
 
 void EnvObjectRecognition::SetDebugDir(const string &debug_dir) {
-  kDebugDir = debug_dir;
+  debug_dir_ = debug_dir;
 }
 
-void EnvObjectRecognition::GetEnvStats(int &succs_rendered, int &succs_valid) {
-  succs_rendered = succs_rendered_;
-  succs_valid = hash_manager_.Size() - 1; // Ignore the start state
+const EnvStats &EnvObjectRecognition::GetEnvStats() {
+  env_stats_.scenes_valid = hash_manager_.Size() - 1; // Ignore the start state
+  return env_stats_;
 }
 
 void EnvObjectRecognition::GetGoalPoses(int true_goal_id,

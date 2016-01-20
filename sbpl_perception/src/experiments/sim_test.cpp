@@ -82,7 +82,12 @@ int main(int argc, char **argv) {
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
-  ObjectRecognizer object_recognizer(argc, argv, world);
+
+  if (world->rank() == kMasterRank) {
+    ros::init(argc, argv, "simulation_tests");
+    ros::NodeHandle nh("~");
+  }
+  ObjectRecognizer object_recognizer(world);
 
   // Setup camera
   double roll = 0.0;

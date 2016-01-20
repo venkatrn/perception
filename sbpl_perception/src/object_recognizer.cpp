@@ -34,8 +34,8 @@ void serialize(Archive &ar, sbpl_perception::ModelMetaData &model_meta_data,
 } // namespace boost
 
 namespace sbpl_perception {
-ObjectRecognizer::ObjectRecognizer(int argc, char **argv,
-                                   std::shared_ptr<boost::mpi::communicator> mpi_world) : planner_params_(0.0) {
+ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
+                                   mpi_world) : planner_params_(0.0) {
 
   mpi_world_ = mpi_world;
 
@@ -45,24 +45,42 @@ ObjectRecognizer::ObjectRecognizer(int argc, char **argv,
   bool image_debug;
 
   if (IsMaster()) {
-    ros::init(argc, argv, "object_recognizer");
-    ros::NodeHandle nh;
-    ros::NodeHandle private_nh("~");
-
     ///////////////////////////////////////////////////////////////////////
     // NOTE: Do not modify any default params here. Make all changes in the
     // appropriate yaml config files. They will override these ones.
     ///////////////////////////////////////////////////////////////////////
 
+    if (!ros::isInitialized()) {
+      printf("ERROR: ObjectRecognizer must be instantiated after ros::init(..) has been called\n");
+      mpi_world_->abort(1);
+      exit(1);
+    }
+
+    ros::NodeHandle private_nh("~");
+
     private_nh.param("image_debug", image_debug, false);
 
     private_nh.param("search_resolution_translation",
-                     search_resolution_translation, 0.004);
+                     search_resolution_translation, 0.04);
     private_nh.param("search_resolution_yaw", search_resolution_yaw,
                      0.3926991);
 
+    printf("SEARCH PARAM: %f\n", search_resolution_translation);
+
+    if (search_resolution_translation < 0.05) {
+      printf("Error loading paramsi\n");
+      mpi_world_->abort(0);
+      exit(1);
+    }
+
     XmlRpc::XmlRpcValue model_bank_list;
-    nh.getParam("model_bank", model_bank_list);
+
+    std::string param_key;
+
+    if (private_nh.searchParam("model_bank", param_key)) {
+      private_nh.getParam(param_key, model_bank_list);
+    }
+
     ROS_ASSERT(model_bank_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
     printf("Model bank has %d models:\n", model_bank_list.size());
     model_bank.resize(model_bank_list.size());
@@ -218,7 +236,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
                           solution_state_ids[solution_state_ids.size() - 2]);
     printf("Goal state ID is %d\n", goal_state_id);
     env_obj_->PrintState(goal_state_id,
-                         kDebugDir + string("goal_state.png"));
+                         env_obj_->GetDebugDir() + string("goal_state.png"));
     env_obj_->GetGoalPoses(goal_state_id, detected_poses);
 
     cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;
@@ -232,13 +250,14 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
     vector<PlannerStats> stats_vector;
     planner_->get_search_stats(&stats_vector);
     last_planning_stats_ = stats_vector;
-    int succs_rendered, succs_valid;
-    env_obj_->GetEnvStats(succs_rendered, succs_valid);
+    EnvStats env_stats = env_obj_->GetEnvStats();
+    last_env_stats_ = env_stats;
 
     cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
     cout << endl << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
          << "Cost" << endl;
-    cout << succs_rendered << " " << succs_valid << " "  << stats_vector[0].expands
+    cout << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "  <<
+         stats_vector[0].expands
          << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
 
     planning_finished = true;
@@ -276,6 +295,7 @@ bool ObjectRecognizer::IsMaster() const {
   return mpi_world_->rank() == kMasterRank;
 }
 }  // namespace
+
 
 
 

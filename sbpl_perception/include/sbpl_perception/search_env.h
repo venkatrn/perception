@@ -168,8 +168,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   void SetDebugOptions(bool image_debug);
   void SetDebugDir(const std::string &debug_dir);
+  const std::string &GetDebugDir() {
+    return debug_dir_;
+  }
 
-  void GetEnvStats(int &succs_rendered, int &succs_valid);
+  const EnvStats &GetEnvStats();
   void GetGoalPoses(int true_goal_id, std::vector<ContPose> *object_poses);
 
   int NumHeuristics() const;
@@ -227,12 +230,14 @@ class EnvObjectRecognition : public EnvironmentMHA {
                 observed_organized_cloud_, projected_cloud_;
 
   bool image_debug_;
+  // Print outputs/debug info to this directory. Assumes that directory exists.
+  std::string debug_dir_;
   unsigned short min_observed_depth_, max_observed_depth_;
 
   Eigen::Matrix4f gl_inverse_transform_;
   Eigen::Isometry3d cam_to_world_;
 
-  int succs_rendered_;
+  EnvStats env_stats_;
 
   void ResetEnvironmentState();
 

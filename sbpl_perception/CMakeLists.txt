@@ -90,6 +90,10 @@ rosbuild_add_openmp_flags(sim_test)
 rosbuild_add_executable(generate_dataset src/utils/generate_dataset.cpp)
 target_link_libraries(generate_dataset ${PROJECT_NAME})
 
+rosbuild_add_executable(experiments/roi_saver
+  experiments/src/roi_saver.cpp)
+target_link_libraries(experiments/roi_saver ${PROJECT_NAME})
+
 # rosbuild_add_executable(mpi_test src/experiments/search_mpi_test.cpp)
 # rosbuild_link_boost(mpi_test mpi serialization)
 # target_link_libraries(mpi_test ${PROJECT_NAME})
@@ -114,9 +118,13 @@ target_link_libraries(generate_dataset ${PROJECT_NAME})
 #   experiments/src/vfh_estimator.cpp)
 # target_link_libraries(experiments/vfh_estimator ${PROJECT_NAME})
 #
-# rosbuild_add_executable(experiments/perch
-#   experiments/src/perch.cpp)
-# target_link_libraries(experiments/perch ${PROJECT_NAME})
+rosbuild_add_executable(experiments/perch
+  experiments/src/perch.cpp)
+target_link_libraries(experiments/perch ${PROJECT_NAME})
+target_link_libraries(experiments/perch libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  libvtkGraphics.so)
+rosbuild_link_boost(experiments/perch mpi serialization)
+rosbuild_add_openmp_flags(experiments/perch)
 #
 # rosbuild_add_executable(experiments/greedy_icp
 #   experiments/src/greedy_icp.cpp)

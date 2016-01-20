@@ -8,8 +8,7 @@
 namespace sbpl_perception {
 class ObjectRecognizer {
  public:
-  ObjectRecognizer(int argc, char **argv,
-                   std::shared_ptr<boost::mpi::communicator> mpi_world);
+  ObjectRecognizer(std::shared_ptr<boost::mpi::communicator> mpi_world);
   bool LocalizeObjects(const RecognitionInput &input,
                        std::vector<ContPose> *detected_poses) const;
   // Test localization from ground truth poses.
@@ -24,6 +23,9 @@ class ObjectRecognizer {
   const std::vector<PlannerStats> &GetLastPlanningEpisodeStats() const {
     return last_planning_stats_;
   }
+  const EnvStats &GetLastEnvStats() const {
+    return last_env_stats_;
+  }
   
   std::shared_ptr<EnvObjectRecognition> GetMutableEnvironment() {
     return env_obj_;
@@ -32,6 +34,7 @@ class ObjectRecognizer {
   mutable std::shared_ptr<EnvObjectRecognition> env_obj_;
   mutable std::unique_ptr<MHAPlanner> planner_;
   mutable std::vector<PlannerStats> last_planning_stats_;
+  mutable EnvStats last_env_stats_;
 
   std::shared_ptr<boost::mpi::communicator> mpi_world_;
 

@@ -1,9 +1,11 @@
 /**
- * @file experiments.cpp
- * @brief Example running PERCH on real data with input specified from a config file.
+ * @file roi_saver.cpp
+ * @brief This is a tool to take a config file describing a scene and save the
+ * ROIs in it to disk.
  * @author Venkatraman Narayanan
- * Carnegie Mellon University, 2015
+ * Carnegie Mellon University, 2016
  */
+
 
 #include <ros/package.h>
 #include <ros/ros.h>
@@ -11,6 +13,7 @@
 #include <sbpl_perception/object_recognizer.h>
 #include <sbpl_perception/rcnn_heuristic_factory.h>
 
+#include <boost/filesystem.hpp>
 #include <pcl/io/pcd_io.h>
 
 #include <memory>
@@ -22,27 +25,37 @@ using namespace sbpl_perception;
 // slaves simply aid in computing successor costs in parallel.
 const int kMasterRank = 0;
 
-const string kProjectDir = ros::package::getPath("sbpl_perception");
+const string kDebugDir = ros::package::getPath("sbpl_perception") +
+                         "/visualization/";
 
 int main(int argc, char **argv) {
+
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
   if (world->rank() == kMasterRank) {
 
-    string config_file;
-
-    if (world->rank() == kMasterRank) {
-      ros::init(argc, argv, "heuristic_test");
-      ros::NodeHandle nh("~");
-      nh.param("config_file", config_file, std::string(""));
+    if (argc < 3) {
+      cerr << "Usage: ./perch <path_to_config_file> <output_base_dir>"
+           << endl;
+      return -1;
     }
 
+    boost::filesystem::path config_file_path = argv[1];
+    boost::filesystem::path output_base_dir = argv[2];
+
+    if (!boost::filesystem::is_regular_file(config_file_path)) {
+      cerr << "Invalid config file" << endl;
+      return -1;
+    }
+
+    ros::init(argc, argv, "roi_saver");
+    ros::NodeHandle nh("~");
     ObjectRecognizer object_recognizer(world);
 
     ConfigParser parser;
-    parser.Parse(config_file);
+    parser.Parse(config_file_path.c_str());
 
     RecognitionInput input;
     input.x_min = parser.min_x;
@@ -70,14 +83,10 @@ int main(int argc, char **argv) {
     RCNNHeuristicFactory rcnn_heuristic_factory(input, env_obj->kinect_simulator_);
 
     // Save ROIs and bboxes to disk.
-    boost::filesystem::path output_dir(kProjectDir + "/heuristics");
+    boost::filesystem::path pcd_file(parser.pcd_file_path);
+    string subdir_id = pcd_file.stem().native();
+    boost::filesystem::path output_dir = output_base_dir / subdir_id;
     rcnn_heuristic_factory.SaveROIsToDisk(output_dir);
-    rcnn_heuristic_factory.LoadHeuristicsFromDisk(output_dir);
-
-    // Heuristics heuristics = rcnn_heuristic_factory.GetHeuristics();
   }
-
   return 0;
 }
-
-

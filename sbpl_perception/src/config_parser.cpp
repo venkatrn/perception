@@ -20,6 +20,7 @@ void ConfigParser::Parse(const string &config_file) {
   fs.open(config_file.c_str());
 
   if (!fs.is_open () || fs.fail ()) {
+    printf("File: %s\n", config_file.c_str());
     throw std::runtime_error("Unable to open environment config file");
     return;
   }

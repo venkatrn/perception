@@ -278,6 +278,7 @@ void RCNNHeuristicFactory::SaveROIsToDisk(const boost::filesystem::path
 
   // cv::imshow("Projected ROIs", c_image);
   // cv::waitKey(1000);
+  cv::imwrite(fname.c_str(), c_image);
 
   // Create a separate image for each bbox and display.
   cv::Mat new_image;
