@@ -16,10 +16,6 @@
 using namespace std;
 using namespace sbpl_perception;
 
-// Process ID of the master processor. This does all the planning work, and the
-// slaves simply aid in computing successor costs in parallel.
-const int kMasterRank = 0;
-
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
 
@@ -29,7 +25,7 @@ int main(int argc, char **argv) {
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
-  if (world->rank() == kMasterRank) {
+  if (IsMaster(world)) {
     ros::init(argc, argv, "perch_experiments");
     ros::NodeHandle nh("~");
   }
@@ -52,7 +48,7 @@ int main(int argc, char **argv) {
 
   ofstream fs_poses, fs_stats;
 
-  if (world->rank() == kMasterRank) {
+  if (IsMaster(world)) {
     fs_poses.open (output_file_poses.string().c_str(),
                    std::ofstream::out | std::ofstream::app);
     fs_stats.open (output_file_stats.string().c_str(),
@@ -63,9 +59,9 @@ int main(int argc, char **argv) {
   cout << config_file << endl;
 
   bool image_debug = false;
-  string debug_dir = kDebugDir + config_file_path.filename().string();
+  string debug_dir = kDebugDir + config_file_path.stem().string();
 
-  if (world->rank() == kMasterRank &&
+  if (IsMaster(world) &&
       !boost::filesystem::is_directory(debug_dir)) {
     boost::filesystem::create_directory(debug_dir);
   }
@@ -110,7 +106,7 @@ int main(int argc, char **argv) {
   object_recognizer.LocalizeObjects(input, &detected_poses);
 
   // Write output and statistics to file.
-  if (world->rank() == kMasterRank) {
+  if (IsMaster(world)) {
     auto stats_vector = object_recognizer.GetLastPlanningEpisodeStats();
     EnvStats env_stats = object_recognizer.GetLastEnvStats();
 

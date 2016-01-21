@@ -21,20 +21,13 @@
 using namespace std;
 using namespace sbpl_perception;
 
-// Process ID of the master processor. This does all the planning work, and the
-// slaves simply aid in computing successor costs in parallel.
-const int kMasterRank = 0;
-
-const string kDebugDir = ros::package::getPath("sbpl_perception") +
-                         "/visualization/";
-
 int main(int argc, char **argv) {
 
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
-  if (world->rank() == kMasterRank) {
+  if (IsMaster(world)) {
 
     if (argc < 3) {
       cerr << "Usage: ./perch <path_to_config_file> <output_base_dir>"

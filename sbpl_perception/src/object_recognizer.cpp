@@ -12,8 +12,6 @@ using std::string;
 using std::vector;
 
 namespace {
-
-constexpr int kMasterRank = 0;
 constexpr int kPlanningFinishedTag = 1;
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
@@ -44,7 +42,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   double search_resolution_yaw = 0.0;
   bool image_debug;
 
-  if (IsMaster()) {
+  if (IsMaster(mpi_world_)) {
     ///////////////////////////////////////////////////////////////////////
     // NOTE: Do not modify any default params here. Make all changes in the
     // appropriate yaml config files. They will override these ones.
@@ -64,14 +62,6 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
                      search_resolution_translation, 0.04);
     private_nh.param("search_resolution_yaw", search_resolution_yaw,
                      0.3926991);
-
-    printf("SEARCH PARAM: %f\n", search_resolution_translation);
-
-    if (search_resolution_translation < 0.05) {
-      printf("Error loading paramsi\n");
-      mpi_world_->abort(0);
-      exit(1);
-    }
 
     XmlRpc::XmlRpcValue model_bank_list;
 
@@ -190,7 +180,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   bool plan_success = false;
   detected_poses->clear();
 
-  if (IsMaster()) {
+  if (IsMaster(mpi_world_)) {
 
     // We'll reset the planner always since num_heuristics could vary between
     // requests.
@@ -290,13 +280,4 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   mpi_world_->barrier();
   return plan_success;
 }
-
-bool ObjectRecognizer::IsMaster() const {
-  return mpi_world_->rank() == kMasterRank;
-}
 }  // namespace
-
-
-
-
-

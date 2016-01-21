@@ -13,14 +13,12 @@
 
 #include <pcl/io/pcd_io.h>
 
+#include <boost/filesystem.hpp>
+
 #include <memory>
 
 using namespace std;
 using namespace sbpl_perception;
-
-// Process ID of the master processor. This does all the planning work, and the
-// slaves simply aid in computing successor costs in parallel.
-const int kMasterRank = 0;
 
 const string kProjectDir = ros::package::getPath("sbpl_perception");
 
@@ -29,11 +27,11 @@ int main(int argc, char **argv) {
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
-  if (world->rank() == kMasterRank) {
+  if (IsMaster(world)) {
 
     string config_file;
 
-    if (world->rank() == kMasterRank) {
+    if (IsMaster(world)) {
       ros::init(argc, argv, "heuristic_test");
       ros::NodeHandle nh("~");
       nh.param("config_file", config_file, std::string(""));
@@ -53,6 +51,9 @@ int main(int argc, char **argv) {
     input.camera_pose = parser.camera_pose;
     input.model_names = parser.ConvertModelNamesInFileToIDs(
                           object_recognizer.GetModelBank());
+    boost::filesystem::path config_file_path(config_file);
+    input.heuristics_dir = ros::package::getPath("sbpl_perception") +
+                           "/heuristics/" + config_file_path.stem().string();
 
     // Objects for storing the point clouds.
     pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
@@ -70,9 +71,9 @@ int main(int argc, char **argv) {
     RCNNHeuristicFactory rcnn_heuristic_factory(input, env_obj->kinect_simulator_);
 
     // Save ROIs and bboxes to disk.
-    boost::filesystem::path output_dir(kProjectDir + "/heuristics");
-    rcnn_heuristic_factory.SaveROIsToDisk(output_dir);
-    rcnn_heuristic_factory.LoadHeuristicsFromDisk(output_dir);
+    // boost::filesystem::path output_dir(kProjectDir + "/heuristics");
+    // rcnn_heuristic_factory.SaveROIsToDisk(output_dir);
+    rcnn_heuristic_factory.LoadHeuristicsFromDisk(input.heuristics_dir);
 
     // Heuristics heuristics = rcnn_heuristic_factory.GetHeuristics();
   }

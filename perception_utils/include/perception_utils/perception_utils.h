@@ -50,6 +50,9 @@ namespace perception_utils
   PointCloudPtr PassthroughFilter(PointCloudPtr cloud);
   PointCloudPtr PassthroughFilter(PointCloudPtr cloud, double min_x, double max_x, double min_y, double max_y, double min_z, double max_z);
 
+  /**@brief Indices filter**/
+  PointCloudPtr IndexFilter(PointCloudPtr cloud, const std::vector<int> &indices, bool set_negative);
+
   /**@brief Downsample point cloud**/
   PointCloudPtr DownsamplePointCloud(PointCloudPtr cloud);
   PointCloudPtr DownsamplePointCloud(PointCloudPtr cloud, double voxel_size);

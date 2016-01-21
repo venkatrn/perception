@@ -1,6 +1,9 @@
 search_resolution_translation: 0.1 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
 
-max_icp_iterations: 10
-sensor_resolution_radius: 0.003 #m
-min_neighbor_points: 50 #  
+perch_params:
+  sensor_resolution_radius: 0.003 #m
+  min_neighbor_points_for_valid_pose: 50 
+  max_icp_iterations: 10
+  use_adaptive_resolution: false
+  use_rcnn_heuristic: true

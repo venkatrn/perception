@@ -828,6 +828,20 @@ PointCloudPtr PassthroughFilter(PointCloudPtr cloud, double min_x, double max_x,
   return filtered_cloud;
 }
 
+PointCloudPtr IndexFilter(PointCloudPtr cloud, const std::vector<int> &indices, bool set_negative) {
+  PointCloudPtr filtered_cloud(new PointCloud);
+  pcl::PointIndicesPtr pcl_indices(new pcl::PointIndices());
+  pcl_indices->indices = indices;
+
+  pcl::ExtractIndices<PointT> extract;
+  extract.setInputCloud (cloud);
+  extract.setIndices (pcl_indices);
+  extract.setNegative (set_negative);
+  extract.filter(*filtered_cloud);
+
+  return filtered_cloud;
+}
+
 bool EvaluateRectangle(std::vector<PointT> &corners) {
   assert(corners.size() == 4);
   float max_x = -1000.0, max_y = -1000.0, max_z = -1000.0;

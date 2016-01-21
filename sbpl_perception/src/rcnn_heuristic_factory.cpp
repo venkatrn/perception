@@ -18,12 +18,6 @@ string kDebugDir = ros::package::getPath("sbpl_perception") +
                    "/visualization/";
 
 namespace {
-const string kPyFasterRCNNBinary = ros::package::getPath("sbpl_perception") +
-                                   "/scripts/run_willow_net.py";
-const string kTempBBoxFileName = ros::package::getPath("sbpl_perception") +
-                                 "/visualization/bbox_outputs.txt" ;
-const string kInputImagePath = ros::package::getPath("sbpl_perception") +
-                               "/visualization/cnn_input_image.png" ;
 const double kHeuristicScaling = 1000.0;
 const double kNormalVariance =  0.4 * 0.4; // m^2
 const double kLargeHeuristic = 2.0 * kHeuristicScaling /
@@ -32,7 +26,7 @@ const double kLargeHeuristic = 2.0 * kHeuristicScaling /
 // Minimum confidence for an RCNN detection to be considered as a heuristic.
 // TODO: we might want to look at the score relative to the best for this
 // bounding box.
-const double kMinimumRCNNConfidence = 0.05;
+const double kMinimumRCNNConfidence = 0.1;
 } // namespace
 
 namespace sbpl_perception {
@@ -62,50 +56,13 @@ RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input,
   EncodeDepthImage(input_depth_image_, encoded_depth_image_);
   // RescaleDepthImage(input_depth_image_, encoded_depth_image_, 0,
   //                   kRescalingMaxDepth);
-  // RunRCNN(encoded_depth_image_);
-}
-
-void RCNNHeuristicFactory::RunRCNN(const cv::Mat &input_encoded_depth_image) {
-  cv::imwrite(kInputImagePath, input_encoded_depth_image);
-  // string command = kPyFasterRCNNBinary
-  //                  + " --cpu"
-  //                  + " --input " + kInputImagePath
-  //                  + " --output" + kTempBBoxFileName;
-  //
-  // system(command.c_str());
-
-  // Now read and parse the bbox output file.
-  ifstream bbox_file;
-  bbox_file.open(kTempBBoxFileName.c_str(), std::ios::in);
-
-  string class_name;
-  double score = 0;
-  double xmin = 0;
-  double xmax = 0;
-  double ymin = 0;
-  double ymax = 0;
-
-  int num_detections = 0;
-
-  while (bbox_file >> class_name && bbox_file >> score && bbox_file >> xmin &&
-         bbox_file >> ymin && bbox_file >> xmax && bbox_file >> ymax) {
-    const cv::Rect bbox(cv::Point(xmin, ymin), cv::Point(xmax, ymax));
-    detections_dict_[class_name].emplace_back(bbox,
-                                              score);
-    num_detections++;
-  }
-
-  bbox_file.close();
-  printf("Read %d detections\n", num_detections);
-
-  heuristics_ = CreateHeuristicsFromDetections(detections_dict_);
 }
 
 void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
                                                   &base_dir) {
 
   if (!boost::filesystem::is_directory(base_dir)) {
-    printf("Base directory %s does not exist. Unable to load heuristics from disk\n",
+    printf("Base heuristic directory %s does not exist. No RCNN heuristics will be used.\n",
            base_dir.c_str());
     return;
   }
@@ -138,6 +95,7 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
     // Read the ROI.
     ifstream bbox_file;
     bbox_file.open(bbox_filename.c_str(), std::ios::in);
+
     if (!bbox_file) {
       printf("Error opening bounding box file %s\n", bbox_filename.c_str());
       return;
@@ -157,6 +115,7 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
 
     ifstream det_file;
     det_file.open(dir_itr->path().c_str(), std::ios::in);
+
     if (!det_file) {
       printf("Error opening detections file %s\n", bbox_filename.c_str());
       return;
@@ -170,7 +129,6 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
       if (find(recognition_input_.model_names.begin(),
                recognition_input_.model_names.end(),
                class_name) == recognition_input_.model_names.end()) {
-        printf("Mismatch %s\n", class_name.c_str());
         continue;
       }
 
@@ -188,7 +146,7 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
     for (const auto &item : all_detections) {
       const vector<Detection> &detections = item.second;
       auto max_it = std::max_element(detections.begin(),
-      detections.end(), [](const Detection &det1, const Detection &det2) {
+      detections.end(), [](const Detection & det1, const Detection & det2) {
         return det1.score > det2.score;
       });
       assert(max_it != detections.end());
@@ -206,7 +164,8 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
     printf("------%s------\n", item.first.c_str());
 
     for (const auto &detection : item.second) {
-      printf("     %f:  %d %d %d %d \n", detection.score, detection.bbox.tl().x, detection.bbox.tl().y, detection.bbox.br().x,
+      printf("     %f:  %d %d %d %d \n", detection.score, detection.bbox.tl().x,
+             detection.bbox.tl().y, detection.bbox.br().x,
              detection.bbox.br().y);
     }
   }
@@ -488,3 +447,4 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
   }
 }
 } // namespace
+

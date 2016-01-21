@@ -7,6 +7,8 @@
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/object_state.h>
 
+#include <boost/mpi.hpp>
+
 #include <functional>
 #include <string>
 
@@ -28,6 +30,9 @@ constexpr unsigned short kKinectMaxDepth = 20000;
 // rescaling the depth image to [0,255].
 constexpr unsigned short kRescalingMaxDepth = 5000;
 
+// The ID of the master process when using MPI.
+constexpr int kMasterRank = 0;
+
 // A container for the input parameters for object recognition.
 struct RecognitionInput {
   // The input point cloud in world frame. *MUST* be an organized point cloud.
@@ -39,6 +44,11 @@ struct RecognitionInput {
   // Environment bounds.
   double x_min, x_max, y_min, y_max;
   double table_height;
+  // Optionally, we can specify a directory for this input that contains
+  // heuristic information. The directory should contain files roi_x.png,
+  // roi_x_bbox.txt and roi_x_det.txt, where x \in [1, #ROIs] in the depth
+  // image. Refer to RCNNHeuristicFactory for more details.
+  std::string heuristics_dir;
 };
 
 // A container for the holding the meta-data associated with a 3D model.
@@ -104,6 +114,8 @@ void VectorIndexToOpenCVIndex(int vector_index, int *x, int *y);
 // Convert PCL organized point cloud index to OpenCV (x,y) index.
 void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y);
 
+// MPI-utilties
+bool IsMaster(std::shared_ptr<boost::mpi::communicator> mpi_world);
 
 typedef std::function<int(const GraphState &state)> Heuristic;
 typedef std::vector<Heuristic> Heuristics;

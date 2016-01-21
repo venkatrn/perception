@@ -37,14 +37,12 @@ class RCNNHeuristicFactory {
   void SaveROIsToDisk(const boost::filesystem::path &base_dir);
 
  private:
-  void RunRCNN(const cv::Mat &input_encoded_depth_image);
   const pcl::simulation::SimExample::Ptr kinect_simulator_;
   RecognitionInput recognition_input_;
   cv::Mat input_depth_image_;
   cv::Mat encoded_depth_image_;
   // A list of detections for each class.
   DetectionsMap detections_dict_;
-
 
   Heuristics CreateHeuristicsFromDetections(const DetectionsMap &detections)
   const;

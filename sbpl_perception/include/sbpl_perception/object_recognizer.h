@@ -42,7 +42,6 @@ class ObjectRecognizer {
 
   EnvConfig env_config_;
 
-  bool IsMaster() const;
   bool RunPlanner(std::vector<ContPose> *detected_poses) const;
 };
 }  // namespace

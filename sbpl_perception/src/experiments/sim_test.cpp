@@ -17,10 +17,6 @@
 using namespace std;
 using namespace sbpl_perception;
 
-namespace {
-  constexpr int kMasterRank = 0;
-}
-
 void GenerateRandomPoses(const RecognitionInput &input,
                          std::vector<int> *model_ids, std::vector<ContPose> *object_poses) {
 
@@ -83,7 +79,7 @@ int main(int argc, char **argv) {
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
-  if (world->rank() == kMasterRank) {
+  if (IsMaster(world)) {
     ros::init(argc, argv, "simulation_tests");
     ros::NodeHandle nh("~");
   }

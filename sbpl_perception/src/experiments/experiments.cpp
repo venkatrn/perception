@@ -14,6 +14,8 @@
 
 #include <pcl/io/pcd_io.h>
 
+#include <boost/filesystem.hpp>
+
 #include <chrono>
 #include <memory>
 #include <random>
@@ -21,24 +23,19 @@
 using namespace std;
 using namespace sbpl_perception;
 
-// Process ID of the master processor. This does all the planning work, and the
-// slaves simply aid in computing successor costs in parallel.
-const int kMasterRank = 0;
-
-const string kDebugDir = ros::package::getPath("sbpl_perception") +
-                         "/visualization/";
-
 int main(int argc, char **argv) {
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
   string config_file;
-  if (world->rank() == kMasterRank) {
+
+  if (IsMaster(world)) {
     ros::init(argc, argv, "real_test");
     ros::NodeHandle nh("~");
     nh.param("config_file", config_file, std::string(""));
   }
+
   ObjectRecognizer object_recognizer(world);
 
   // All processes should wait until master has loaded params.
@@ -55,12 +52,16 @@ int main(int argc, char **argv) {
   input.y_max = parser.max_y;
   input.table_height = parser.table_height;
   input.camera_pose = parser.camera_pose;
-  input.model_names = parser.model_names;
   input.model_names = parser.ConvertModelNamesInFileToIDs(
                         object_recognizer.GetModelBank());
 
+  boost::filesystem::path config_file_path(config_file);
+  input.heuristics_dir = ros::package::getPath("sbpl_perception") +
+                         "/heuristics/" + config_file_path.stem().string();
+
   // Objects for storing the point clouds.
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
+
   // Read the input PCD file from disk.
   if (pcl::io::loadPCDFile<PointT>(parser.pcd_file_path.c_str(),
                                    *cloud_in) != 0) {

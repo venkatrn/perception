@@ -168,4 +168,8 @@ void VectorIndexToOpenCVIndex(int vector_index, int *x, int *y) {
 void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y) {
   VectorIndexToOpenCVIndex(PCLIndexToVectorIndex(pcl_index), x, y);
 }
+
+bool IsMaster(std::shared_ptr<boost::mpi::communicator> mpi_world) {
+  return mpi_world->rank() == kMasterRank;
+}
 }  // namespace 
