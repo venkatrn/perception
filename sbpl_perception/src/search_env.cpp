@@ -42,21 +42,25 @@ using namespace Eigen;
 namespace {
 
 // const double kSensorResolution = 0.01 / 2;//0.01
-constexpr double kSensorResolution = 0.003;
-constexpr double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
+double kSensorResolution = 0.003;
+double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
 
 // Number of points that should be near the (x,y,table height) of the object
 // for that state to be considered as valid.
-constexpr int kMinimumNeighborPointsForValidPose =
+int kMinimumNeighborPointsForValidPose =
   50;  //50 for ICRA experiments
+
+bool kUseAdaptiveResolution = false;
+bool kUseRCNNHeuristic = true;
+
+// Max number of ICP iterations.
+int kMaxICPIterations = 10;
 
 // Whether should use depth-dependent cost penalty. If true, cost is
 // indicator(pixel explained) * range_in_meters(pixel). Otherwise, cost is
 // indicator(pixel explained).
 constexpr bool kUseDepthSensitiveCost = false;
 
-string debug_dir_ = ros::package::getPath("sbpl_perception") +
-                   "/visualization/";
 constexpr int kMasterRank = 0;
 
 }  // namespace
@@ -66,7 +70,8 @@ namespace sbpl_perception {
 EnvObjectRecognition::EnvObjectRecognition(const
                                            std::shared_ptr<boost::mpi::communicator> &comm) :
   mpi_comm_(comm),
-  image_debug_(false), env_stats_{0,0} {
+  image_debug_(false), debug_dir_(ros::package::getPath("sbpl_perception") +
+                                  "/visualization/"), env_stats_ {0, 0} {
 
   // OpenGL requires argc and argv
   char **argv;
@@ -76,7 +81,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
   argv[0] = "0";
   argv[1] = "1";
   kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
-                                                     kDepthImageHeight, kDepthImageWidth));
+  kDepthImageHeight, kDepthImageWidth));
   scene_ = kinect_simulator_->scene_;
   observed_cloud_.reset(new PointCloud);
   projected_cloud_.reset(new PointCloud);
@@ -84,12 +89,37 @@ EnvObjectRecognition::EnvObjectRecognition(const
   downsampled_observed_cloud_.reset(new PointCloud);
 
   gl_inverse_transform_ <<
-                        0, 0 , -1 , 0,
-                        -1, 0 , 0 , 0,
-                        0, 1 , 0 , 0,
-                        0, 0 , 0 , 1;
+  0, 0 , -1 , 0,
+  -1, 0 , 0 , 0,
+  0, 1 , 0 , 0,
+  0, 0 , 0 , 1;
 
   pcl::console::setVerbosityLevel(pcl::console::L_ALWAYS);
+
+  // Load algorithm parameters.
+  // NOTE: Do not change these default parameters. Configure these in the
+  // appropriate yaml file.
+  if (IsMaster(mpi_comm_)) {
+    if (!ros::isInitialized) {
+      printf("Error: ros::init() must be called before environment can be constructed\n");
+      mpi_comm_->abort(1);
+      exit(1);
+    }
+
+    ros::NodeHandle private_nh("~perch_params");
+    private_nh.param("sensor_resolution_radius", kSensorResolution, 0.003);
+    private_nh.param("min_points_for_valid_pose",
+                     kMinimumNeighborPointsForValidPose, 50);
+    private_nh.param("max_icp_iterations", kMaxICPIterations, 10);
+    private_nh.param("use_adaptive_resolution", kUseAdaptiveResolution, false);
+    private_nh.param("use_rcnn_heuristic", kUseRCNNHeuristic, true);
+    kSensorResolutionSqr = kSensorResolution * kSensorResolution;
+
+    printf("----------PERCH Config-------------\n");
+    printf("Sensor Resolution Radius: %f\n", kSensorResolution);
+    printf("Min Points for Valid Pose: %d\n", kMinimumNeighborPointsForValidPose);
+    printf("Max ICP Iterations: %d\n", kMaxICPIterations);
+  }
 }
 
 EnvObjectRecognition::~EnvObjectRecognition() {
@@ -128,15 +158,17 @@ void EnvObjectRecognition::LoadObjFiles(const vector<ModelMetaData>
                           model_bank_it->flipped);
     obj_models_.push_back(obj_model);
 
-    printf("Read %s with %d polygons and %d triangles\n", model_name.c_str(),
-           static_cast<int>(mesh.polygons.size()),
-           static_cast<int>(mesh.cloud.data.size()));
-    printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f,   %f\n",
-           obj_model.min_x(),
-           obj_model.max_x(), obj_model.min_y(), obj_model.max_y(), obj_model.min_z(),
-           obj_model.max_z(), obj_model.GetCircumscribedRadius(),
-           obj_model.GetInscribedRadius());
-    printf("\n");
+    if (IsMaster(mpi_comm_)) {
+      printf("Read %s with %d polygons and %d triangles\n", model_name.c_str(),
+             static_cast<int>(mesh.polygons.size()),
+             static_cast<int>(mesh.cloud.data.size()));
+      printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f,   %f\n",
+             obj_model.min_x(),
+             obj_model.max_x(), obj_model.min_y(), obj_model.max_y(), obj_model.min_z(),
+             obj_model.max_z(), obj_model.GetCircumscribedRadius(),
+             obj_model.GetInscribedRadius());
+      printf("\n");
+    }
   }
 }
 
@@ -253,8 +285,6 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     source_state = hash_manager_.GetState(source_state_id);
   }
 
-  std::cout << source_state;
-
   // If in cache, return
   auto it = succ_cache.find(source_state_id);
 
@@ -268,6 +298,9 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       *succ_ids = succ_cache[source_state_id];
     }
 
+    printf("Expanding cached state: %d with %zu objects\n",
+           source_state_id,
+           source_state.NumObjects());
     return;
   }
 
@@ -349,6 +382,9 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       counted_pixels_map_[candidate_succ_ids[ii]] = output_unit.child_counted_pixels;
       g_value_map_[candidate_succ_ids[ii]] = g_value_map_[source_state_id] +
                                              output_unit.cost;
+
+      // TODO: Get TargetCost!!!
+      last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.cost;
 
       // Cache the depth image only for single object renderings, *only* if valid.
       // NOTE: The hash key is computed on the *unadjusted* child state.
@@ -545,13 +581,12 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   }
 
   // Ditto for penultimate state.
-  if (static_cast<int>(source_state.NumObjects()) == env_params_.num_objects - 1) {
+  if (static_cast<int>(source_state.NumObjects()) == env_params_.num_objects -
+      1) {
     GetSuccs(source_state_id, succ_ids, costs);
     true_costs->resize(succ_ids->size(), true);
     return;
   }
-
-  std::cout << source_state;
 
   // If in cache, return
   auto it = succ_cache.find(source_state_id);
@@ -566,6 +601,9 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
       *succ_ids = succ_cache[source_state_id];
     }
 
+    printf("Lazily expanding cached state: %d with %zu objects\n",
+           source_state_id,
+           source_state.NumObjects());
     return;
   }
 
@@ -636,6 +674,9 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
       continue;
     }
 
+    // TODO: Get TargetCost!!!
+    last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.cost;
+
     if (IsGoalState(candidate_succs[ii])) {
       succ_ids->push_back(env_params_.goal_state_id);
     } else {
@@ -648,7 +689,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
     if (image_debug_) {
       std::stringstream ss;
       ss.precision(20);
-      ss << debug_dir_ + "succ_" << candidate_succ_ids[ii] << ".png";
+      ss << debug_dir_ + "succ_" << candidate_succ_ids[ii] << "_lazy.png";
       PrintImage(ss.str(), output_unit.depth_image);
       // printf("State %d,       %d\n", candidate_succ_ids[ii],
       //        output_unit.cost);
@@ -694,7 +735,12 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id,
   printf("Getting true cost for edge: %d ---> %d\n", source_state_id,
          child_state_id);
 
-  GraphState source_state = hash_manager_.GetState(source_state_id);
+  GraphState source_state;
+  if (adjusted_states_.find(source_state_id) != adjusted_states_.end()) {
+    source_state = adjusted_states_[source_state_id];
+  } else {
+    source_state = hash_manager_.GetState(source_state_id);
+  }
 
   // Dirty trick for multiple goal states.
   if (child_state_id == env_params_.goal_state_id) {
@@ -713,6 +759,10 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id,
                              &output_unit.child_counted_pixels, &output_unit.adjusted_state,
                              &output_unit.state_properties, &output_unit.depth_image,
                              &output_unit.unadjusted_depth_image);
+
+  if (child_state_id == 253) {
+    printf("!!!!!!!!!!   STATE 253 cost: %d   !!!!!!!!!!!!!!!!\n", output_unit.cost);
+  }
 
   bool invalid_state = output_unit.cost == -1;
 
@@ -780,7 +830,8 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
     return 0;
   }
 
-  GraphState s = hash_manager_.GetState(state_id);
+  GraphState s;
+
   if (adjusted_states_.find(state_id) != adjusted_states_.end()) {
     s = adjusted_states_[state_id];
   } else {
@@ -790,7 +841,7 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   int num_objects_left = env_params_.num_objects - s.NumObjects();
   int depth_first_heur = num_objects_left;
   // printf("State %d: %d %d\n", state_id, icp_heur, depth_first_heur);
-  
+
   assert(q_id < NumHeuristics());
 
   switch (q_id) {
@@ -799,22 +850,25 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
 
   case 1:
     return depth_first_heur;
-  
+
   default: {
-        if (q_id == 3) {
-          auto last_obj_pose = s.object_states().back().cont_pose();
-          printf("H for state %d at (%f %f): %d\n", state_id, last_obj_pose.x(), last_obj_pose.y(), rcnn_heuristics_[q_id-2](s));
-        }
-    return rcnn_heuristics_[q_id - 2](s);
-           }
+    const int rcnn_heuristic = rcnn_heuristics_[q_id - 2](s);
 
-  // case 2: {
-  //   // return static_cast<int>(1000 * minz_map_[state_id]);
-  //   return kNumPixels - static_cast<int>(counted_pixels_map_[state_id].size());
-  // }
+    if (rcnn_heuristic > 1e-5) {
+      return kNumPixels;
+    }
+    return last_object_rendering_cost_[state_id];
 
-  // default:
-  //   return 0;
+    // return rcnn_heuristics_[q_id - 2](s);
+  }
+
+    // case 2: {
+    //   // return static_cast<int>(1000 * minz_map_[state_id]);
+    //   return kNumPixels - static_cast<int>(counted_pixels_map_[state_id].size());
+    // }
+
+    // default:
+    //   return 0;
   }
 }
 
@@ -873,7 +927,8 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image);
 
     // Begin ICP Adjustment
-    GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out);
+    GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out,
+                       parent_counted_pixels);
 
     if (cloud_in->size() != 0 && cloud_out->size() == 0) {
       printf("Error in ICP adjustment\n");
@@ -884,11 +939,13 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     int last_idx = child_state.NumObjects() - 1;
     adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
 
+
     // End ICP Adjustment
     // Check again after ICP.
     if (!IsValidPose(source_state, last_object_id,
                      modified_last_object.cont_pose(), true)) {
-      // printf(" state %d is invalid\n ", child_id);
+      // cloud_out = cloud_in;
+      // *adjusted_child_state = child_state;
       return -1;
     }
 
@@ -996,7 +1053,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   ContPose child_pose = last_object.cont_pose();
   int last_object_id = last_object.id();
 
-  vector<unsigned short> depth_image, new_obj_depth_image;
+  vector<unsigned short> depth_image, last_obj_depth_image;
   const float *succ_depth_buffer;
   ContPose pose_in(child_pose.x(), child_pose.y(), child_pose.yaw()),
            pose_out(child_pose.x(), child_pose.y(), child_pose.yaw());
@@ -1008,38 +1065,38 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   GraphState s_new_obj;
   s_new_obj.AppendObject(ObjectState(last_object_id,
                                      obj_models_[last_object_id].symmetric(), child_pose));
-  succ_depth_buffer = GetDepthImage(s_new_obj, &new_obj_depth_image);
-
+  succ_depth_buffer = GetDepthImage(s_new_obj, &last_obj_depth_image);
 
   unadjusted_depth_image->clear();
-  GetComposedDepthImage(source_depth_image, new_obj_depth_image,
+  GetComposedDepthImage(source_depth_image, last_obj_depth_image,
                         unadjusted_depth_image);
 
-  // Create new buffer with only new pixels
-  float new_pixel_buffer[kDepthImageWidth * kDepthImageHeight];
-
-  for (int y = 0; y <  kDepthImageHeight; ++y) {
-    for (int x = 0; x < kDepthImageWidth; ++x) {
-      int i = y * kDepthImageWidth + x ; // depth image index
-      int i_in = (kDepthImageHeight - 1 - y) * kDepthImageWidth + x
-                 ; // flip up down (buffer index)
-
-      if (new_obj_depth_image[i] != kKinectMaxDepth &&
-          source_depth_image[i] == kKinectMaxDepth) {
-        new_pixel_buffer[i_in] = succ_depth_buffer[i_in];
-      } else {
-        new_pixel_buffer[i_in] = 1.0; // max range
-      }
-    }
+  unsigned short succ_min_depth_unused, succ_max_depth_unused;
+  vector<int> new_pixel_indices;
+  if (IsOccluded(source_depth_image, *unadjusted_depth_image, &new_pixel_indices,
+                 &succ_min_depth_unused,
+                 &succ_max_depth_unused)) {
+    return -1;
   }
+
+  vector<unsigned short> new_obj_depth_image(kDepthImageWidth *
+                                             kDepthImageHeight, kKinectMaxDepth);
+
+  // Do ICP alignment on object *only* if it has been occluded by an existing
+  // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
+
+  for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
+    new_obj_depth_image[new_pixel_indices[ii]] =
+      unadjusted_depth_image->at(new_pixel_indices[ii]);
+  }
+
+  // Create point cloud (cloud_in) corresponding to new pixels.
+  cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image);
 
   // Align with ICP
   // Only non-occluded points
-  kinect_simulator_->rl_->getPointCloudFromBuffer (cloud_in, new_pixel_buffer,
-                                                   true,
-                                                   env_params_.camera_pose);
 
-  GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out);
+  GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out, parent_counted_pixels);
   // icp_cost = static_cast<int>(kICPCostMultiplier * icp_fitness_score);
   int last_idx = child_state.NumObjects() - 1;
 
@@ -1053,6 +1110,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   if (!IsValidPose(source_state, last_object_id,
                    adjusted_child_state->object_states().back().cont_pose(), true)) {
     // printf(" state %d is invalid\n ", child_id);
+    // cloud_out = cloud_in;
+    // *adjusted_child_state = child_state;
     return -1;
   }
 
@@ -1062,7 +1121,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                         env_params_.camera_pose);
 
   unsigned short succ_min_depth, succ_max_depth;
-  vector<int> new_pixel_indices;
+  new_pixel_indices.clear();
+  new_obj_depth_image.clear();
+  new_obj_depth_image.resize(kNumPixels, kKinectMaxDepth);
 
   if (IsOccluded(source_depth_image, depth_image, &new_pixel_indices,
                  &succ_min_depth,
@@ -1070,29 +1131,17 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     return -1;
   }
 
+  for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
+    new_obj_depth_image[new_pixel_indices[ii]] =
+      depth_image[new_pixel_indices[ii]];
+  }
+
+  // Create point cloud (cloud_in) corresponding to new pixels.
+  cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
+
   // Cache the min and max depths
   child_properties->last_min_depth = succ_min_depth;
   child_properties->last_max_depth = succ_max_depth;
-
-  // Must use re-rendered adjusted partial cloud for cost
-  for (int y = 0; y <  kDepthImageHeight; ++y) {
-    for (int x = 0; x < kDepthImageWidth; ++x) {
-      int i = y * kDepthImageWidth + x ; // depth image index
-      int i_in = (kDepthImageHeight - 1 - y) * kDepthImageWidth + x
-                 ; // flip up down (buffer index)
-
-      if (depth_image[i] != kKinectMaxDepth &&
-          source_depth_image[i] == kKinectMaxDepth) {
-        new_pixel_buffer[i_in] = succ_depth_buffer[i_in];
-      } else {
-        new_pixel_buffer[i_in] = 1.0; // max range
-      }
-    }
-  }
-
-  kinect_simulator_->rl_->getPointCloudFromBuffer (cloud_out, new_pixel_buffer,
-                                                   true,
-                                                   env_params_.camera_pose);
 
   // Compute costs
   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
@@ -1266,14 +1315,32 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     obj_center.z = env_params_.table_height;
 
     vector<float> sqr_dists;
+    vector<int> validation_points;
+
+    // Check that this object state is valid, i.e, it has at least
+    // kMinimumNeighborPointsForValidPose within the circumscribed cylinder.
+    // This should be true if we correctly validate successors.
+    const double validation_search_rad =
+      obj_models_[last_obj_id].GetCircumscribedRadius();
+    int num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
+                                                                validation_search_rad,
+                                                                validation_points,
+                                                                sqr_dists, kNumPixels);
+    assert(num_validation_neighbors >= kMinimumNeighborPointsForValidPose);
+
+    // The points within the inscribed cylinder are the ones made
+    // "infeasible".
+    const double inscribed_rad = obj_models_[last_obj_id].GetInscribedRadius();
+    const double inscribed_rad_sq = inscribed_rad * inscribed_rad;
     vector<int> infeasible_points;
-    const double search_rad = obj_models_[last_obj_id].GetCircumscribedRadius();
-    int num_neighbors_found = projected_knn_->radiusSearch(obj_center, search_rad,
-                                                           infeasible_points,
-                                                           sqr_dists, kNumPixels);
-    // If we correctly validate successors, we should have at least one point
-    // that is made infeasible made by this object.
-    assert(num_neighbors_found >= kMinimumNeighborPointsForValidPose);
+    infeasible_points.reserve(validation_points.size());
+
+    for (size_t ii = 0; ii < validation_points.size(); ++ii) {
+      if (sqr_dists[ii] <= inscribed_rad_sq) {
+        infeasible_points.push_back(validation_points[ii]);
+      }
+    }
+
     std::sort(infeasible_points.begin(), infeasible_points.end());
     indices_to_consider.resize(infeasible_points.size());
     auto it = std::set_difference(infeasible_points.begin(),
@@ -1362,10 +1429,9 @@ vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(
                                                 range);
     v = kDepthImageHeight - 1 - v;
 
-    assert(u >= 0);
-    assert(v >= 0);
-    assert(u < kDepthImageWidth);
-    assert(v < kDepthImageHeight);
+    if (v < 0 || u < 0 || v >= kDepthImageHeight || u >= kDepthImageWidth) {
+      continue;
+    }
 
     const int idx = v * kDepthImageWidth + u;
     assert(idx >= 0 && idx < kNumPixels);
@@ -1485,10 +1551,12 @@ void EnvObjectRecognition::PrintImage(string fname,
   }
 
   cv::imwrite(fname.c_str(), c_image);
-  if(fname.find("expansion") != string::npos) {
+
+  if (fname.find("expansion") != string::npos) {
     cv::imshow("expansions", c_image);
     cv::waitKey(10);
   }
+
   //http://docs.opencv.org/modules/contrib/doc/facerec/colormaps.html
 }
 
@@ -1677,12 +1745,14 @@ void EnvObjectRecognition::ResetEnvironmentState() {
 
   env_params_.start_state_id = hash_manager_.GetStateIDForceful(
                                  start_state); // Start state is the empty state
-  hash_manager_.Print();
-  std::cout << "start id is: " << env_params_.start_state_id << std::flush;
-  std::cout << "goal state is: " << goal_state << std::flush;
   env_params_.goal_state_id = hash_manager_.GetStateIDForceful(goal_state);
-  std::cout << "goal id is: " << env_params_.goal_state_id << std::flush;
-  hash_manager_.Print();
+
+  if (IsMaster(mpi_comm_)) {
+    std::cout << "goal state is: " << goal_state << std::flush;
+    std::cout << "start id is: " << env_params_.start_state_id << std::flush;
+    std::cout << "goal id is: " << env_params_.goal_state_id << std::flush;
+    hash_manager_.Print();
+  }
 
   // TODO: group environment state variables into struct.
   minz_map_.clear();
@@ -1764,10 +1834,13 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   SetObservation(input.model_names.size(), depth_image);
 
   // Precompute RCNN heuristics.
-  rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input, kinect_simulator_));
-  rcnn_heuristics_ = rcnn_heuristic_factory_->GetHeuristics();
+  rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input,
+                                                         kinect_simulator_));
 
-  cv::namedWindow("expansions");
+  if (kUseRCNNHeuristic) {
+    rcnn_heuristic_factory_->LoadHeuristicsFromDisk(input.heuristics_dir);
+    rcnn_heuristics_ = rcnn_heuristic_factory_->GetHeuristics();
+  }
 }
 
 void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
@@ -1782,7 +1855,8 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
 }
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
-                                                const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out) {
+                                                const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
+                                                const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
   *pose_out = pose_in;
 
   pcl::IterativeClosestPointNonLinear<PointT, PointT> icp;
@@ -1797,7 +1871,12 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     icp.setInputSource(cloud_in);
   }
 
-  icp.setInputTarget(downsampled_observed_cloud_);
+  const PointCloudPtr remaining_observed_cloud = perception_utils::IndexFilter(
+                                                   observed_cloud_, counted_indices, true);
+  const PointCloudPtr remaining_downsampled_observed_cloud =
+    DownsamplePointCloud(remaining_observed_cloud);
+  icp.setInputTarget(remaining_downsampled_observed_cloud);
+  // icp.setInputTarget(downsampled_observed_cloud_);
   // icp.setInputTarget(observed_cloud_);
 
   pcl::registration::TransformationEstimation2D<PointT, PointT>::Ptr est;
@@ -1823,7 +1902,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   // Set the max correspondence distance (e.g., correspondences with higher distances will be ignored)
   icp.setMaxCorrespondenceDistance(env_params_.res / 2);
   // Set the maximum number of iterations (criterion 1)
-  icp.setMaximumIterations(10);
+  icp.setMaximumIterations(kMaxICPIterations);
   // Set the transformation epsilon (criterion 2)
   icp.setTransformationEpsilon(1e-8); //1e-8
   // Set the euclidean distance difference epsilon (criterion 3)
@@ -1861,6 +1940,9 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     // writer.writeBinary (ss1.str()  , *cloud_in);
     // writer.writeBinary (ss2.str()  , *cloud_out);
     // i++;
+  } else {
+    cloud_out = cloud_in;
+    *pose_out = pose_in;
   }
 
   return score;
@@ -2051,10 +2133,13 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
       continue;
     }
 
+    const double res = kUseAdaptiveResolution ?
+                       obj_models_[ii].GetInscribedRadius() : env_params_.res;
+
     for (double x = env_params_.x_min; x <= env_params_.x_max;
-         x += env_params_.res) {
+         x += res) {
       for (double y = env_params_.y_min; y <= env_params_.y_max;
-           y += env_params_.res) {
+           y += res) {
         for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
           ContPose p(x, y, theta);
 
@@ -2132,6 +2217,8 @@ vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
   return masked_depth_image;
 }
 }  // namespace
+
+
 
 
 

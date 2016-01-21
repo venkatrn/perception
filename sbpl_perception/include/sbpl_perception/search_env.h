@@ -97,8 +97,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
 
   double GetICPAdjustedPose(const PointCloudPtr cloud_in,
-                            const ContPose &pose_in,
-                            PointCloudPtr &cloud_out, ContPose *pose_out);
+                            const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
+                            const std::vector<int> counted_indices = std::vector<int>(0));
 
   // Greedy ICP planner
   GraphState ComputeGreedyICPPoses();
@@ -202,6 +202,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   /**@brief Mapping from state IDs to states for those states that were changed
    * after evaluating true cost**/
   std::unordered_map<int, GraphState> adjusted_states_;
+
+  // The rendering cost (or TargetCost) incurred while adding the last object
+  // in this state.
+  std::unordered_map<int, int> last_object_rendering_cost_;
 
   /**@brief Mapping from State to State ID**/
   std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
@@ -330,3 +334,4 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 };
 } // namespace
+
