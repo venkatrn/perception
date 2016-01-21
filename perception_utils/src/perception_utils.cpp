@@ -39,24 +39,6 @@
 
 #include <boost/thread/thread.hpp>
 
-// Euclidean cluster extraction params
-const int kMaxClusterSize = 1000000; //10000
-const int kMinClusterSize = 100; //100
-const double kClusterTolerance = 0.01; //0.03
-
-// Plane Extraction
-const double kPlaneInlierThreshold = 0.005;
-
-// Downsampling params
-const double kVoxelLeafSize = 0.02; //0.02
-
-// Cluster evaluation params
-const double kMinHeight = 0.01;
-const double kMaxHeight = 1.5;
-const double kMinLength = 0.2;
-const double kMaxLength = 5;
-const double kMinWidth = 0.2;
-const double kMaxWidth = 5;
 // The following are PR2-specific, and assumes that reference frame is base_link
 const double kMinX = 0.1;
 const double kMaxX = 1.5;
@@ -64,10 +46,6 @@ const double kMinY = -1.0;
 const double kMaxY = 1.0;
 const double kMinZ = 0.1;
 const double kMaxZ = 2.0;
-
-// Statistical Outlier Removal
-const double kOutlierNumNeighborPoints = 50;
-const double kOutlierStdDev = 1.0;
 
 using namespace std;
 
@@ -365,11 +343,12 @@ PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
   seg.setOptimizeCoefficients (false);
   // Mandatory
   seg.setModelType (pcl::SACMODEL_PLANE);
+  seg.setMaxIterations (500);
   // seg.setModelType (pcl::SACMODEL_PARALLEL_PLANE);
   //seg.setAxis (Eigen::Vector3f (0.0, 0.0, 1.0));
   //seg.setEpsAngle (15*3.14/180);
   seg.setMethodType (pcl::SAC_RANSAC);
-  seg.setDistanceThreshold (0.02); //0.02
+  seg.setDistanceThreshold (0.01); //0.02
   seg.setInputCloud (cloud->makeShared ());
   seg.segment (*inliers, *coefficients);
   // std::cerr << "Model coefficients: " << coefficients->values[0] << " "
@@ -756,13 +735,15 @@ PointCloudPtr ProjectOntoPlane(const
   return projected_cloud;
 }
 
-PointCloudPtr RemoveOutliers(PointCloudPtr cloud) {
+PointCloudPtr RemoveStatisticalOutliers(PointCloudPtr cloud,
+                                        int num_neigbors /*= kOutlierNumNeighborPoints*/,
+                                        double std_dev_mul /*= kOutlierStdDevMul*/) {
   PointCloudPtr filtered_cloud(new PointCloud);
   pcl::StatisticalOutlierRemoval<PointT> sor;
   sor.setKeepOrganized (true);
   sor.setInputCloud(cloud);
-  sor.setMeanK(kOutlierNumNeighborPoints);
-  sor.setStddevMulThresh(kOutlierStdDev);
+  sor.setMeanK(num_neigbors);
+  sor.setStddevMulThresh(std_dev_mul);
   sor.filter(*filtered_cloud);
   return filtered_cloud;
 }
@@ -828,7 +809,7 @@ PointCloudPtr PassthroughFilter(PointCloudPtr cloud, double min_x, double max_x,
   return filtered_cloud;
 }
 
-PointCloudPtr IndexFilter(PointCloudPtr cloud, const std::vector<int> &indices, bool set_negative) {
+PointCloudPtr IndexFilter(PointCloudPtr cloud, const std::vector<int> &indices, bool set_negative /*=false*/) {
   PointCloudPtr filtered_cloud(new PointCloud);
   pcl::PointIndicesPtr pcl_indices(new pcl::PointIndices());
   pcl_indices->indices = indices;
@@ -837,6 +818,7 @@ PointCloudPtr IndexFilter(PointCloudPtr cloud, const std::vector<int> &indices, 
   extract.setInputCloud (cloud);
   extract.setIndices (pcl_indices);
   extract.setNegative (set_negative);
+  extract.setKeepOrganized(true);
   extract.filter(*filtered_cloud);
 
   return filtered_cloud;

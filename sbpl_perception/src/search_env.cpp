@@ -383,8 +383,9 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       g_value_map_[candidate_succ_ids[ii]] = g_value_map_[source_state_id] +
                                              output_unit.cost;
 
-      // TODO: Get TargetCost!!!
-      last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.cost;
+      // TODO: should use source+target cost?
+      // last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.cost;
+      last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.state_properties.target_cost;
 
       // Cache the depth image only for single object renderings, *only* if valid.
       // NOTE: The hash key is computed on the *unadjusted* child state.
@@ -539,6 +540,7 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
                                        input_unit.adjusted_last_object_state,
                                        input_unit.source_counted_pixels,
                                        &output_unit.adjusted_state,
+                                       &output_unit.state_properties,
                                        &output_unit.depth_image);
       }
     }
@@ -674,8 +676,9 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
       continue;
     }
 
-    // TODO: Get TargetCost!!!
-    last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.cost;
+    // TODO: should use source+target cost?
+    // last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.cost;
+    last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.state_properties.target_cost;
 
     if (IsGoalState(candidate_succs[ii])) {
       succ_ids->push_back(env_params_.goal_state_id);
@@ -881,10 +884,14 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
                                       const GraphState &adjusted_last_object_state,
                                       const std::vector<int> &parent_counted_pixels,
                                       GraphState *adjusted_child_state,
+                                      GraphStateProperties *child_properties,
                                       vector<unsigned short> *final_depth_image) {
   assert(child_state.NumObjects() > 0);
   final_depth_image->clear();
   *adjusted_child_state = child_state;
+
+  child_properties->last_max_depth = kKinectMaxDepth;
+  child_properties->last_min_depth = 0;
 
   const auto &last_object = child_state.object_states().back();
   ContPose child_pose = last_object.cont_pose();
@@ -954,14 +961,15 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     new_obj_depth_image = GetDepthImageFromPointCloud(cloud_out);
 
     vector<int> new_pixel_indices_unused;
-    unsigned short succ_min_depth_unused, succ_max_depth_unused;
 
     if (IsOccluded(source_depth_image, new_obj_depth_image,
                    &new_pixel_indices_unused,
-                   &succ_min_depth_unused,
-                   &succ_max_depth_unused)) {
+                   &succ_min_depth,
+                   &succ_max_depth)) {
       return -1;
     }
+    child_properties->last_min_depth = succ_min_depth;
+    child_properties->last_min_depth = succ_max_depth;
 
     new_obj_depth_image = ApplyOcclusionMask(new_obj_depth_image,
                                              source_depth_image);
@@ -986,10 +994,12 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
 
     if (IsOccluded(source_depth_image, new_obj_depth_image,
                    &new_pixel_indices_unused,
-                   &succ_min_depth_unused,
-                   &succ_max_depth_unused)) {
+                   &succ_min_depth,
+                   &succ_max_depth)) {
       return -1;
     }
+    child_properties->last_min_depth = succ_min_depth;
+    child_properties->last_min_depth = succ_max_depth;
   }
 
   cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
@@ -1009,6 +1019,9 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
                               adjusted_child_state->object_states().back(),
                               last_level, parent_counted_pixels, &child_counted_pixels);
   total_cost = source_cost + target_cost;
+
+  child_properties->source_cost = source_cost;
+  child_properties->target_cost = target_cost;
 
   // std::stringstream cloud_ss;
   // cloud_ss.precision(20);

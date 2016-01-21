@@ -30,11 +30,58 @@ namespace po = boost::program_options;
 //const string kPCDFilename =  ros::package::getPath("sbpl_perception") + "/data/pointclouds/1404182828.986669753.pcd";
 const string kPCDFilename =  ros::package::getPath("sbpl_perception") +
                              "/data/RAM/pcd_files/occlusions/frame_20111220T115445.303284.pcd";
+const int kStatisticalOutlierNeighbors = 10;
+const double kStatisticalOutlierStdDevMul = 2;
 
 bool viewer_on = false;
 double z_limit; // TODO: elimiate globals
 
 pcl::visualization::PCLVisualizer *viewer;
+
+PointCloudPtr ErodeCloud(const PointCloudPtr input_cloud, double table_height) {
+  const double kObjectMinRad = 0.02;
+  const int kMinimumNeighborPointsForObjectness = 150;
+  const double kIgnorePointsAboveHeight = 0.04;
+  // Project point cloud to table.
+  PointCloudPtr projected_cloud(new PointCloud(*input_cloud));
+
+  pcl::search::KdTree<PointT>::Ptr projected_knn;
+
+  for (size_t ii = 0; ii < projected_cloud->size(); ++ii) {
+    projected_cloud->points[ii].z = 0;
+  }
+
+  projected_knn.reset(new pcl::search::KdTree<PointT>(true));
+  projected_knn->setInputCloud(projected_cloud);
+
+  vector<int> valid_indices;
+  valid_indices.reserve(projected_cloud->size());
+
+  for (size_t ii = 0; ii < projected_cloud->size(); ++ii) {
+    const auto point = projected_cloud->points[ii];
+
+    if (std::isnan(point.x) ||
+          std::isinf(point.x)) {
+      continue;
+    }
+
+    vector<int> indices;
+    vector<float> sqr_dists;
+
+    int num_neighbors_found = projected_knn->radiusSearch(point, kObjectMinRad,
+                                                          indices,
+                                                          sqr_dists, kMinimumNeighborPointsForObjectness); //0.2
+    if (num_neighbors_found == kMinimumNeighborPointsForObjectness) {
+      valid_indices.push_back(ii);
+    } else if (input_cloud->points[ii].z > table_height + kIgnorePointsAboveHeight) {
+      valid_indices.push_back(ii);
+    }
+
+  }
+  PointCloudPtr eroded_cloud(new PointCloud);
+  eroded_cloud = perception_utils::IndexFilter(input_cloud, valid_indices);
+  return eroded_cloud;
+}
 
 
 void GetDepthImageFromPointCloud(PointCloudPtr cloud,
@@ -71,7 +118,7 @@ void GetDepthImageFromPointCloud(PointCloudPtr cloud,
               0, 0, 0, 1;
   transformPointCloud(*trans_cloud, *trans_cloud, cam_to_body);
   printf("RO W: %d H: %d\n", trans_cloud->width, trans_cloud->height);
-  trans_cloud = perception_utils::RemoveOutliers(trans_cloud);
+  // trans_cloud = perception_utils::RemoveStatisticalOutliers(trans_cloud, kStatisticalOutlierNeighbors, kStatisticalOutlierStdDevMul);
   printf("W: %d H: %d\n", trans_cloud->width, trans_cloud->height);
 
   //---------------------------------------------------
@@ -143,6 +190,8 @@ void GetDepthImageFromPointCloud(PointCloudPtr cloud,
   //pass.setFilterLimitsNegative (true);
   pass.filter(*trans_cloud);
 
+  // Erode cloud based on 'objectness' measure at a point.
+  trans_cloud = ErodeCloud(trans_cloud, table_height);
 
   if (viewer_on) {
     perception_utils::DrawOrientedBoundingBox(*viewer, table_points,
@@ -300,13 +349,16 @@ int main(int argc, char **argv) {
   string output_pcd_name = pcd_file_path.filename().string();
   string output_metadata_name = pcd_file_path.filename().string();
 
-  auto output_image_path = boost::filesystem::path(output_dir + '/' + output_image_name);
+  auto output_image_path = boost::filesystem::path(output_dir + '/' +
+                                                   output_image_name);
   output_image_path.replace_extension(".png");
 
-  auto output_pcd_path = boost::filesystem::path(output_dir + '/' + output_image_name);
+  auto output_pcd_path = boost::filesystem::path(output_dir + '/' +
+                                                 output_image_name);
   output_pcd_path.replace_extension(".pcd");
 
-  auto output_metadata_path = boost::filesystem::path(output_dir + '/' + output_metadata_name);
+  auto output_metadata_path = boost::filesystem::path(output_dir + '/' +
+                                                      output_metadata_name);
   output_metadata_path.replace_extension(".txt");
 
   cout << output_image_path.c_str() << endl;
@@ -318,10 +370,12 @@ int main(int argc, char **argv) {
 
   std::ofstream fs;
   fs.open(output_metadata_path.c_str(), std::ofstream::out | std::ofstream::app);
+
   if (!fs.is_open() || fs.fail()) {
     std::cerr << "Unable to open output metdata file" << endl;
     return -1;
   }
+
   fs << min_x << " " << max_x << endl;
   fs << min_y << " " << max_y << endl;
   fs << table_height << endl;
@@ -333,3 +387,4 @@ int main(int argc, char **argv) {
     return 1;
   }
 }
+

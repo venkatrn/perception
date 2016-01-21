@@ -275,7 +275,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     const std::vector<int> &parent_counted_pixels,
                     std::vector<int> *child_counted_pixels);
 
-  // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any additional renderings. This requires the true source depth image and unadjusted child depth image (pre-ICP).
+  // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any
+  // additional renderings. This requires the true source depth image and
+  // unadjusted child depth image (pre-ICP).
   int GetLazyCost(const GraphState &source_state, const GraphState &child_state,
                   const std::vector<unsigned short> &source_depth_image,
                   const std::vector<unsigned short> &unadjusted_last_object_depth_image,
@@ -283,6 +285,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                   const GraphState &adjusted_last_object_state,
                   const std::vector<int> &parent_counted_pixels,
                   GraphState *adjusted_child_state,
+                  GraphStateProperties *state_properties,
                   std::vector<unsigned short> *final_depth_image);
 
   // Returns true if parent is occluded by successor. Additionally returns min and max depth for newly rendered pixels
@@ -334,4 +337,5 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 };
 } // namespace
+
 
