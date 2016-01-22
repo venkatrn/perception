@@ -62,6 +62,37 @@ struct EnvParams {
   int num_models; // This is the number of models available (can be more or less than number of objects on table
 };
 
+struct PERCHParams {
+  bool initialized;
+  double sensor_resolution;
+  // Number of points that should be near the (x,y,table height) of the object
+  // for that state to be considered as valid.
+  int min_neighbor_points_for_valid_pose;
+  int max_icp_iterations;
+  bool use_rcnn_heuristic;
+  bool use_adaptive_resolution;
+
+  bool vis_expanded_states;
+  bool print_expanded_states;
+  bool debug_verbose;
+  PERCHParams() : initialized(false) {}
+
+  friend class boost::serialization::access;
+  template <typename Ar> void serialize(Ar &ar, const unsigned int) {
+    ar &initialized;
+    ar &sensor_resolution;
+    ar &min_neighbor_points_for_valid_pose;
+    ar &max_icp_iterations;
+    ar &use_rcnn_heuristic;
+    ar &use_adaptive_resolution;
+    ar &vis_expanded_states;
+    ar &print_expanded_states;
+    ar &debug_verbose;
+  }
+};
+// BOOST_IS_MPI_DATATYPE(PERCHParams);
+// BOOST_IS_BITWISE_SERIALIZABLE(PERCHParams);
+
 class EnvObjectRecognition : public EnvironmentMHA {
  public:
   explicit EnvObjectRecognition(const std::shared_ptr<boost::mpi::communicator>
@@ -187,6 +218,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   pcl::simulation::Scene::Ptr scene_;
 
   EnvParams env_params_;
+  PERCHParams perch_params_;
 
   // Config parser.
   ConfigParser parser_;

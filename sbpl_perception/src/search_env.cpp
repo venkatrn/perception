@@ -40,29 +40,10 @@ using namespace pcl::simulation;
 using namespace Eigen;
 
 namespace {
-
-// const double kSensorResolution = 0.01 / 2;//0.01
-double kSensorResolution = 0.003;
-double kSensorResolutionSqr = kSensorResolution *kSensorResolution;
-
-// Number of points that should be near the (x,y,table height) of the object
-// for that state to be considered as valid.
-int kMinimumNeighborPointsForValidPose =
-  50;  //50 for ICRA experiments
-
-bool kUseAdaptiveResolution = false;
-bool kUseRCNNHeuristic = true;
-
-// Max number of ICP iterations.
-int kMaxICPIterations = 10;
-
 // Whether should use depth-dependent cost penalty. If true, cost is
 // indicator(pixel explained) * range_in_meters(pixel). Otherwise, cost is
 // indicator(pixel explained).
 constexpr bool kUseDepthSensitiveCost = false;
-
-constexpr int kMasterRank = 0;
-
 }  // namespace
 
 namespace sbpl_perception {
@@ -100,26 +81,43 @@ EnvObjectRecognition::EnvObjectRecognition(const
   // NOTE: Do not change these default parameters. Configure these in the
   // appropriate yaml file.
   if (IsMaster(mpi_comm_)) {
-    if (!ros::isInitialized) {
+    if (!ros::isInitialized()) {
       printf("Error: ros::init() must be called before environment can be constructed\n");
       mpi_comm_->abort(1);
       exit(1);
     }
 
     ros::NodeHandle private_nh("~perch_params");
-    private_nh.param("sensor_resolution_radius", kSensorResolution, 0.003);
+    private_nh.param("sensor_resolution_radius", perch_params_.sensor_resolution,
+                     0.003);
     private_nh.param("min_points_for_valid_pose",
-                     kMinimumNeighborPointsForValidPose, 50);
-    private_nh.param("max_icp_iterations", kMaxICPIterations, 10);
-    private_nh.param("use_adaptive_resolution", kUseAdaptiveResolution, false);
-    private_nh.param("use_rcnn_heuristic", kUseRCNNHeuristic, true);
-    kSensorResolutionSqr = kSensorResolution * kSensorResolution;
+                     perch_params_.min_neighbor_points_for_valid_pose, 50);
+    private_nh.param("max_icp_iterations", perch_params_.max_icp_iterations, 10);
+    private_nh.param("use_adaptive_resolution",
+                     perch_params_.use_adaptive_resolution, false);
+    private_nh.param("use_rcnn_heuristic", perch_params_.use_rcnn_heuristic, true);
+
+    private_nh.param("visualize_expanded_states",
+                     perch_params_.vis_expanded_states, false);
+    private_nh.param("print_expanded_states", perch_params_.print_expanded_states,
+                     false);
+    private_nh.param("debug_verbose", perch_params_.debug_verbose, false);
+    perch_params_.initialized = true;
 
     printf("----------PERCH Config-------------\n");
-    printf("Sensor Resolution Radius: %f\n", kSensorResolution);
-    printf("Min Points for Valid Pose: %d\n", kMinimumNeighborPointsForValidPose);
-    printf("Max ICP Iterations: %d\n", kMaxICPIterations);
+    printf("Sensor Resolution Radius: %f\n", perch_params_.sensor_resolution);
+    printf("Min Points for Valid Pose: %d\n",
+           perch_params_.min_neighbor_points_for_valid_pose);
+    printf("Max ICP Iterations: %d\n", perch_params_.max_icp_iterations);
+    printf("RCNN Heuristic: %d\n", perch_params_.use_rcnn_heuristic);
+    printf("Vis Expansions: %d\n", perch_params_.vis_expanded_states);
+    printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
+    printf("Debug Verbose: %d\n", perch_params_.debug_verbose);
   }
+
+  mpi_comm_->barrier();
+  broadcast(*mpi_comm_, perch_params_, kMasterRank);
+  assert(perch_params_.initialized);
 }
 
 EnvObjectRecognition::~EnvObjectRecognition() {
@@ -199,12 +197,12 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   // double search_rad = obj_models_[model_id].GetCircumscribedRadius();
   // int num_neighbors_found = knn->radiusSearch(point, search_rad,
   //                                             indices,
-  //                                             sqr_dists, kMinimumNeighborPointsForValidPose); //0.2
+  //                                             sqr_dists, perch_params_.min_neighbor_points_for_valid_pose); //0.2
   int num_neighbors_found = projected_knn_->radiusSearch(point, search_rad,
                                                          indices,
-                                                         sqr_dists, kMinimumNeighborPointsForValidPose); //0.2
+                                                         sqr_dists, perch_params_.min_neighbor_points_for_valid_pose); //0.2
 
-  if (num_neighbors_found < kMinimumNeighborPointsForValidPose) {
+  if (num_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
     return false;
   }
 
@@ -307,8 +305,11 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   printf("Expanding state: %d with %zu objects\n",
          source_state_id,
          source_state.NumObjects());
-  string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
-  PrintState(source_state_id, fname);
+
+  if (perch_params_.print_expanded_states) {
+    string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
+    PrintState(source_state_id, fname);
+  }
 
   vector<int> candidate_succ_ids, candidate_costs;
   vector<GraphState> candidate_succs;
@@ -349,30 +350,37 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
     bool invalid_state = output_unit.cost == -1;
 
-    if (output_unit.cost != -1) {
-      // Get the ID of the existing state, or create a new one if it doesn't
-      // exist.
-      int modified_state_id = hash_manager_.GetStateIDForceful(
-                                output_unit.adjusted_state);
+    // if (output_unit.cost != -1) {
+    //   // Get the ID of the existing state, or create a new one if it doesn't
+    //   // exist.
+    //   int modified_state_id = hash_manager_.GetStateIDForceful(
+    //                             output_unit.adjusted_state);
+    //
+    //   // If this successor exists and leads to a worse g-value, skip it.
+    //   if (g_value_map_.find(modified_state_id) != g_value_map_.end() &&
+    //       g_value_map_[modified_state_id] <= g_value_map_[source_state_id] +
+    //       output_unit.cost) {
+    //     invalid_state = true;
+    //     // Otherwise, return the ID of the existing state and update its
+    //     // continuous coordinates.
+    //   } else {
+    //     candidate_succ_ids[ii] = modified_state_id;
+    //     hash_manager_.UpdateState(output_unit.adjusted_state);
+    //   }
+    // }
 
-      // If this successor exists and leads to a worse g-value, skip it.
-      if (g_value_map_.find(modified_state_id) != g_value_map_.end() &&
-          g_value_map_[modified_state_id] <= g_value_map_[source_state_id] +
-          output_unit.cost) {
-        invalid_state = true;
-        // Otherwise, return the ID of the existing state and update its
-        // continuous coordinates.
-      } else {
-        candidate_succ_ids[ii] = modified_state_id;
-        hash_manager_.UpdateState(output_unit.adjusted_state);
-      }
+    const auto &input_unit = cost_computation_input[ii];
+    candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
+                               input_unit.child_state);
+
+    if (adjusted_states_.find(candidate_succ_ids[ii]) != adjusted_states_.end()) {
+      invalid_state = true;
     }
-
-    // candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(cost_computation_input[ii].child_state);
 
     if (invalid_state) {
       candidate_costs[ii] = -1;
     } else {
+      adjusted_states_[candidate_succ_ids[ii]] = output_unit.adjusted_state;
       assert(output_unit.depth_image.size() != 0);
       candidate_costs[ii] = output_unit.cost;
       minz_map_[candidate_succ_ids[ii]] =
@@ -429,7 +437,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       ss.precision(20);
       ss << debug_dir_ + "succ_" << candidate_succ_ids[ii] << ".png";
       PrintImage(ss.str(), output_unit.depth_image);
-      printf("State %d,       %d      %d      %d      %d      %d\n", candidate_succ_ids[ii],
+      printf("State %d,       %d      %d      %d      %d      %d\n",
+             candidate_succ_ids[ii],
              output_unit.state_properties.target_cost,
              output_unit.state_properties.source_cost,
              output_unit.state_properties.last_level_cost,
@@ -449,13 +458,15 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   // cache succs and costs
   cost_cache[source_state_id] = *costs;
 
-  printf("Succs for %d\n", source_state_id);
+  if (perch_params_.debug_verbose) {
+    printf("Succs for %d\n", source_state_id);
 
-  for (int ii = 0; ii < static_cast<int>(succ_ids->size()); ++ii) {
-    printf("%d  ,  %d\n", (*succ_ids)[ii], (*costs)[ii]);
+    for (int ii = 0; ii < static_cast<int>(succ_ids->size()); ++ii) {
+      printf("%d  ,  %d\n", (*succ_ids)[ii], (*costs)[ii]);
+    }
+
+    printf("\n");
   }
-
-  printf("\n");
 
   // ROS_INFO("Expanding state: %d with %d objects and %d successors",
   //          source_state_id,
@@ -613,8 +624,10 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   printf("Lazily expanding state: %d with %zu objects\n",
          source_state_id,
          source_state.NumObjects());
-  string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
-  PrintState(source_state_id, fname);
+  if (perch_params_.print_expanded_states) {
+    string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
+    PrintState(source_state_id, fname);
+  }
 
   vector<int> candidate_succ_ids;
   vector<GraphState> candidate_succs;
@@ -718,13 +731,15 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   // cache succs and costs
   cost_cache[source_state_id] = *costs;
 
-  printf("Succs for %d\n", source_state_id);
+  if (perch_params_.debug_verbose) {
+    printf("Lazy succs for %d\n", source_state_id);
 
-  for (int ii = 0; ii < static_cast<int>(succ_ids->size()); ++ii) {
-    printf("%d  ,  %d\n", (*succ_ids)[ii], (*costs)[ii]);
+    for (int ii = 0; ii < static_cast<int>(succ_ids->size()); ++ii) {
+      printf("%d  ,  %d\n", (*succ_ids)[ii], (*costs)[ii]);
+    }
+
+    printf("\n");
   }
-
-  printf("\n");
 
   // ROS_INFO("Expanding state: %d with %d objects and %d successors",
   //          source_state_id,
@@ -1093,6 +1108,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   if (IsOccluded(source_depth_image, *unadjusted_depth_image, &new_pixel_indices,
                  &succ_min_depth_unused,
                  &succ_max_depth_unused)) {
+    // final_depth_image->clear();
+    // *final_depth_image = *unadjusted_depth_image;
     return -1;
   }
 
@@ -1128,15 +1145,15 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   if (!IsValidPose(source_state, last_object_id,
                    adjusted_child_state->object_states().back().cont_pose(), true)) {
     // printf(" state %d is invalid\n ", child_id);
-    // cloud_out = cloud_in;
-    // *adjusted_child_state = child_state;
+    // succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
+    // final_depth_image->clear();
+    // *final_depth_image = depth_image;
     return -1;
   }
 
   succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
   // All points
-  kinect_simulator_->rl_->getPointCloud(succ_cloud, true,
-                                        env_params_.camera_pose);
+  succ_cloud = GetGravityAlignedPointCloud(depth_image);
 
   unsigned short succ_min_depth, succ_max_depth;
   new_pixel_indices.clear();
@@ -1146,6 +1163,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   if (IsOccluded(source_depth_image, depth_image, &new_pixel_indices,
                  &succ_min_depth,
                  &succ_max_depth)) {
+    // final_depth_image->clear();
+    // *final_depth_image = depth_image;
     return -1;
   }
 
@@ -1154,7 +1173,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
       depth_image[new_pixel_indices[ii]];
   }
 
-  // Create point cloud (cloud_in) corresponding to new pixels.
+  // Create point cloud (cloud_out) corresponding to new pixels.
   cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
 
   // Cache the min and max depths
@@ -1277,7 +1296,8 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
     vector<int> indices;
     vector<float> sqr_dists;
     PointT point = partial_rendered_cloud->points[ii];
-    int num_neighbors_found = knn->radiusSearch(point, kSensorResolution,
+    int num_neighbors_found = knn->radiusSearch(point,
+                                                perch_params_.sensor_resolution,
                                                 indices,
                                                 sqr_dists, 1);
     const bool point_unexplained = num_neighbors_found == 0;
@@ -1352,7 +1372,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     vector<int> validation_points;
 
     // Check that this object state is valid, i.e, it has at least
-    // kMinimumNeighborPointsForValidPose within the circumscribed cylinder.
+    // perch_params_.min_neighbor_points_for_valid_pose within the circumscribed cylinder.
     // This should be true if we correctly validate successors.
     const double validation_search_rad =
       obj_models_[last_obj_id].GetCircumscribedRadius();
@@ -1360,7 +1380,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
                                                                 validation_search_rad,
                                                                 validation_points,
                                                                 sqr_dists, kNumPixels);
-    assert(num_validation_neighbors >= kMinimumNeighborPointsForValidPose);
+    assert(num_validation_neighbors >=
+           perch_params_.min_neighbor_points_for_valid_pose);
 
     // The points within the inscribed cylinder are the ones made
     // "infeasible".
@@ -1392,7 +1413,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     PointT point = observed_cloud_->points[ii];
     vector<float> sqr_dists;
     vector<int> indices;
-    int num_neighbors_found = knn_reverse->radiusSearch(point, kSensorResolution,
+    int num_neighbors_found = knn_reverse->radiusSearch(point,
+                                                        perch_params_.sensor_resolution,
                                                         indices,
                                                         sqr_dists, 1);
     bool point_unexplained = num_neighbors_found == 0;
@@ -1447,7 +1469,8 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
     PointT point = observed_cloud_->points[ii];
     vector<float> sqr_dists;
     vector<int> indices;
-    int num_neighbors_found = knn_reverse->radiusSearch(point, kSensorResolution,
+    int num_neighbors_found = knn_reverse->radiusSearch(point,
+                                                        perch_params_.sensor_resolution,
                                                         indices,
                                                         sqr_dists, 1);
     bool point_unexplained = num_neighbors_found == 0;
@@ -1605,6 +1628,7 @@ void EnvObjectRecognition::PrintState(GraphState s, string fname) {
 
 void EnvObjectRecognition::PrintImage(string fname,
                                       const vector<unsigned short> &depth_image) {
+
   assert(depth_image.size() != 0);
   static cv::Mat image;
   image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
@@ -1643,9 +1667,11 @@ void EnvObjectRecognition::PrintImage(string fname,
 
   cv::imwrite(fname.c_str(), c_image);
 
-  if (fname.find("expansion") != string::npos) {
-    cv::imshow("expansions", c_image);
-    cv::waitKey(10);
+  if (perch_params_.vis_expanded_states) {
+    if (fname.find("expansion") != string::npos) {
+      cv::imshow("expansions", c_image);
+      cv::waitKey(10);
+    }
   }
 
   //http://docs.opencv.org/modules/contrib/doc/facerec/colormaps.html
@@ -1928,7 +1954,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input,
                                                          kinect_simulator_));
 
-  if (kUseRCNNHeuristic) {
+  if (perch_params_.use_rcnn_heuristic) {
     rcnn_heuristic_factory_->LoadHeuristicsFromDisk(input.heuristics_dir);
     rcnn_heuristics_ = rcnn_heuristic_factory_->GetHeuristics();
   }
@@ -1993,11 +2019,11 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   // Set the max correspondence distance (e.g., correspondences with higher distances will be ignored)
   icp.setMaxCorrespondenceDistance(env_params_.res / 2);
   // Set the maximum number of iterations (criterion 1)
-  icp.setMaximumIterations(kMaxICPIterations);
+  icp.setMaximumIterations(perch_params_.max_icp_iterations);
   // Set the transformation epsilon (criterion 2)
   icp.setTransformationEpsilon(1e-8); //1e-8
   // Set the euclidean distance difference epsilon (criterion 3)
-  icp.setEuclideanFitnessEpsilon(kSensorResolution);  // 1e-5
+  icp.setEuclideanFitnessEpsilon(perch_params_.sensor_resolution);  // 1e-5
 
   icp.align(*cloud_out);
   double score = 100.0;
@@ -2224,7 +2250,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
       continue;
     }
 
-    const double res = kUseAdaptiveResolution ?
+    const double res = perch_params_.use_adaptive_resolution ?
                        obj_models_[ii].GetInscribedRadius() : env_params_.res;
 
     for (double x = env_params_.x_min; x <= env_params_.x_max;
@@ -2308,6 +2334,8 @@ vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
   return masked_depth_image;
 }
 }  // namespace
+
+
 
 
 
