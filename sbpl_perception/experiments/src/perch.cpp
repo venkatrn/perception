@@ -88,6 +88,9 @@ int main(int argc, char **argv) {
   input.model_names = parser.ConvertModelNamesInFileToIDs(
                         object_recognizer.GetModelBank());
 
+  input.heuristics_dir = ros::package::getPath("sbpl_perception") +
+                         "/heuristics/" + config_file_path.stem().string();
+
   // Objects for storing the point clouds.
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
 
