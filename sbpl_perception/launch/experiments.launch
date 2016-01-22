@@ -20,7 +20,7 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120006.581890.txt"/> <!&#45;&#45;incorrect&#45;&#45;> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114557.353958.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114827.329624.txt"/> -->
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/>
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/>  -->
       <!--4 small objects-->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
@@ -41,7 +41,7 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120142.169847.txt"/> -->
 
-      <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114628.408278.txt"/>
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114628.408278.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/chess_input/2r_1k_1q.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/chess_input/6p_2r_1k_1q_1n_1b.txt"/> -->
     </node>

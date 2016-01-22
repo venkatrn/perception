@@ -41,12 +41,15 @@ struct GraphStateProperties {
   unsigned short last_max_depth;
   int target_cost;
   int source_cost;
+  int last_level_cost;
   template <typename Ar> void serialize(Ar &ar, const unsigned int) {
     ar &last_min_depth;
     ar &last_max_depth;
     ar &target_cost;
     ar &source_cost;
+    ar &last_level_cost;
   }
+  GraphStateProperties() : last_min_depth(0), last_max_depth(0), target_cost(0), source_cost(0), last_level_cost(0) {}
 };
 
 // Specialize the hash function for GraphState type.

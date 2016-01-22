@@ -274,6 +274,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     const ObjectState &last_object, const bool last_level,
                     const std::vector<int> &parent_counted_pixels,
                     std::vector<int> *child_counted_pixels);
+  // NOTE: updated_counted_pixels should always be equal to the number of
+  // points in the input point cloud.
+  int GetLastLevelCost(const PointCloudPtr full_rendered_cloud,
+                    const ObjectState &last_object,
+                    const std::vector<int> &counted_pixels,
+                    std::vector<int> *updated_counted_pixels);
 
   // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any
   // additional renderings. This requires the true source depth image and

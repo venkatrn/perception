@@ -383,9 +383,9 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       g_value_map_[candidate_succ_ids[ii]] = g_value_map_[source_state_id] +
                                              output_unit.cost;
 
-      // TODO: should use source+target cost?
-      // last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.cost;
-      last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.state_properties.target_cost;
+      last_object_rendering_cost_[candidate_succ_ids[ii]] =
+        output_unit.state_properties.target_cost +
+        output_unit.state_properties.source_cost;
 
       // Cache the depth image only for single object renderings, *only* if valid.
       // NOTE: The hash key is computed on the *unadjusted* child state.
@@ -429,9 +429,10 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       ss.precision(20);
       ss << debug_dir_ + "succ_" << candidate_succ_ids[ii] << ".png";
       PrintImage(ss.str(), output_unit.depth_image);
-      printf("State %d,       %d      %d      %d      %d\n", candidate_succ_ids[ii],
+      printf("State %d,       %d      %d      %d      %d      %d\n", candidate_succ_ids[ii],
              output_unit.state_properties.target_cost,
              output_unit.state_properties.source_cost,
+             output_unit.state_properties.last_level_cost,
              candidate_costs[ii],
              g_value_map_[candidate_succ_ids[ii]]);
 
@@ -676,9 +677,9 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
       continue;
     }
 
-    // TODO: should use source+target cost?
-    // last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.cost;
-    last_object_rendering_cost_[candidate_succ_ids[ii]] = output_unit.state_properties.target_cost;
+    last_object_rendering_cost_[candidate_succ_ids[ii]] =
+      output_unit.state_properties.target_cost +
+      output_unit.state_properties.source_cost;
 
     if (IsGoalState(candidate_succs[ii])) {
       succ_ids->push_back(env_params_.goal_state_id);
@@ -739,6 +740,7 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id,
          child_state_id);
 
   GraphState source_state;
+
   if (adjusted_states_.find(source_state_id) != adjusted_states_.end()) {
     source_state = adjusted_states_[source_state_id];
   } else {
@@ -762,10 +764,6 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id,
                              &output_unit.child_counted_pixels, &output_unit.adjusted_state,
                              &output_unit.state_properties, &output_unit.depth_image,
                              &output_unit.unadjusted_depth_image);
-
-  if (child_state_id == 253) {
-    printf("!!!!!!!!!!   STATE 253 cost: %d   !!!!!!!!!!!!!!!!\n", output_unit.cost);
-  }
 
   bool invalid_state = output_unit.cost == -1;
 
@@ -860,6 +858,7 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
     if (rcnn_heuristic > 1e-5) {
       return kNumPixels;
     }
+
     return last_object_rendering_cost_[state_id];
 
     // return rcnn_heuristics_[q_id - 2](s);
@@ -968,6 +967,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
                    &succ_max_depth)) {
       return -1;
     }
+
     child_properties->last_min_depth = succ_min_depth;
     child_properties->last_min_depth = succ_max_depth;
 
@@ -998,6 +998,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
                    &succ_max_depth)) {
       return -1;
     }
+
     child_properties->last_min_depth = succ_min_depth;
     child_properties->last_min_depth = succ_max_depth;
   }
@@ -1011,17 +1012,19 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   const bool last_level = false;
 
 
-  int target_cost = 0, source_cost = 0, total_cost = 0;
+  int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
 
   vector<int> child_counted_pixels;
   source_cost = GetSourceCost(cloud_out,
                               adjusted_child_state->object_states().back(),
                               last_level, parent_counted_pixels, &child_counted_pixels);
-  total_cost = source_cost + target_cost;
 
   child_properties->source_cost = source_cost;
   child_properties->target_cost = target_cost;
+  child_properties->last_level_cost = 0;
+
+  total_cost = source_cost + target_cost + last_level_cost;
 
   // std::stringstream cloud_ss;
   // cloud_ss.precision(20);
@@ -1086,6 +1089,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   unsigned short succ_min_depth_unused, succ_max_depth_unused;
   vector<int> new_pixel_indices;
+
   if (IsOccluded(source_depth_image, *unadjusted_depth_image, &new_pixel_indices,
                  &succ_min_depth_unused,
                  &succ_max_depth_unused)) {
@@ -1109,7 +1113,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // Align with ICP
   // Only non-occluded points
 
-  GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out, parent_counted_pixels);
+  GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out,
+                     parent_counted_pixels);
   // icp_cost = static_cast<int>(kICPCostMultiplier * icp_fitness_score);
   int last_idx = child_state.NumObjects() - 1;
 
@@ -1159,18 +1164,32 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // Compute costs
   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
                           env_params_.num_objects;
-  int target_cost = 0, source_cost = 0, total_cost = 0;
+  int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
+
+  // source_cost = GetSourceCost(succ_cloud,
+  //                             adjusted_child_state->object_states().back(),
+  //                             last_level, parent_counted_pixels, child_counted_pixels);
   source_cost = GetSourceCost(succ_cloud,
                               adjusted_child_state->object_states().back(),
-                              last_level, parent_counted_pixels, child_counted_pixels);
-  total_cost = source_cost + target_cost;
+                              false, parent_counted_pixels, child_counted_pixels);
+
+  if (last_level) {
+    vector<int> updated_counted_pixels;
+    last_level_cost = GetLastLevelCost(succ_cloud,
+                                       adjusted_child_state->object_states().back(), *child_counted_pixels,
+                                       &updated_counted_pixels);
+    *child_counted_pixels = updated_counted_pixels;
+  }
+
+  total_cost = source_cost + target_cost + last_level_cost;
 
   final_depth_image->clear();
   *final_depth_image = depth_image;
 
   child_properties->target_cost = target_cost;
   child_properties->source_cost = source_cost;
+  child_properties->last_level_cost = last_level_cost;
 
   // std::stringstream cloud_ss;
   // cloud_ss.precision(20);
@@ -1295,6 +1314,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
                                         const std::vector<int> &parent_counted_pixels,
                                         std::vector<int> *child_counted_pixels) {
 
+  //TODO: TESTING
+  assert(!last_level);
 
   // Compute the cost of points made infeasible in the observed point cloud.
   pcl::search::KdTree<PointT>::Ptr knn_reverse;
@@ -1388,6 +1409,63 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
   int source_cost = static_cast<int>(nn_score);
   return source_cost;
+}
+
+int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
+                                           full_rendered_cloud,
+                                           const ObjectState &last_object,
+                                           const std::vector<int> &counted_pixels,
+                                           std::vector<int> *updated_counted_pixels) {
+  // Compute the cost of points made infeasible in the observed point cloud.
+  pcl::search::KdTree<PointT>::Ptr knn_reverse;
+  knn_reverse.reset(new pcl::search::KdTree<PointT>(true));
+  knn_reverse->setInputCloud(full_rendered_cloud);
+
+  updated_counted_pixels->clear();
+  *updated_counted_pixels = counted_pixels;
+
+  // TODO: make principled
+  if (full_rendered_cloud->points.empty()) {
+    return 100000;
+  }
+
+  std::sort(updated_counted_pixels->begin(), updated_counted_pixels->end());
+
+  vector<int> indices_to_consider;
+
+  indices_to_consider.resize(valid_indices_.size());
+  auto it = std::set_difference(valid_indices_.begin(), valid_indices_.end(),
+                                updated_counted_pixels->begin(), updated_counted_pixels->end(),
+                                indices_to_consider.begin());
+  indices_to_consider.resize(it - indices_to_consider.begin());
+
+  double nn_score = 0.0;
+
+  for (const int ii : indices_to_consider) {
+    updated_counted_pixels->push_back(ii);
+
+    PointT point = observed_cloud_->points[ii];
+    vector<float> sqr_dists;
+    vector<int> indices;
+    int num_neighbors_found = knn_reverse->radiusSearch(point, kSensorResolution,
+                                                        indices,
+                                                        sqr_dists, 1);
+    bool point_unexplained = num_neighbors_found == 0;
+
+    if (point_unexplained) {
+      if (kUseDepthSensitiveCost) {
+        //TODO: get range
+        // nn_score += observed_depth_image_[ii] / 1000.0;
+      } else {
+        nn_score += 1.0;
+      }
+    }
+  }
+
+  assert(updated_counted_pixels->size() == valid_indices_.size());
+
+  int last_level_cost = static_cast<int>(nn_score);
+  return last_level_cost;
 }
 
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
@@ -2230,6 +2308,7 @@ vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
   return masked_depth_image;
 }
 }  // namespace
+
 
 
 
