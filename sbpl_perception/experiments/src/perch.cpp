@@ -59,14 +59,18 @@ int main(int argc, char **argv) {
   cout << config_file << endl;
 
   bool image_debug = false;
-  string debug_dir = kDebugDir + config_file_path.stem().string();
+  string experiment_dir = kDebugDir + output_file_poses.stem().string() + "/";
+  string debug_dir = experiment_dir + config_file_path.stem().string() + "/";
+
+  if (IsMaster(world) &&
+      !boost::filesystem::is_directory(experiment_dir)) {
+    boost::filesystem::create_directory(experiment_dir);
+  }
 
   if (IsMaster(world) &&
       !boost::filesystem::is_directory(debug_dir)) {
     boost::filesystem::create_directory(debug_dir);
   }
-
-  debug_dir = debug_dir + "/";
 
   object_recognizer.GetMutableEnvironment()->SetDebugDir(debug_dir);
   object_recognizer.GetMutableEnvironment()->SetDebugOptions(image_debug);
