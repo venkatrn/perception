@@ -16,6 +16,7 @@
 #include <pcl/io/io.h>
 #include <pcl/io/vtk_lib_io.h>
 #include <pcl/PCLPointCloud2.h>
+#include <ros/ros.h>
 
 #include <boost/filesystem.hpp>
 
@@ -24,6 +25,7 @@
 #include <fstream>
 
 using namespace std;
+using namespace sbpl_perception;
 
 void TransformPolyMesh(const pcl::PolygonMesh::Ptr
                        &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform) {
@@ -116,9 +118,44 @@ int main(int argc, char **argv) {
 
   }
 
+
   boost::filesystem::path gt_dir = argv[1];
   boost::filesystem::path config_dir = argv[2];
   boost::filesystem::path output_file = argv[3];
+
+
+  ros::init(argc, argv, "ground_truth_parser");
+  ros::NodeHandle private_nh("~");
+  XmlRpc::XmlRpcValue model_bank_list;
+
+  vector<ModelMetaData> model_bank;
+  std::string param_key;
+  if (private_nh.searchParam("model_bank", param_key)) {
+    private_nh.getParam(param_key, model_bank_list);
+  }
+
+  ROS_ASSERT(model_bank_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
+  printf("Model bank has %d models:\n", model_bank_list.size());
+  model_bank.resize(model_bank_list.size());
+  for (int ii = 0; ii < model_bank_list.size(); ++ii) {
+    auto &object_data = model_bank_list[ii];
+    ROS_ASSERT(object_data.getType() == XmlRpc::XmlRpcValue::TypeArray);
+    ROS_ASSERT(object_data.size() == 4);
+    ROS_ASSERT(object_data[0].getType() == XmlRpc::XmlRpcValue::TypeString);
+    ROS_ASSERT(object_data[1].getType() == XmlRpc::XmlRpcValue::TypeString);
+    ROS_ASSERT(object_data[2].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
+    ROS_ASSERT(object_data[3].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
+
+    ModelMetaData model_meta_data;
+    SetModelMetaData(static_cast<string>(object_data[0]),
+                     static_cast<string>(object_data[1]), static_cast<bool>(object_data[2]),
+                     static_cast<bool>(object_data[3]), &model_meta_data);
+    model_bank[ii] = model_meta_data;
+    printf("%s: %s, %d, %d\n", model_meta_data.name.c_str(),
+           model_meta_data.file.c_str(), model_meta_data.flipped,
+           model_meta_data.symmetric);
+
+  }
 
   if (!boost::filesystem::is_directory(gt_dir)) {
     cerr << "Invalid ground truth directory" << endl;
@@ -175,14 +212,16 @@ int main(int argc, char **argv) {
       Eigen::Affine3f transformed_pose;
       transformed_pose = world_transform * gt_matrices[ii];
 
+      ModelMetaData meta_data = sbpl_perception::GetMetaDataFromModelFilename(model_bank, parser.model_files[ii]);
+
       pcl::PolygonMesh mesh;
-      pcl::io::loadPolygonFile (parser.model_files[ii].c_str(), mesh);
-      ObjectModel obj_model(mesh, parser.model_files[ii].c_str(),
-                            parser.model_symmetries[ii],
-                            parser.model_flippings[ii]);
+      pcl::io::loadPolygonFile (meta_data.file.c_str(), mesh);
+      ObjectModel obj_model(mesh, meta_data.name,
+                            meta_data.symmetric,
+                            meta_data.flipped);
       obj_models.push_back(obj_model);
       printf("Read %s with %d polygons and %d triangles\n",
-             parser.model_files[ii].c_str(),
+             meta_data.name.c_str(),
              static_cast<int>(mesh.polygons.size()),
              static_cast<int>(mesh.cloud.data.size()));
       printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f\n",

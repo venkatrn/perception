@@ -27,6 +27,8 @@ const double kLargeHeuristic = 2.0 * kHeuristicScaling /
 // TODO: we might want to look at the score relative to the best for this
 // bounding box.
 const double kMinimumRCNNConfidence = 0.1;
+// Any ROI with #points in it less than this number will be ignored.
+const int kMinimumBBoxPoints = 400; 
 } // namespace
 
 namespace sbpl_perception {
@@ -109,6 +111,13 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
     const cv::Rect roi_bbox(cv::Point(xmin, ymin), cv::Point(xmax, ymax));
     bbox_file.close();
 
+    // Skip this ROI has too few points.
+    const vector<cv::Point> points_in_bbox = GetValidPointsInBoundingBox(
+                                             input_depth_image_, roi_bbox);
+    if (static_cast<int>(points_in_bbox.size()) < kMinimumBBoxPoints) {
+      continue;
+    }
+
     // Read the RCNN detections from file.
     string class_name;
     double score = 0;
@@ -123,6 +132,10 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
 
     DetectionsMap all_detections;
 
+    string best_class;
+    double best_score = -1.0;
+    Detection best_detection(cv::Rect(0, 0, 0, 0), best_score);
+
     while (det_file >> class_name && det_file >> score && det_file >> xmin &&
            det_file >> ymin && det_file >> xmax && det_file >> ymax) {
       // If this model is not in the scene, ignore.
@@ -132,8 +145,14 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
         continue;
       }
 
-      // If the score is too low, ignore.
+      if (score > best_score) {
+        best_score = score;
+        best_class = class_name;
+        best_detection.score = best_score;
+        best_detection.bbox = roi_bbox;
+      }
 
+      // If the score is too low, ignore.
       if (score < kMinimumRCNNConfidence) {
         continue;
       }
@@ -151,6 +170,14 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
       });
       assert(max_it != detections.end());
       detections_dict_[item.first].push_back(*max_it);
+    }
+
+    // If we didn't get any high-confidence detections for this ROI, lets the
+    // take the best class amongst the ones in the scene, even if it had a very
+    // low confidence score. 
+    assert(best_score > 0);
+    if (all_detections.empty()) {
+      detections_dict_[best_class].push_back(best_detection);
     }
 
     det_file.close();
@@ -363,6 +390,9 @@ ContPose RCNNHeuristicFactory::GetPoseFromBBox(const cv::Mat &depth_image,
     Eigen::Vector3d world_point_eig(world_point.x, world_point.y, world_point.z);
     projected_centroid += world_point_eig;
     num_points++;
+  }
+  if (num_points == 0) {
+    printf("BBOX %d %d has no valid points!\n", bbox.x, bbox.y);
   }
 
   projected_centroid = projected_centroid / num_points;

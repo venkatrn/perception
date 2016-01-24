@@ -163,7 +163,7 @@
 
       [red_mug,
       $(find sbpl_perception)/data/RAM/cad_models/red_mug.ply,
-      false,
+      true,
       false],
 
       [simple_green,

@@ -90,7 +90,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
     ros::NodeHandle private_nh("~perch_params");
     private_nh.param("sensor_resolution_radius", perch_params_.sensor_resolution,
                      0.003);
-    private_nh.param("min_points_for_valid_pose",
+    private_nh.param("min_neighbor_points_for_valid_pose",
                      perch_params_.min_neighbor_points_for_valid_pose, 50);
     private_nh.param("max_icp_iterations", perch_params_.max_icp_iterations, 10);
     private_nh.param("use_adaptive_resolution",

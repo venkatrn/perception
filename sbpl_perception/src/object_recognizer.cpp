@@ -93,27 +93,27 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
              model_meta_data.file.c_str(), model_meta_data.flipped,
              model_meta_data.symmetric);
 
-      // Load planner config params.
-      private_nh.param("inflation_epsilon", planner_params_.inflation_eps, 10.0);
-      private_nh.param("max_planning_time", planner_params_.max_time, 60.0);
-      // If true, planner will ignore time limit until a first solution is
-      // found. For anytime search, planner terminates with first solution.
-      private_nh.param("first_solution", planner_params_.return_first_solution,
-                       true);
-      private_nh.param("use_lazy", planner_params_.use_lazy,
-                       true);
-      planner_params_.meta_search_type =
-        mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
-      planner_params_.planner_type = mha_planner::PlannerType::SMHA;
-      planner_params_.mha_type =
-        mha_planner::MHAType::FOCAL;
-      planner_params_.final_eps = planner_params_.inflation_eps;
-      planner_params_.dec_eps = 0.2;
-      planner_params_.repair_time = -1;
-      // Unused
-      // planner_params_.anchor_eps = 1.0;
-      // planner_params_.use_anchor = true;
     }
+    // Load planner config params.
+    private_nh.param("inflation_epsilon", planner_params_.inflation_eps, 10.0);
+    private_nh.param("max_planning_time", planner_params_.max_time, 60.0);
+    // If true, planner will ignore time limit until a first solution is
+    // found. For anytime search, planner terminates with first solution.
+    private_nh.param("first_solution", planner_params_.return_first_solution,
+                     true);
+    private_nh.param("use_lazy", planner_params_.use_lazy,
+                     true);
+    planner_params_.meta_search_type =
+      mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
+    planner_params_.planner_type = mha_planner::PlannerType::SMHA;
+    planner_params_.mha_type =
+      mha_planner::MHAType::FOCAL;
+    planner_params_.final_eps = planner_params_.inflation_eps;
+    planner_params_.dec_eps = 0.2;
+    planner_params_.repair_time = -1;
+    // Unused
+    // planner_params_.anchor_eps = 1.0;
+    // planner_params_.use_anchor = true;
   }
 
   // All processes should wait until master has loaded params.

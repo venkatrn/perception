@@ -104,9 +104,9 @@ target_link_libraries(experiments/roi_saver ${PROJECT_NAME})
 # rosbuild_add_gtest(tests/hash_manager_test tests/hash_manager_test.cpp)
 # target_link_libraries(tests/hash_manager_test ${PROJECT_NAME})
 #
-# rosbuild_add_executable(experiments/ground_truth_parser
-#   experiments/src/ground_truth_parser.cpp)
-# target_link_libraries(experiments/ground_truth_parser ${PROJECT_NAME})
+rosbuild_add_executable(experiments/ground_truth_parser
+  experiments/src/ground_truth_parser.cpp)
+target_link_libraries(experiments/ground_truth_parser ${PROJECT_NAME})
 #
 # rosbuild_add_executable(experiments/view_generator
 #   experiments/src/view_generator.cpp)
@@ -114,9 +114,9 @@ target_link_libraries(experiments/roi_saver ${PROJECT_NAME})
 # target_link_libraries(experiments/view_generator libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
 #   libvtkGraphics.so)
 #
-# rosbuild_add_executable(experiments/vfh_estimator
-#   experiments/src/vfh_estimator.cpp)
-# target_link_libraries(experiments/vfh_estimator ${PROJECT_NAME})
+rosbuild_add_executable(experiments/vfh_estimator
+  experiments/src/vfh_estimator.cpp)
+target_link_libraries(experiments/vfh_estimator ${PROJECT_NAME})
 #
 rosbuild_add_executable(experiments/perch
   experiments/src/perch.cpp)

@@ -3,12 +3,12 @@ search_resolution_yaw: 0.3926991 # rad
 
 perch_params:
   sensor_resolution_radius: 0.003 #m
-  min_neighbor_points_for_valid_pose: 50 
+  min_neighbor_points_for_valid_pose: 400 #50
   max_icp_iterations: 20
   use_adaptive_resolution: false
   use_rcnn_heuristic: true
 
   ## Visualization and Debugging
-  visualize_expanded_states: true
+  visualize_expanded_states: false
   print_expanded_states: false
   debug_verbose: false # unused

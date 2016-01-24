@@ -12,6 +12,7 @@
 #include <pcl/registration/warp_point_rigid_3d.h>
 
 #include <ros/package.h>
+#include <ros/ros.h>
 
 #include <boost/filesystem.hpp>
 
@@ -19,6 +20,7 @@
 
 using namespace perception_utils;
 using namespace std;
+using namespace sbpl_perception;
 
 typedef vector<double> VD;
 typedef vector<VD> VVD;
@@ -239,6 +241,40 @@ int main(int argc, char **argv) {
   boost::filesystem::path config_dir = argv[1];
   boost::filesystem::path output_file = argv[2];
 
+  ros::init(argc, argv, "ourcvfh_estimator");
+  ros::NodeHandle private_nh("~");
+  XmlRpc::XmlRpcValue model_bank_list;
+
+  vector<ModelMetaData> model_bank;
+  std::string param_key;
+  if (private_nh.searchParam("model_bank", param_key)) {
+    private_nh.getParam(param_key, model_bank_list);
+  }
+
+  ROS_ASSERT(model_bank_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
+  printf("Model bank has %d models:\n", model_bank_list.size());
+  model_bank.resize(model_bank_list.size());
+  for (int ii = 0; ii < model_bank_list.size(); ++ii) {
+    auto &object_data = model_bank_list[ii];
+    ROS_ASSERT(object_data.getType() == XmlRpc::XmlRpcValue::TypeArray);
+    ROS_ASSERT(object_data.size() == 4);
+    ROS_ASSERT(object_data[0].getType() == XmlRpc::XmlRpcValue::TypeString);
+    ROS_ASSERT(object_data[1].getType() == XmlRpc::XmlRpcValue::TypeString);
+    ROS_ASSERT(object_data[2].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
+    ROS_ASSERT(object_data[3].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
+
+    ModelMetaData model_meta_data;
+    SetModelMetaData(static_cast<string>(object_data[0]),
+                     static_cast<string>(object_data[1]), static_cast<bool>(object_data[2]),
+                     static_cast<bool>(object_data[3]), &model_meta_data);
+    model_bank[ii] = model_meta_data;
+    printf("%s: %s, %d, %d\n", model_meta_data.name.c_str(),
+           model_meta_data.file.c_str(), model_meta_data.flipped,
+           model_meta_data.symmetric);
+
+  }
+
+
   if (!boost::filesystem::is_directory(config_dir)) {
     cerr << "Invalid config directory" << endl;
     return -1;
@@ -279,12 +315,14 @@ int main(int argc, char **argv) {
 
     vector<ObjectModel> test_obj_models, train_obj_models;
 
+
     for (size_t ii = 0; ii < parser.model_files.size(); ++ii) {
+      ModelMetaData meta_data = sbpl_perception::GetMetaDataFromModelFilename(model_bank, parser.model_files[ii]);
       pcl::PolygonMesh mesh;
       pcl::io::loadPolygonFile (parser.model_files[ii].c_str(), mesh);
-      ObjectModel test_obj_model(mesh, parser.model_files[ii].c_str(),
-                                 parser.model_symmetries[ii],
-                                 parser.model_flippings[ii]);
+      ObjectModel test_obj_model(mesh, meta_data.name,
+                                 meta_data.symmetric,
+                                 meta_data.flipped);
       ObjectModel train_obj_model(mesh, parser.model_files[ii].c_str(),
                                   false,
                                   false);

@@ -13,6 +13,18 @@ void SetModelMetaData(const string &name, const string &file,
   model_meta_data->symmetric = symmetric;
 }
 
+ModelMetaData GetMetaDataFromModelFilename(const ModelBank& model_bank, std::string &model_file) {
+  for (const auto &meta_data : model_bank) {
+    if (meta_data.file.compare(model_file) == 0) {
+      return meta_data;
+    }
+  }
+  ModelMetaData matched_meta_data;
+  printf("Model file %s not found in model bank\n", model_file.c_str());
+  SetModelMetaData("", "", false, false, &matched_meta_data);
+  return matched_meta_data;
+}
+
 void ColorizeDepthImage(const cv::Mat &depth_image,
                         cv::Mat &colored_depth_image,
                         unsigned short min_depth,

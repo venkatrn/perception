@@ -19,7 +19,7 @@
       <!-- 4 glasses-->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120006.581890.txt"/> <!&#45;&#45;incorrect&#45;&#45;> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114557.353958.txt"/> -->
-      <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114827.329624.txt"/>
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114827.329624.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/>  -->
       <!--4 small objects-->
@@ -37,9 +37,17 @@
       <!--Contact objects-->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114051.053321.txt"/> -->
 
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114413.016266.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115302.940896.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115946.415206.txt"/> -->
+
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> <!&#45;&#45;long!!&#45;&#45;> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120142.169847.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120147.910222.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120202.414337.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142149.770360.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142537.928074.txt"/>
 
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114628.408278.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/chess_input/2r_1k_1q.txt"/> -->

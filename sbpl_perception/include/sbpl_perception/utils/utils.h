@@ -69,8 +69,14 @@ struct EnvStats {
   int scenes_valid;
 };
 
+typedef std::function<int(const GraphState &state)> Heuristic;
+typedef std::vector<Heuristic> Heuristics;
+typedef std::vector<ModelMetaData> ModelBank;
+
 void SetModelMetaData(const std::string &name, const std::string &file,
                       const bool flipped, const bool symmetric, ModelMetaData *model_meta_data);
+
+ModelMetaData GetMetaDataFromModelFilename(const ModelBank& model_bank, std::string &model_file);
 
 // Colorize depth image, given the max and min depths. Type is assumed to be
 // unsigned short (CV_16UC1) as typical of a kinect sensor.
@@ -117,8 +123,5 @@ void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y);
 // MPI-utilties
 bool IsMaster(std::shared_ptr<boost::mpi::communicator> mpi_world);
 
-typedef std::function<int(const GraphState &state)> Heuristic;
-typedef std::vector<Heuristic> Heuristics;
-typedef std::vector<ModelMetaData> ModelBank;
 }
 // namespace
