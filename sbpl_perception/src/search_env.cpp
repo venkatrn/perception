@@ -1953,6 +1953,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   // Precompute RCNN heuristics.
   rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input,
                                                          kinect_simulator_));
+  rcnn_heuristic_factory_->SetDebugDir(debug_dir_);
 
   if (perch_params_.use_rcnn_heuristic) {
     rcnn_heuristic_factory_->LoadHeuristicsFromDisk(input.heuristics_dir);

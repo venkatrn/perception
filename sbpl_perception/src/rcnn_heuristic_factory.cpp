@@ -14,7 +14,7 @@
 
 using namespace std;
 
-string kDebugDir = ros::package::getPath("sbpl_perception") +
+string kDefaultDebugDir = ros::package::getPath("sbpl_perception") +
                    "/visualization/";
 
 namespace {
@@ -28,14 +28,17 @@ const double kLargeHeuristic = 2.0 * kHeuristicScaling /
 // bounding box.
 const double kMinimumRCNNConfidence = 0.1;
 // Any ROI with #points in it less than this number will be ignored.
-const int kMinimumBBoxPoints = 400; 
+const int kMinimumBBoxPoints = 400;
+// Any ROI with #points in it less than this number AND having no
+// high-confidence detections will be ignored.
+const int kMinimumBBoxPointsForLowConfidence = 2000;
 } // namespace
 
 namespace sbpl_perception {
 RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input,
                                            const pcl::simulation::SimExample::Ptr kinect_simulator) : recognition_input_
   (input),
-  kinect_simulator_(kinect_simulator) {
+  kinect_simulator_(kinect_simulator), debug_dir_(kDefaultDebugDir) {
 
   Eigen::Affine3f cam_to_body;
   cam_to_body.matrix() << 0, 0, 1, 0,
@@ -113,7 +116,8 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
 
     // Skip this ROI has too few points.
     const vector<cv::Point> points_in_bbox = GetValidPointsInBoundingBox(
-                                             input_depth_image_, roi_bbox);
+                                               input_depth_image_, roi_bbox);
+
     if (static_cast<int>(points_in_bbox.size()) < kMinimumBBoxPoints) {
       continue;
     }
@@ -174,9 +178,11 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
 
     // If we didn't get any high-confidence detections for this ROI, lets the
     // take the best class amongst the ones in the scene, even if it had a very
-    // low confidence score. 
+    // low confidence score.
     assert(best_score > 0);
-    if (all_detections.empty()) {
+
+    if (all_detections.empty() &&
+        static_cast<int>(points_in_bbox.size()) > kMinimumBBoxPointsForLowConfidence) {
       detections_dict_[best_class].push_back(best_detection);
     }
 
@@ -324,7 +330,7 @@ Heuristics RCNNHeuristicFactory::CreateHeuristicsFromDetections(
 
       cv::Mat raster;
       RasterizeHeuristic(heuristic, raster);
-      string fname = kDebugDir + "heur_" + object_id + "_" + to_string(
+      string fname = debug_dir_ + "heur_" + object_id + "_" + to_string(
                        instance_num) + ".png";
       cv::imwrite(fname, raster);
       ++instance_num;
@@ -391,6 +397,7 @@ ContPose RCNNHeuristicFactory::GetPoseFromBBox(const cv::Mat &depth_image,
     projected_centroid += world_point_eig;
     num_points++;
   }
+
   if (num_points == 0) {
     printf("BBOX %d %d has no valid points!\n", bbox.x, bbox.y);
   }
@@ -477,4 +484,5 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
   }
 }
 } // namespace
+
 

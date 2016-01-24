@@ -36,6 +36,10 @@ class RCNNHeuristicFactory {
   // Find ROIs in the image by projecting 3D bounding boxes to the image.
   void SaveROIsToDisk(const boost::filesystem::path &base_dir);
 
+  void SetDebugDir(const std::string &debug_dir) {
+    debug_dir_ = debug_dir;
+  }
+
  private:
   const pcl::simulation::SimExample::Ptr kinect_simulator_;
   RecognitionInput recognition_input_;
@@ -60,6 +64,8 @@ class RCNNHeuristicFactory {
                            const cv::Rect bbox) const;
 
   void RasterizeHeuristic(const Heuristic &heuristic, cv::Mat &raster) const;
+
+  std::string debug_dir_;
 };
 } // namespace
 
