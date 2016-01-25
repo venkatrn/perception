@@ -1772,7 +1772,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
                                   observed_depth_image_);
 
-  if (mpi_comm_->rank() == kMasterRank) {
+  if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
     std::stringstream ss;
     ss.precision(20);
     ss << debug_dir_ + "test_cloud.pcd";
@@ -1830,7 +1830,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     }
   }
 
-  if (mpi_comm_->rank() == kMasterRank) {
+  if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
     std::stringstream ss;
     ss.precision(20);
     ss << debug_dir_ + "obs_cloud" << ".pcd";
@@ -1840,7 +1840,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   }
 
 
-  if (mpi_comm_->rank() == kMasterRank) {
+  if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
     std::stringstream ss;
     ss.precision(20);
     ss << debug_dir_ + "projected_cloud" << ".pcd";
@@ -1940,7 +1940,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
 
   *observed_organized_cloud_ = *depth_img_cloud;
 
-  if (mpi_comm_->rank() == kMasterRank) {
+  if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
     std::stringstream ss;
     ss.precision(20);
     ss << debug_dir_ + "obs_organized_cloud" << ".pcd";

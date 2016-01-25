@@ -26,7 +26,7 @@ const double kLargeHeuristic = 2.0 * kHeuristicScaling /
 // Minimum confidence for an RCNN detection to be considered as a heuristic.
 // TODO: we might want to look at the score relative to the best for this
 // bounding box.
-const double kMinimumRCNNConfidence = 0.1;
+const double kMinimumRCNNConfidence = 0.2;
 // Any ROI with #points in it less than this number will be ignored.
 const int kMinimumBBoxPoints = 400;
 // Any ROI with #points in it less than this number AND having no
@@ -179,12 +179,12 @@ void RCNNHeuristicFactory::LoadHeuristicsFromDisk(const boost::filesystem::path
     // If we didn't get any high-confidence detections for this ROI, lets the
     // take the best class amongst the ones in the scene, even if it had a very
     // low confidence score.
-    assert(best_score > 0);
-
-    if (all_detections.empty() &&
-        static_cast<int>(points_in_bbox.size()) > kMinimumBBoxPointsForLowConfidence) {
-      detections_dict_[best_class].push_back(best_detection);
-    }
+    // assert(best_score > 0);
+    //
+    // if (all_detections.empty() &&
+    //     static_cast<int>(points_in_bbox.size()) > kMinimumBBoxPointsForLowConfidence) {
+    //   detections_dict_[best_class].push_back(best_detection);
+    // }
 
     det_file.close();
   }
