@@ -126,7 +126,7 @@ target_link_libraries(experiments/perch libvtkCommon.so libvtkFiltering.so libvt
 rosbuild_link_boost(experiments/perch mpi serialization)
 rosbuild_add_openmp_flags(experiments/perch)
 #
-# rosbuild_add_executable(experiments/greedy_icp
-#   experiments/src/greedy_icp.cpp)
-# target_link_libraries(experiments/greedy_icp ${PROJECT_NAME})
-# rosbuild_add_openmp_flags(experiments/greedy_icp)
+rosbuild_add_executable(experiments/greedy_icp
+  experiments/src/greedy_icp.cpp)
+target_link_libraries(experiments/greedy_icp ${PROJECT_NAME})
+rosbuild_add_openmp_flags(experiments/greedy_icp)

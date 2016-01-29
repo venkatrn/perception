@@ -7,6 +7,7 @@
 
 #include <sbpl_perception/search_env.h>
 #include <perception_utils/perception_utils.h>
+#include <sbpl_perception/object_recognizer.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -19,10 +20,7 @@
 #include <memory>
 
 using namespace std;
-
-// Process ID of the master processor. This does all the planning work, and the
-// slaves simply aid in computing successor costs in parallel.
-const int kMasterRank = 0;
+using namespace sbpl_perception;
 
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
@@ -33,48 +31,96 @@ int main(int argc, char **argv) {
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
-  if (world->rank() == kMasterRank) {
-    if (argc < 2) {
-      cerr << "Usage: ./perch <path_to_config_file> <path_output_file_poses>"
-           << endl;
-      return -1;
-    }
+  if (IsMaster(world)) {
+    ros::init(argc, argv, "greedy_icp_experiments");
+    ros::NodeHandle nh("~");
+  }
 
-    boost::filesystem::path config_file_path = argv[1];
-    boost::filesystem::path output_file_poses = argv[2];
+  ObjectRecognizer object_recognizer(world);
 
-    if (!boost::filesystem::is_regular_file(config_file_path)) {
-      cerr << "Invalid config file" << endl;
-      return -1;
-    }
+  if (argc < 4) {
+    cerr << "Usage: ./greedy_icp <path_to_config_file> <path_output_file_poses> <path_output_file_stats>"
+         << endl;
+    return -1;
+  }
 
-    ofstream fs_poses;
+  boost::filesystem::path config_file_path = argv[1];
+  boost::filesystem::path output_file_poses = argv[2];
+
+  if (!boost::filesystem::is_regular_file(config_file_path)) {
+    cerr << "Invalid config file" << endl;
+    return -1;
+  }
+
+  ofstream fs_poses;
+
+  if (IsMaster(world)) {
     fs_poses.open (output_file_poses.string().c_str(),
                    std::ofstream::out | std::ofstream::app);
+  }
 
-    string config_file = config_file_path.string();
-    cout << config_file << endl;
+  string config_file = config_file_path.string();
+  cout << config_file << endl;
 
-    bool image_debug = false;
-    string debug_dir = kDebugDir + "greedy_" + config_file_path.filename().string();
+  bool image_debug = false;
 
-    if (!boost::filesystem::is_directory(debug_dir)) {
-      boost::filesystem::create_directory(debug_dir);
-    }
+  string experiment_dir = kDebugDir + "greedy_" +
+                          output_file_poses.stem().string() + "/";
+  string debug_dir = experiment_dir + config_file_path.stem().string() + "/";
 
-    debug_dir = debug_dir + "/";
+  if (IsMaster(world) &&
+      !boost::filesystem::is_directory(experiment_dir)) {
+    boost::filesystem::create_directory(experiment_dir);
+  }
 
-    // Objects for storing the point clouds.
-    pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
-    pcl::PointCloud<PointT>::Ptr cloud_out(new PointCloud);
+  if (IsMaster(world) &&
+      !boost::filesystem::is_directory(debug_dir)) {
+    boost::filesystem::create_directory(debug_dir);
+  }
 
-    unique_ptr<EnvObjectRecognition> env_obj(new EnvObjectRecognition(world));
-    unique_ptr<MHAPlanner> planner(new MHAPlanner(env_obj.get(), 1, true));
+  debug_dir = debug_dir + "/";
 
-    env_obj->SetDebugDir(debug_dir);
-    env_obj->SetDebugOptions(image_debug);
-    env_obj->Initialize(config_file);
+  object_recognizer.GetMutableEnvironment()->SetDebugDir(debug_dir);
+  object_recognizer.GetMutableEnvironment()->SetDebugOptions(image_debug);
 
+  // Wait until all processes are ready for the planning phase.
+  world->barrier();
+
+  ConfigParser parser;
+  parser.Parse(config_file);
+
+  RecognitionInput input;
+  input.x_min = parser.min_x;
+  input.x_max = parser.max_x;
+  input.y_min = parser.min_y;
+  input.y_max = parser.max_y;
+  input.table_height = parser.table_height;
+  input.camera_pose = parser.camera_pose;
+  input.model_names = parser.model_names;
+  input.model_names = parser.ConvertModelNamesInFileToIDs(
+                        object_recognizer.GetModelBank());
+
+  input.heuristics_dir = ros::package::getPath("sbpl_perception") +
+                         "/heuristics/" + config_file_path.stem().string();
+
+  // Objects for storing the point clouds.
+  pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
+
+  // Read the input PCD file from disk.
+  if (pcl::io::loadPCDFile<PointT>(parser.pcd_file_path.c_str(),
+                                   *cloud_in) != 0) {
+    cerr << "Could not find input PCD file!" << endl;
+    return -1;
+  }
+
+  world->barrier();
+
+  input.cloud = cloud_in;
+
+  object_recognizer.GetMutableEnvironment()->SetInput(input);
+
+  if (IsMaster(world)) {
+    auto env_obj = object_recognizer.GetMutableEnvironment();
     auto greedy_state = env_obj->ComputeGreedyICPPoses();
 
     for (const auto &object_state : greedy_state.object_states()) {
@@ -83,11 +129,10 @@ int main(int argc, char **argv) {
            << pose.yaw() << endl;
     }
 
-    string pcd_file_path;
-    int succs_rendered, succs_valid;
-    env_obj->GetEnvStats(succs_rendered, succs_valid, pcd_file_path);
     // Now write to file
-    fs_poses << pcd_file_path << endl;
+    boost::filesystem::path pcd_file(parser.pcd_file_path);
+    string input_id = pcd_file.stem().native();
+    fs_poses << input_id << endl;
 
     for (const auto &object_state : greedy_state.object_states()) {
       auto pose = object_state.cont_pose();
@@ -97,6 +142,7 @@ int main(int argc, char **argv) {
 
     fs_poses.close();
   }
+
   return 0;
 }
 

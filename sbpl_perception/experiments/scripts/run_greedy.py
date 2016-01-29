@@ -7,8 +7,8 @@ import subprocess
 ros_pack = rospkg.RosPack();
 rootdir = ros_pack.get_path('sbpl_perception')
 config_dir = rootdir + '/data/experiment_input'
-pose_file = rootdir + '/perch_poses.txt'
-stats_file = rootdir + '/perch_stats.txt'
+pose_file = rootdir + '/greedy_poses.txt'
+stats_file = rootdir + '/greedy_stats.txt'
 
 greedy_bin = ros_pack.get_path('sbpl_perception') + '/bin/experiments/greedy_icp'
 
