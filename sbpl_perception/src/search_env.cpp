@@ -1529,6 +1529,44 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   return cloud;
 }
 
+PointCloudPtr EnvObjectRecognition::GetGravityAlignedOrganizedPointCloud(
+  const vector<unsigned short> &depth_image) {
+  PointCloudPtr cloud(new PointCloud);
+  cloud->width = kDepthImageWidth;
+  cloud->height = kDepthImageHeight;
+  cloud->points.resize(kNumPixels);
+  cloud->is_dense = true;
+
+  for (int ii = 0; ii < kNumPixels; ++ii) {
+    auto &point = cloud->points[VectorIndexToPCLIndex(ii)];
+    // Skip if empty pixel
+    if (depth_image[ii] == kKinectMaxDepth) {
+      point.x = NAN;
+      point.y = NAN;
+      point.z = NAN;
+      continue;
+    }
+
+    // int u = kDepthImageWidth - ii % kDepthImageWidth;
+    int u = ii % kDepthImageWidth;
+    int v = ii / kDepthImageWidth;
+    v = kDepthImageHeight - 1 - v;
+    // int idx = y * camera_width_ + x;
+    //         int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
+    // point = observed_organized_cloud_->at(v, u);
+
+    Eigen::Vector3f point_eig;
+    kinect_simulator_->rl_->getGlobalPoint(u, v,
+                                           static_cast<float>(depth_image[ii]) / 1000.0, cam_to_world_,
+                                           point_eig);
+    point.x = point_eig[0];
+    point.y = point_eig[1];
+    point.z = point_eig[2];
+  }
+
+  return cloud;
+}
+
 vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(
   const PointCloudPtr &cloud) {
   vector<unsigned short> depth_image(kNumPixels, kKinectMaxDepth);
@@ -1911,6 +1949,7 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
   GetDepthImage(s, &depth_image);
   kinect_simulator_->rl_->getOrganizedPointCloud(observed_organized_cloud_, true,
                                                  env_params_.camera_pose);
+  // Precompute RCNN heuristics.
   SetObservation(object_ids.size(), depth_image);
 }
 
@@ -1920,6 +1959,11 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   SetBounds(input.x_min, input.x_max, input.y_min, input.y_max);
   SetTableHeight(input.table_height);
   SetCameraPose(input.camera_pose);
+  // If #repetitions is not set, we will assume every unique model appears
+  // exactly once in the scene.
+  // if (input.model_repetitions.empty()) {
+  //   input.model_repetitions.resize(input.model_names.size(), 1);
+  // }
 
   ResetEnvironmentState();
 

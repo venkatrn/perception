@@ -131,6 +131,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
                             const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
                             const std::vector<int> counted_indices = std::vector<int>(0));
 
+  std::vector<unsigned short> GetInputDepthImage() {
+    return observed_depth_image_;
+  }
+
   // Greedy ICP planner
   GraphState ComputeGreedyICPPoses();
 
@@ -211,6 +215,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // TODO: Make these private
   std::unique_ptr<RCNNHeuristicFactory> rcnn_heuristic_factory_;
   Heuristics rcnn_heuristics_;
+  PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short>
+                                            &depth_image);
+  PointCloudPtr GetGravityAlignedOrganizedPointCloud(const std::vector<unsigned short>
+                                            &depth_image);
 
  private:
 
@@ -337,8 +345,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
                    bool after_refinement) const;
 
   void LabelEuclideanClusters();
-  PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short>
-                                            &depth_image);
   std::vector<unsigned short> GetDepthImageFromPointCloud(
     const PointCloudPtr &cloud);
 
