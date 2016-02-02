@@ -21,3 +21,9 @@ bugs.txt
 *.json
 *ycm_extra_conf*
 tags
+
+
+heuristics/
+*_results/
+rcnn/
+icra16*
