@@ -1,0 +1,39 @@
+<package>
+  <name>object_recognition_node</name>
+  <version>1.0.0</version>
+  <description>object_recognition_node</description>
+  <maintainer email="venkatraman@cmu.edu">Venkatraman Narayanan</maintainer>
+
+  <license>BSD</license>
+
+  <url type="website">http://ros.org/wiki/object_recognition_node</url>
+  <!-- <url type="bugtracker"></url> -->
+
+  <author>Venkatraman Narayanan</author>
+
+  <!-- Dependencies which this package needs to build itself. -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Dependencies needed to compile this package. -->
+  <build_depend>roscpp</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>perception_utils</build_depend>
+  <build_depend>keyboard</build_depend>
+  <build_depend>tf</build_depend>
+  <build_depend>tf_conversions</build_depend>
+
+  <!-- Dependencies needed after this package is compiled. -->
+  <run_depend>roscpp</run_depend>
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>perception_utils</run_depend>
+  <run_depend>keyboard</run_depend>
+  <run_depend>tf</run_depend>
+  <run_depend>tf_conversions</run_depend>
+
+  <!-- Dependencies needed only for running tests. -->
+  <!-- <test_depend>sensor_msgs</test_depend> -->
+  <!-- <test_depend>perception_utils</test_depend> -->
+  <!-- <test_depend>keyboard</test_depend> -->
+  <!-- <test_depend>tf_conversions</test_depend> -->
+
+</package>

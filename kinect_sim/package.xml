@@ -1,0 +1,48 @@
+<package>
+  <name>kinect_sim</name>
+  <version>1.0.0</version>
+  <description>kinect_sim</description>
+  <maintainer email="venkatraman@cmu.edu">Venkatraman Narayanan</maintainer>
+
+  <license>BSD</license>
+
+  <url type="website">http://ros.org/wiki/kinect_sim</url>
+  <!-- <url type="bugtracker"></url> -->
+
+  <author>Venkatraman Narayanan</author>
+
+  <!-- Dependencies which this package needs to build itself. -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Dependencies needed to compile this package. -->
+  <!-- <build_depend>geometry_msgs</build_depend> -->
+  <!-- <build_depend>sensor_msgs</build_depend> -->
+  <build_depend>roscpp</build_depend>
+  <build_depend>roslib</build_depend>
+  <build_depend>pcl_ros</build_depend>
+  <build_depend>cv_bridge</build_depend>
+  <build_depend>libpcl-all-dev</build_depend>
+
+  <!-- Dependencies needed after this package is compiled. -->
+  <!-- <run_depend>geometry_msgs</run_depend> -->
+  <!-- <run_depend>sensor_msgs</run_depend> -->
+  <run_depend>roscpp</run_depend>
+  <run_depend>roslib</run_depend>
+  <run_depend>pcl_ros</run_depend>
+  <run_depend>cv_bridge</run_depend>
+  <run_depend>libpcl-all</run_depend>
+  <run_depend>libpcl-all-dev</run_depend>
+
+  <!-- Dependencies needed only for running tests. -->
+  <!-- <test_depend>geometry_msgs</test_depend> -->
+  <!-- <test_depend>sensor_msgs</test_depend> -->
+  <!-- <test_depend>roscpp</test_depend> -->
+  <!-- <test_depend>roslib</test_depend> -->
+  <!-- <test_depend>pcl_ros</test_depend> -->
+  <!-- <test_depend>cv_bridge</test_depend> -->
+
+<export>
+    <cpp lflags="-Wl,-rpath,${prefix}/lib -L${prefix}/lib -lkinect_sim" cflags="`pkg-config --cflags eigen3` -I${prefix}/include"/>
+</export>
+
+</package>
