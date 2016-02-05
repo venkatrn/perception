@@ -31,23 +31,22 @@ wstool update -t src
 catkin_make
 ```
 
-Test
+Demo
 ----
 
-Download the data folder from https://sbpl.pc.cs.cmu.edu/shared/Venkat/sbpl_perception/ and place under ~/my_workspace/src/perception/sbpl_perception/
+An example scene is provided under sbpl_perception/demo. To run PERCH, 
 
 Example usage:
 ```bash
 roscd sbpl_perception && mkdir visualization
-roslaunch sbpl_perception experiments.launch 
+roslaunch sbpl_perception demo.launch 
 ```
 
-The states 'expanded' as well as the goal state will be available in sbpl_perception/visualization. To also visualize the 'generated' states, 
+The states 'expanded' as well as the goal state will be saved under sbpl_perception/visualization. The expanded states will also show up on an OpenCV window named "Expansions". To also save all the 'generated' (rendered) states to sbpl_perception/visualization, use
 
 ```bash
-roslaunch sbpl_perception experiments.launch image_debug:=true
+roslaunch sbpl_perception demo.launch image_debug:=true
 ```
 (TODO: more details)
 
 Run ```wstool update -t src``` to pull changes from all related repositories.
-
