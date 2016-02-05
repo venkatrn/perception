@@ -145,7 +145,7 @@ double ObjectModel::GetCircumscribedRadius() const {
 
 
 pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const ContPose &p,
-                                                    double table_height) {
+                                                    double table_height) const {
   pcl::PolygonMeshPtr mesh_in(new pcl::PolygonMesh(mesh_));
   pcl::PolygonMeshPtr transformed_mesh(new pcl::PolygonMesh);
   Eigen::Matrix4f transform;
@@ -158,9 +158,21 @@ pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const ContPose &p,
   return transformed_mesh;
 }
 
-pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const Eigen::Matrix4f &transform ) {
+pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const Eigen::Matrix4f &transform ) const {
   pcl::PolygonMeshPtr mesh_in(new pcl::PolygonMesh(mesh_));
   pcl::PolygonMeshPtr transformed_mesh(new pcl::PolygonMesh);
   TransformPolyMesh(mesh_in, transformed_mesh, transform);
   return transformed_mesh;
+}
+
+Eigen::Affine3f ObjectModel::GetRawModelToSceneTransform(const ContPose &p, double table_height) const {
+  Eigen::Matrix4f transform;
+  transform <<
+            cos(p.yaw()), -sin(p.yaw()) , 0, p.x(),
+                sin(p.yaw()) , cos(p.yaw()) , 0, p.y(),
+                0, 0 , 1 , table_height,
+                0, 0 , 0 , 1;
+  Eigen::Affine3f model_to_scene_transform;
+  model_to_scene_transform.matrix() = transform.matrix() * preprocessing_transform_.matrix();
+  return model_to_scene_transform;
 }

@@ -87,6 +87,9 @@ target_link_libraries(real_test ${PROJECT_NAME})
 add_executable(sim_test src/experiments/sim_test.cpp)
 target_link_libraries(sim_test ${PROJECT_NAME})
 
+add_executable(demo src/experiments/demo.cpp)
+target_link_libraries(demo ${PROJECT_NAME})
+
 catkin_add_gtest(${PROJECT_NAME}_states_test tests/states_test.cpp)
 target_link_libraries(${PROJECT_NAME}_states_test ${PROJECT_NAME})
 

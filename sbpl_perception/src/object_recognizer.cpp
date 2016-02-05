@@ -136,6 +136,26 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 }
 
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
+                      std::vector<Eigen::Affine3f> *object_transforms) const {
+  object_transforms->clear();
+
+  vector<ContPose> detected_poses;
+  const bool plan_success = LocalizeObjects(input, &detected_poses);
+  if (!plan_success) {
+    return false;
+  }
+  assert(detected_poses.size() == input.model_names.size());
+
+  const auto &models = env_obj_->obj_models_;
+  object_transforms->resize(input.model_names.size());
+  for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
+    const auto &obj_model = env_obj_->obj_models_[ii];
+    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(detected_poses[ii], input.table_height);
+  }
+  return plan_success;
+}
+
+bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
                                        std::vector<ContPose> *detected_poses) const {
   printf("Object recognizer received request to localize %zu objects: \n",
          input.model_names.size());

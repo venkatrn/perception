@@ -18,8 +18,8 @@ class ObjectModel {
   ObjectModel(const pcl::PolygonMesh &mesh, const std::string name, const bool symmetric, const bool flipped);
   double GetInscribedRadius() const;
   double GetCircumscribedRadius() const;
-  pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p, double table_height);
-  pcl::PolygonMeshPtr GetTransformedMesh(const Eigen::Matrix4f &transform);
+  pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p, double table_height) const;
+  pcl::PolygonMeshPtr GetTransformedMesh(const Eigen::Matrix4f &transform) const;
 
   // Accessors
   const pcl::PolygonMesh &mesh() const {
@@ -49,9 +49,17 @@ class ObjectModel {
   double max_z() const {
     return max_z_;
   }
-  const Eigen::Affine3f &preprocessing_transform() {
+
+  // Return the internal transform applied to the raw models (i.e, any scaling
+  // and translation applied ahead of time before the search runs).
+  const Eigen::Affine3f &preprocessing_transform() const {
     return preprocessing_transform_;
   }
+
+  // Return the transform that aligns a raw model (i.e, the one provided to the
+  // constructor) to a continuous pose (x,y,table_height,\theta) in the world
+  // frame.
+  Eigen::Affine3f GetRawModelToSceneTransform(const ContPose &p, double table_height) const;
 
  private:
   pcl::PolygonMesh mesh_;

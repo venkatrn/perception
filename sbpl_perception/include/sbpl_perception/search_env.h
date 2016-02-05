@@ -220,6 +220,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   PointCloudPtr GetGravityAlignedOrganizedPointCloud(const std::vector<unsigned short>
                                             &depth_image);
 
+  // We should get rid of this eventually.
+  friend class ObjectRecognizer;
+
  private:
 
   std::vector<ObjectModel> obj_models_;
