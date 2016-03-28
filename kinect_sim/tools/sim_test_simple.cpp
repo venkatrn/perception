@@ -57,6 +57,7 @@
 #include <pcl/io/vtk_lib_io.h>
 
 #include "kinect_sim/camera.h"
+#include "kinect_sim/camera_constants.h"
 #include "kinect_sim/model.h"
 #include "kinect_sim/scene.h"
 #include "kinect_sim/range_likelihood.h"
@@ -581,8 +582,8 @@ initialize (int argc, char** argv)
 int
 main (int argc, char** argv)
 {
-  int width = 640;
-  int height = 480;
+  int width = kCameraWidth;
+  int height = kCameraHeight;
 
   window_width_ = width * 2;
   window_height_ = height * 2;
@@ -637,8 +638,8 @@ main (int argc, char** argv)
   // range_likelihood_ = RangeLikelihood::Ptr(new RangeLikelihood(1, 1, 480, 640, scene_));
 
   // Actually corresponds to default parameters:
-  range_likelihood_->setCameraIntrinsicsParameters (640,480, 576.09757860,
-            576.09757860, 321.06398107, 242.97676897);
+  range_likelihood_->setCameraIntrinsicsParameters (kCameraWidth,kCameraHeight, kCameraFX,
+            kCameraFY, kCameraCX, kCameraCY);
   range_likelihood_->setComputeOnCPU (false);
   range_likelihood_->setSumOnCPU (true);
   range_likelihood_->setUseColor (true);

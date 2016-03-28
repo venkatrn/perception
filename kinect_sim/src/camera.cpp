@@ -1,5 +1,6 @@
 #include <iostream>
 #include <kinect_sim/camera.h>
+#include <kinect_sim/camera_constants.h>
 
 using namespace Eigen;
 using namespace pcl::simulation;
@@ -56,8 +57,8 @@ pcl::simulation::Camera::setParameters (int width, int height,
 void
 pcl::simulation::Camera::initializeCameraParameters ()
 {
-  setParameters (640, 480,
-                 576.09757860f, 576.09757860f,
-                 321.06398107f, 242.97676897f,
-                 0.1f, 20.0f); //ZNEAR
+  setParameters (kCameraWidth, kCameraHeight,
+                 kCameraFX, kCameraFY,
+                 kCameraCX, kCameraCY,
+                 kZNear, kZFar); //ZNEAR
 }

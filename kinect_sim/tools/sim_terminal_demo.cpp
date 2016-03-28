@@ -19,6 +19,7 @@
 # include <windows.h>
 #endif
 
+#include <kinect_sim/camera_constants.h>
 #include <kinect_sim/simulation_io.hpp>
 
 using namespace Eigen;
@@ -136,8 +137,8 @@ main (int argc, char** argv)
   int mode=atoi(argv[1]);
   
   // 2 Construct the simulation method:
-  int width = 640;
-  int height = 480;
+  int width = kCameraWidth;
+  int height = kCameraHeight;
   simexample = SimExample::Ptr (new SimExample (argc, argv, height,width ));
   
   // 3 Generate a series of simulation poses:
