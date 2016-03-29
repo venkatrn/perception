@@ -15,6 +15,9 @@ namespace {
 constexpr int kPlanningFinishedTag = 1;
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
+// For the APC setup, we need to correct the camera pose matrix to remove the
+// camera-body to camera-optical frame transform.
+const bool kAPC = true;
 }  // namespace
 
 namespace boost {
@@ -94,6 +97,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
              model_meta_data.symmetric);
 
     }
+
     // Load planner config params.
     private_nh.param("inflation_epsilon", planner_params_.inflation_eps, 10.0);
     private_nh.param("max_planning_time", planner_params_.max_time, 60.0);
@@ -136,22 +140,27 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 }
 
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
-                      std::vector<Eigen::Affine3f> *object_transforms) const {
+                                       std::vector<Eigen::Affine3f> *object_transforms) const {
   object_transforms->clear();
 
   vector<ContPose> detected_poses;
   const bool plan_success = LocalizeObjects(input, &detected_poses);
+
   if (!plan_success) {
     return false;
   }
+
   assert(detected_poses.size() == input.model_names.size());
 
   const auto &models = env_obj_->obj_models_;
   object_transforms->resize(input.model_names.size());
+
   for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
-    const auto &obj_model = env_obj_->obj_models_[ii];
-    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(detected_poses[ii], input.table_height);
+    const auto &obj_model = models[ii];
+    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
+                                  detected_poses[ii], input.table_height);
   }
+
   return plan_success;
 }
 
@@ -164,7 +173,20 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
     printf("Model %zu: %s\n", ii, input.model_names[ii].c_str());
   }
 
-  env_obj_->SetInput(input);
+  if (kAPC) {
+    Eigen::Affine3f cam_to_body;
+    cam_to_body.matrix() << 0, 0, 1, 0,
+                       -1, 0, 0, 0,
+                       0, -1, 0, 0,
+                       0, 0, 0, 1;
+    Eigen::Isometry3d camera_pose;
+    RecognitionInput tweaked_input = input;
+    tweaked_input.camera_pose = input.camera_pose.matrix() *
+                        cam_to_body.inverse().matrix().cast<double>();;
+    env_obj_->SetInput(tweaked_input);
+  } else {
+    env_obj_->SetInput(input);
+  }
   // Wait until all processes are ready for the planning phase.
   mpi_world_->barrier();
   const bool plan_success = RunPlanner(detected_poses);
@@ -301,3 +323,4 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   return plan_success;
 }
 }  // namespace
+
