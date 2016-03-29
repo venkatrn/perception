@@ -41,9 +41,11 @@ using namespace Eigen;
 
 namespace {
 // Whether should use depth-dependent cost penalty. If true, cost is
-// indicator(pixel explained) * range_in_meters(pixel). Otherwise, cost is
+// indicator(pixel explained) * multiplier * range_in_meters(pixel). Otherwise, cost is
 // indicator(pixel explained).
 constexpr bool kUseDepthSensitiveCost = false;
+// The multiplier used in the above definition.
+constexpr double kDepthSensitiveCostMultiplier = 100.0;
 }  // namespace
 
 namespace sbpl_perception {
@@ -1313,7 +1315,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
         camera_origin_point.y = camera_origin[1];
         camera_origin_point.z = camera_origin[2];
         double range = pcl::euclideanDistance(camera_origin_point, point);
-        cost = range;
+        cost = kDepthSensitiveCostMultiplier * range;
       } else {
         cost = 1.0;
       }
@@ -1421,8 +1423,13 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
     if (point_unexplained) {
       if (kUseDepthSensitiveCost) {
-        //TODO: get range
-        // nn_score += observed_depth_image_[ii] / 1000.0;
+        auto camera_origin = env_params_.camera_pose.translation();
+        PointT camera_origin_point;
+        camera_origin_point.x = camera_origin[0];
+        camera_origin_point.y = camera_origin[1];
+        camera_origin_point.z = camera_origin[2];
+        double range = pcl::euclideanDistance(camera_origin_point, point);
+        nn_score += kDepthSensitiveCostMultiplier * range;
       } else {
         nn_score += 1.0;
       }
@@ -1477,8 +1484,13 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
 
     if (point_unexplained) {
       if (kUseDepthSensitiveCost) {
-        //TODO: get range
-        // nn_score += observed_depth_image_[ii] / 1000.0;
+        auto camera_origin = env_params_.camera_pose.translation();
+        PointT camera_origin_point;
+        camera_origin_point.x = camera_origin[0];
+        camera_origin_point.y = camera_origin[1];
+        camera_origin_point.z = camera_origin[2];
+        double range = pcl::euclideanDistance(camera_origin_point, point);
+        nn_score += kDepthSensitiveCostMultiplier * range;
       } else {
         nn_score += 1.0;
       }

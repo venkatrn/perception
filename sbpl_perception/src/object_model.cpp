@@ -24,7 +24,7 @@ using namespace std;
 
 namespace {
 // If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
-constexpr bool kMeshInMillimeters = true; 
+constexpr bool kMeshInMillimeters = false; // true for PERCH experiments  
 
 void TransformPolyMesh(const pcl::PolygonMesh::Ptr
                        &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform) {

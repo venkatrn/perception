@@ -15,8 +15,8 @@
 namespace sbpl_perception {
 
 // Depth image parameters (TODO: read in from config file).
-constexpr int kDepthImageHeight = 480;
-constexpr int kDepthImageWidth = 640;
+constexpr int kDepthImageHeight = 424;
+constexpr int kDepthImageWidth = 512;
 constexpr int kNumPixels = kDepthImageWidth * kDepthImageHeight;
 
 // The max-range (no return) value in a depth image produced by

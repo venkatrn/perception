@@ -20,6 +20,12 @@
 #include <memory>
 #include <random>
 
+namespace {
+  // For the APC setup, we need to correct the camera pose matrix to remove the
+  // camera-body to camera-optical frame transform.
+  const bool kAPC = true;
+}
+
 using namespace std;
 using namespace sbpl_perception;
 
@@ -51,9 +57,21 @@ int main(int argc, char **argv) {
   input.y_min = parser.min_y;
   input.y_max = parser.max_y;
   input.table_height = parser.table_height;
-  input.camera_pose = parser.camera_pose;
-  input.model_names = parser.ConvertModelNamesInFileToIDs(
-                        object_recognizer.GetModelBank());
+
+  if (kAPC) {
+    Eigen::Affine3f cam_to_body;
+    cam_to_body.matrix() << 0, 0, 1, 0,
+                       -1, 0, 0, 0,
+                       0, -1, 0, 0,
+                       0, 0, 0, 1;
+    Eigen::Isometry3d camera_pose;
+    input.camera_pose = parser.camera_pose.matrix() * cam_to_body.inverse().matrix().cast<double>();;
+    input.model_names = parser.model_names;
+  } else {
+    input.model_names = parser.ConvertModelNamesInFileToIDs(
+                          object_recognizer.GetModelBank());
+    input.camera_pose = parser.camera_pose;
+  }
 
   boost::filesystem::path config_file_path(config_file);
   input.heuristics_dir = ros::package::getPath("sbpl_perception") +

@@ -1,0 +1,46 @@
+<launch>
+  <rosparam param="model_bank" subst_value="True">
+
+    [
+
+      <!--Format-->
+      <!--
+      [name,
+      file_descriptor,
+      flipped (up-side down in the images wrt to the model),
+      symmetric (rotationally symmetric about Z-axis)]  
+      -->
+
+      [cheezeit,
+      $(find sbpl_perception)/data/apc_models/cheezit_big_original.stl,
+      false,
+      false],
+
+      [crayola,
+      $(find sbpl_perception)/data/apc_models/crayola_64_ct.stl,
+      false,
+      false],
+
+      [elmers,
+      $(find sbpl_perception)/data/apc_models/elmers_washable_no_run_school_glue.stl,
+      false,
+      false],
+
+      [feline,
+      $(find sbpl_perception)/data/apc_models/feline_greenies_dental_treats.stl,
+      false,
+      false],
+
+      [stir_sticks,
+      $(find sbpl_perception)/data/apc_models/genuine_joe_plastic_stir_sticks.stl,
+      false,
+      false],
+
+      [oreo,
+      $(find sbpl_perception)/data/apc_models/oreo_mega_stuf.stl,
+      false,
+      false],
+
+    ]
+  </rosparam>
+</launch>
