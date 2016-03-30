@@ -1,7 +1,7 @@
 - git:
     local-name: perch
     uri: https://github.com/venkatrn/perception.git
-    version: master
+    version: apc
 - git:
     local-name: improved-mha-planner
     uri: https://github.com/venkatrn/improved-mha-planner.git
