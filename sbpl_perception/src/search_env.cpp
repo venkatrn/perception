@@ -1845,6 +1845,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   // Project point cloud to table.
   *projected_cloud_ = *observed_cloud_;
 
+  valid_indices_.clear();
   valid_indices_.reserve(projected_cloud_->size());
 
   for (size_t ii = 0; ii < projected_cloud_->size(); ++ii) {
@@ -1900,9 +1901,11 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 }
 
 void EnvObjectRecognition::ResetEnvironmentState() {
+  printf("-------------------Resetting Environment State-------------------\n");
   GraphState start_state, goal_state;
 
   hash_manager_.Reset();
+  adjusted_states_.clear();
   env_stats_.scenes_rendered = 0;
   env_stats_.scenes_valid = 0;
 
@@ -1927,16 +1930,22 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   g_value_map_.clear();
   succ_cache.clear();
   cost_cache.clear();
+  last_object_rendering_cost_.clear();
   depth_image_cache_.clear();
   counted_pixels_map_.clear();
   adjusted_single_object_depth_image_cache_.clear();
   unadjusted_single_object_depth_image_cache_.clear();
   adjusted_single_object_state_cache_.clear();
+  valid_indices_.clear();
 
   minz_map_[env_params_.start_state_id] = 0;
   maxz_map_[env_params_.start_state_id] = 0;
   g_value_map_[env_params_.start_state_id] = 0;
 
+  observed_cloud_.reset(new PointCloud);
+  projected_cloud_.reset(new PointCloud);
+  observed_organized_cloud_.reset(new PointCloud);
+  downsampled_observed_cloud_.reset(new PointCloud);
 }
 
 void EnvObjectRecognition::SetObservation(vector<int> object_ids,
