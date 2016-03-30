@@ -27,7 +27,7 @@ class ObjectRecognizer {
                        const std::vector<ContPose> &ground_truth_object_poses,
                        std::vector<ContPose> *detected_poses) const;
 
-  const std::vector<ModelMetaData> &GetModelBank() const {
+  const ModelBank &GetModelBank() const {
     return env_config_.model_bank;
   }
   const std::vector<PlannerStats> &GetLastPlanningEpisodeStats() const {

@@ -121,7 +121,7 @@ DatasetGenerator::DatasetGenerator(int argc, char **argv) : output_dir_("") {
   nh.getParam("model_bank", model_bank_list);
   ROS_ASSERT(model_bank_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
   printf("Model bank has %d models:\n", model_bank_list.size());
-  vector<ModelMetaData> model_bank(model_bank_list.size());
+  ModelBank model_bank;
 
   for (int ii = 0; ii < model_bank_list.size(); ++ii) {
     auto &object_data = model_bank_list[ii];
@@ -136,7 +136,7 @@ DatasetGenerator::DatasetGenerator(int argc, char **argv) : output_dir_("") {
     SetModelMetaData(static_cast<string>(object_data[0]),
                      static_cast<string>(object_data[1]), static_cast<bool>(object_data[2]),
                      static_cast<bool>(object_data[3]), &model_meta_data);
-    model_bank[ii] = model_meta_data;
+    model_bank[model_meta_data.name] = model_meta_data;
     printf("%s: %s, %d, %d\n", model_meta_data.name.c_str(),
            model_meta_data.file.c_str(), model_meta_data.flipped,
            model_meta_data.symmetric);
@@ -145,7 +145,8 @@ DatasetGenerator::DatasetGenerator(int argc, char **argv) : output_dir_("") {
   // Now create the models.
   object_models_.clear();
 
-  for (const auto &model_meta_data : model_bank) {
+  for (const auto &bank_item : model_bank) {
+    const ModelMetaData &model_meta_data = bank_item.second;
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFile (model_meta_data.file.c_str(), mesh);
     ObjectModel obj_model(mesh, model_meta_data.name,

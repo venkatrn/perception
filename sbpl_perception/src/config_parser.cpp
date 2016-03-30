@@ -136,7 +136,8 @@ std::vector<std::string> ConfigParser::ConvertModelNamesInFileToIDs(
   std::vector<std::string> model_ids;
 
   for (const std::string &name : model_names) {
-    for (const auto &model : bank) {
+    for (const auto &bank_item : bank) {
+      const sbpl_perception::ModelMetaData &model = bank_item.second;
       if (model.file.find(name) != std::string::npos) {
         model_ids.push_back(model.name);
         break;

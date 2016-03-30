@@ -13,6 +13,7 @@
 #include <sbpl_perception/object_recognizer.h>
 
 #include <pcl/io/pcd_io.h>
+#include <pcl/visualization/pcl_visualizer.h>
 
 #include <boost/filesystem.hpp>
 
@@ -82,8 +83,47 @@ int main(int argc, char **argv) {
 
   input.cloud = cloud_in;
 
-  vector<ContPose> detected_poses;
-  object_recognizer.LocalizeObjects(input, &detected_poses);
+  // vector<ContPose> detected_poses;
+  // object_recognizer.LocalizeObjects(input, &detected_poses);
+  vector<Eigen::Affine3f> object_transforms;
+  object_recognizer.LocalizeObjects(input, &object_transforms);
+
+  if (IsMaster(world)) {
+    pcl::visualization::PCLVisualizer* viewer = new pcl::visualization::PCLVisualizer("PERCH Viewer");
+    viewer->removeAllPointClouds();
+    viewer->removeAllShapes();
+    if (!viewer->updatePointCloud(input.cloud, "input_cloud")) {
+      viewer->addPointCloud(input.cloud, "input_cloud");
+    }
+
+    std::cout << "Output transforms:\n";
+
+    const ModelBank &model_bank = object_recognizer.GetModelBank();
+    for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
+      string model_name = input.model_names[ii];
+      std::cout << "Object: " << model_name << std::endl;
+      std::cout << object_transforms[ii].matrix() << std::endl << std::endl;
+      string model_file = model_bank.at(model_name).file;
+
+      pcl::PolygonMesh mesh;
+      pcl::io::loadPolygonFile(model_file.c_str(), mesh);
+      pcl::PolygonMesh::Ptr mesh_ptr(new pcl::PolygonMesh(mesh));
+      ObjectModel::TransformPolyMesh(mesh_ptr, mesh_ptr, object_transforms[ii].matrix());
+      viewer->addPolygonMesh(*mesh_ptr, model_name);
+      viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.3, model_name);
+      double red = 0;
+      double green = 0;
+      double blue = 0;;
+      pcl::visualization::getRandomColors(red, green, blue);
+      viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
+
+      const double kTableThickness = 0.02;
+      viewer->addCube(input.x_min, input.x_max, input.y_min, input.y_max, input.table_height - kTableThickness, input.table_height, 1.0, 0.0, 0.0, "support_surface");
+      viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, "support_surface");
+      viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING, pcl::visualization::PCL_VISUALIZER_SHADING_GOURAUD, "support_surface");
+    }
+    viewer->spin();
+  }
+  world->barrier();
   return 0;
 }
-

@@ -14,7 +14,8 @@ void SetModelMetaData(const string &name, const string &file,
 }
 
 ModelMetaData GetMetaDataFromModelFilename(const ModelBank& model_bank, std::string &model_file) {
-  for (const auto &meta_data : model_bank) {
+  for (const auto &bank_item : model_bank) {
+    const ModelMetaData &meta_data = bank_item.second; 
     if (meta_data.file.compare(model_file) == 0) {
       return meta_data;
     }

@@ -125,7 +125,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
 EnvObjectRecognition::~EnvObjectRecognition() {
 }
 
-void EnvObjectRecognition::LoadObjFiles(const vector<ModelMetaData>
+void EnvObjectRecognition::LoadObjFiles(const ModelBank
                                         &model_bank,
                                         const vector<string> &model_names) {
 
@@ -137,25 +137,21 @@ void EnvObjectRecognition::LoadObjFiles(const vector<ModelMetaData>
   obj_models_.clear();
 
   for (int ii = 0; ii < env_params_.num_models; ++ii) {
-    // TODO: this should be made efficient using a hash map when the number of models in the
-    // bank becomes really large.
     string model_name = model_names[ii];
-    auto model_bank_it = std::find_if(model_bank.begin(),
-    model_bank.end(), [model_name](const ModelMetaData & model_meta_data) {
-      return model_meta_data.name == model_name;
-    });
+    auto model_bank_it = model_bank.find(model_name);
 
     if (model_bank_it == model_bank.end()) {
       printf("Model %s not found in model bank\n", model_name.c_str());
       exit(1);
     }
+    const ModelMetaData &model_meta_data = model_bank_it->second;
 
     pcl::PolygonMesh mesh;
-    pcl::io::loadPolygonFile (model_bank_it->file.c_str(), mesh);
+    pcl::io::loadPolygonFile (model_meta_data.file.c_str(), mesh);
 
-    ObjectModel obj_model(mesh, model_bank_it->file.c_str(),
-                          model_bank_it->symmetric,
-                          model_bank_it->flipped);
+    ObjectModel obj_model(mesh, model_meta_data.file.c_str(),
+                          model_meta_data.symmetric,
+                          model_meta_data.flipped);
     obj_models_.push_back(obj_model);
 
     if (IsMaster(mpi_comm_)) {

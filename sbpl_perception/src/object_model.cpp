@@ -26,21 +26,6 @@ namespace {
 // If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
 constexpr bool kMeshInMillimeters = false; // true for PERCH experiments  
 
-void TransformPolyMesh(const pcl::PolygonMesh::Ptr
-                       &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform) {
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new
-                                                pcl::PointCloud<pcl::PointXYZ>);
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new
-                                                 pcl::PointCloud<pcl::PointXYZ>);
-  pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
-
-  transformPointCloud(*cloud_in, *cloud_out, transform);
-
-  *mesh_out = *mesh_in;
-  pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
-  return;
-}
-
 Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
                      pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, bool flipped) {
   pcl::PointCloud<PointT>::Ptr cloud_in (new
@@ -107,6 +92,21 @@ ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name, const 
   symmetric_ = symmetric;
   name_ = name;
   SetObjectProperties();
+}
+
+void ObjectModel::TransformPolyMesh(const pcl::PolygonMesh::Ptr
+                       &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform) {
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new
+                                                pcl::PointCloud<pcl::PointXYZ>);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new
+                                                 pcl::PointCloud<pcl::PointXYZ>);
+  pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
+
+  transformPointCloud(*cloud_in, *cloud_out, transform);
+
+  *mesh_out = *mesh_in;
+  pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
+  return;
 }
 
 void ObjectModel::SetObjectProperties() {

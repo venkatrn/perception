@@ -40,7 +40,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
   mpi_world_ = mpi_world;
 
-  vector<ModelMetaData> model_bank;
+  vector<ModelMetaData> model_bank_vector;
   double search_resolution_translation = 0.0;
   double search_resolution_yaw = 0.0;
   bool image_debug;
@@ -76,7 +76,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
     ROS_ASSERT(model_bank_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
     printf("Model bank has %d models:\n", model_bank_list.size());
-    model_bank.resize(model_bank_list.size());
+    model_bank_vector.resize(model_bank_list.size());
 
     for (int ii = 0; ii < model_bank_list.size(); ++ii) {
       auto &object_data = model_bank_list[ii];
@@ -91,7 +91,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
       SetModelMetaData(static_cast<string>(object_data[0]),
                        static_cast<string>(object_data[1]), static_cast<bool>(object_data[2]),
                        static_cast<bool>(object_data[3]), &model_meta_data);
-      model_bank[ii] = model_meta_data;
+      model_bank_vector[ii] = model_meta_data;
       printf("%s: %s, %d, %d\n", model_meta_data.name.c_str(),
              model_meta_data.file.c_str(), model_meta_data.flipped,
              model_meta_data.symmetric);
@@ -123,7 +123,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   // All processes should wait until master has loaded params.
   mpi_world_->barrier();
 
-  broadcast(*mpi_world_, model_bank, kMasterRank);
+  broadcast(*mpi_world_, model_bank_vector, kMasterRank);
   broadcast(*mpi_world_, image_debug, kMasterRank);
   broadcast(*mpi_world_, search_resolution_translation, kMasterRank);
   broadcast(*mpi_world_, search_resolution_yaw, kMasterRank);
@@ -131,6 +131,10 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   env_config_.res = search_resolution_translation;
   env_config_.theta_res = search_resolution_yaw;
 
+  ModelBank model_bank;
+  for (const auto &meta_data : model_bank_vector) {
+    model_bank[meta_data.name] = meta_data;
+  }
   env_config_.model_bank = model_bank;
   // Set model files
   env_obj_.reset(new EnvObjectRecognition(mpi_world_));

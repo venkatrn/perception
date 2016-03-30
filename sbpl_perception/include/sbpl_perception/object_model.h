@@ -20,7 +20,8 @@ class ObjectModel {
   double GetCircumscribedRadius() const;
   pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p, double table_height) const;
   pcl::PolygonMeshPtr GetTransformedMesh(const Eigen::Matrix4f &transform) const;
-
+  static void TransformPolyMesh(const pcl::PolygonMesh::Ptr
+                       &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform);
   // Accessors
   const pcl::PolygonMesh &mesh() const {
     return mesh_;

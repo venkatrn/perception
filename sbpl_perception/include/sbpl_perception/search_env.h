@@ -49,7 +49,7 @@ struct EnvConfig {
   // Search resolution.
   double res, theta_res;
   // The model-bank.
-  std::vector<ModelMetaData> model_bank;
+  ModelBank model_bank;
 };
 
 struct EnvParams {
@@ -102,7 +102,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Load the object models to be used in the search episode. model_bank contains
   // metadata of *all* models, and model_ids is the list of models that are
   // present in the current scene.
-  void LoadObjFiles(const std::vector<ModelMetaData> &model_bank,
+  void LoadObjFiles(const ModelBank &model_bank,
                     const std::vector<std::string> &model_names);
 
   void PrintState(int state_id, std::string fname);
@@ -235,7 +235,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   ConfigParser parser_;
 
   // Model bank.
-  std::vector<ModelMetaData> model_bank_;
+  ModelBank model_bank_;
 
   // The MPI communicator.
   std::shared_ptr<boost::mpi::communicator> mpi_comm_;

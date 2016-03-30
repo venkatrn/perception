@@ -11,6 +11,7 @@
 
 #include <functional>
 #include <string>
+#include <unordered_map>
 
 namespace sbpl_perception {
 
@@ -71,7 +72,7 @@ struct EnvStats {
 
 typedef std::function<int(const GraphState &state)> Heuristic;
 typedef std::vector<Heuristic> Heuristics;
-typedef std::vector<ModelMetaData> ModelBank;
+typedef std::unordered_map<std::string, ModelMetaData> ModelBank;
 
 void SetModelMetaData(const std::string &name, const std::string &file,
                       const bool flipped, const bool symmetric, ModelMetaData *model_meta_data);
