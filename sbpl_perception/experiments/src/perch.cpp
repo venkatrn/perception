@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
 
   world->barrier();
 
-  input.cloud = cloud_in;
+  input.cloud = *cloud_in;
 
   vector<ContPose> detected_poses;
   object_recognizer.LocalizeObjects(input, &detected_poses);

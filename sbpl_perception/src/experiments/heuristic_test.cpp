@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
       return -1;
     }
 
-    input.cloud = cloud_in;
+    input.cloud = *cloud_in;
 
     auto env_obj = object_recognizer.GetMutableEnvironment();
     RCNNHeuristicFactory rcnn_heuristic_factory(input, env_obj->kinect_simulator_);

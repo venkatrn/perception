@@ -1993,7 +1993,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   Eigen::Affine3f transform;
   transform.matrix() = input.camera_pose.matrix().cast<float>();
   transform = cam_to_body.inverse() * transform.inverse();
-  transformPointCloud(*input.cloud, *depth_img_cloud,
+  transformPointCloud(input.cloud, *depth_img_cloud,
                       transform);
 
   vector<unsigned short> depth_image =

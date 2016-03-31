@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
   // point cloud.
   input.camera_pose = camera_pose;
   input.model_names = vector<string>({"tilex_spray", "tide", "glass_7"});
-  input.cloud = cloud_in;
+  input.cloud = *cloud_in;
 
   vector<Eigen::Affine3f> object_transforms;
   object_recognizer.LocalizeObjects(input, &object_transforms);

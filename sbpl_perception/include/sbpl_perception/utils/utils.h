@@ -4,6 +4,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/contrib/contrib.hpp>
 #include <perception_utils/pcl_typedefs.h>
+#include <perception_utils/pcl_serialization.h>
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/object_state.h>
 
@@ -37,7 +38,7 @@ constexpr int kMasterRank = 0;
 // A container for the input parameters for object recognition.
 struct RecognitionInput {
   // The input point cloud in world frame. *MUST* be an organized point cloud.
-  PointCloudPtr cloud;
+  PointCloud cloud;
   // The IDs of the object models present in the scene.
   std::vector<std::string> model_names;
   // Camera pose relative to world origin.
@@ -124,5 +125,23 @@ void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y);
 // MPI-utilties
 bool IsMaster(std::shared_ptr<boost::mpi::communicator> mpi_world);
 
+} // namespace
+
+namespace boost {
+namespace serialization {
+
+template<class Archive>
+void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
+               const unsigned int version) {
+    ar &input.cloud;
+    ar &input.model_names;
+    ar &input.camera_pose;
+    ar &input.x_min;
+    ar &input.x_max;
+    ar &input.y_min;
+    ar &input.y_max;
+    ar &input.table_height;
+    ar &input.heuristics_dir;
 }
-// namespace
+} // namespace serialization
+} // namespace boost
