@@ -27,6 +27,11 @@ class ObjectRecognizer {
                        const std::vector<ContPose> &ground_truth_object_poses,
                        std::vector<ContPose> *detected_poses) const;
 
+  // Return the points in the input point cloud corresponding to each object.
+  // The returned vector is of size input.model_names.size(). Note: This method
+  // should be called right after LocalizeObjects.
+  std::vector<PointCloudPtr> GetObjectPointClouds() const;  
+
   const ModelBank &GetModelBank() const {
     return env_config_.model_bank;
   }
@@ -45,6 +50,8 @@ class ObjectRecognizer {
   mutable std::unique_ptr<MHAPlanner> planner_;
   mutable std::vector<PlannerStats> last_planning_stats_;
   mutable EnvStats last_env_stats_;
+  mutable std::vector<PointCloudPtr> last_object_point_clouds_;
+
 
   std::shared_ptr<boost::mpi::communicator> mpi_world_;
 

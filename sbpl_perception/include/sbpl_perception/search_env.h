@@ -209,6 +209,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   const EnvStats &GetEnvStats();
   void GetGoalPoses(int true_goal_id, std::vector<ContPose> *object_poses);
+  std::vector<PointCloudPtr> GetObjectPointClouds(const std::vector<int>
+                                                  &solution_state_ids);
 
   int NumHeuristics() const;
 
@@ -217,8 +219,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   Heuristics rcnn_heuristics_;
   PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short>
                                             &depth_image);
-  PointCloudPtr GetGravityAlignedOrganizedPointCloud(const std::vector<unsigned short>
-                                            &depth_image);
+  PointCloudPtr GetGravityAlignedOrganizedPointCloud(const
+                                                     std::vector<unsigned short>
+                                                     &depth_image);
 
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
@@ -257,9 +260,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, unsigned short> minz_map_;
   std::unordered_map<int, unsigned short> maxz_map_;
   std::unordered_map<int, int> g_value_map_;
-  std::unordered_map<int, std::vector<int>>
-                                         counted_pixels_map_; // Keep track of the pixels we have accounted for in cost computation for a given state
-
+  // Keep track of the observed pixels we have accounted for in cost computation for a given state.
+  // This includes all points in the observed point cloud that fall within the volume of objects assigned 
+  // so far in the state. For the last level states, this *does not* include the points that 
+  // lie outside the union volumes of all assigned objects.
+  std::unordered_map<int, std::vector<int>> counted_pixels_map_;
   // Maps state hash to depth image.
   std::unordered_map<GraphState, std::vector<unsigned short>>
                                                            unadjusted_single_object_depth_image_cache_;
@@ -273,7 +278,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<int> valid_indices_;
 
   std::vector<unsigned short> observed_depth_image_;
-  PointCloudPtr observed_cloud_, downsampled_observed_cloud_,
+  PointCloudPtr original_input_cloud_, observed_cloud_, downsampled_observed_cloud_,
                 observed_organized_cloud_, projected_cloud_;
 
   bool image_debug_;
@@ -320,9 +325,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // NOTE: updated_counted_pixels should always be equal to the number of
   // points in the input point cloud.
   int GetLastLevelCost(const PointCloudPtr full_rendered_cloud,
-                    const ObjectState &last_object,
-                    const std::vector<int> &counted_pixels,
-                    std::vector<int> *updated_counted_pixels);
+                       const ObjectState &last_object,
+                       const std::vector<int> &counted_pixels,
+                       std::vector<int> *updated_counted_pixels);
 
   // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any
   // additional renderings. This requires the true source depth image and
@@ -384,5 +389,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 };
 } // namespace
+
 
 

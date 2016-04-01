@@ -21,6 +21,8 @@
 #include <memory>
 #include <random>
 
+#include <cstdlib>
+
 namespace {
 // APC config files are slightly different from the PERCH ones, so we will
 // handle them differently.
@@ -97,12 +99,16 @@ int main(int argc, char **argv) {
 
     if (!viewer->updatePointCloud(cloud_in, "input_cloud")) {
       viewer->addPointCloud(cloud_in, "input_cloud");
+      viewer->setPointCloudRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "input_cloud");
     }
 
     std::cout << "Output transforms:\n";
 
     const ModelBank &model_bank = object_recognizer.GetModelBank();
+    const vector<PointCloudPtr> object_point_clouds = object_recognizer.GetObjectPointClouds();
 
+		srand(time(0));
     for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
       string model_name = input.model_names[ii];
       std::cout << "Object: " << model_name << std::endl;
@@ -116,7 +122,7 @@ int main(int argc, char **argv) {
                                      object_transforms[ii].matrix());
       viewer->addPolygonMesh(*mesh_ptr, model_name);
       viewer->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_OPACITY, 0.3, model_name);
+        pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, model_name);
       double red = 0;
       double green = 0;
       double blue = 0;;
@@ -130,8 +136,17 @@ int main(int argc, char **argv) {
                       "support_surface");
       viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY,
                                           0.2, "support_surface");
-      viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
-                                          pcl::visualization::PCL_VISUALIZER_SHADING_GOURAUD, "support_surface");
+      viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
+                                          pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME, "support_surface");
+      // viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
+      //                                     pcl::visualization::PCL_VISUALIZER_SHADING_GOURAUD, "support_surface");
+
+      string cloud_id = model_name + string("cloud");
+      viewer->addPointCloud(object_point_clouds[ii], cloud_id);
+      viewer->setPointCloudRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, cloud_id);
+      viewer->setPointCloudRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, cloud_id);
     }
 
     viewer->spin();

@@ -67,6 +67,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
   kDepthImageHeight, kDepthImageWidth));
   scene_ = kinect_simulator_->scene_;
   observed_cloud_.reset(new PointCloud);
+  original_input_cloud_.reset(new PointCloud);
   projected_cloud_.reset(new PointCloud);
   observed_organized_cloud_.reset(new PointCloud);
   downsampled_observed_cloud_.reset(new PointCloud);
@@ -1196,7 +1197,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     last_level_cost = GetLastLevelCost(succ_cloud,
                                        adjusted_child_state->object_states().back(), *child_counted_pixels,
                                        &updated_counted_pixels);
-    *child_counted_pixels = updated_counted_pixels;
+    // NOTE: we won't include the points that lie outside the union of volumes.
+    // Refer to the header for documentation on child_counted_pixels.
+    // *child_counted_pixels = updated_counted_pixels;
   }
 
   total_cost = source_cost + target_cost + last_level_cost;
@@ -1351,6 +1354,9 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
 
   vector<int> indices_to_consider;
+  // Indices of points within the circumscribed cylinder, but outside the
+  // inscribed cylinder.
+  vector<int> indices_circumscribed;
 
   if (last_level) {
     indices_to_consider.resize(valid_indices_.size());
@@ -1381,6 +1387,16 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     assert(num_validation_neighbors >=
            perch_params_.min_neighbor_points_for_valid_pose);
 
+    // Remove the points already counted.
+    vector<int> filtered_validation_points;
+    filtered_validation_points.resize(validation_points.size());
+    std::sort(validation_points.begin(), validation_points.end());
+    auto filter_it = std::set_difference(validation_points.begin(), validation_points.end(),
+                                  child_counted_pixels->begin(), child_counted_pixels->end(),
+                                  filtered_validation_points.begin());
+    indices_to_consider.resize(filter_it - filtered_validation_points.begin());
+    validation_points = filtered_validation_points;
+
     // The points within the inscribed cylinder are the ones made
     // "infeasible".
     const double inscribed_rad = obj_models_[last_obj_id].GetInscribedRadius();
@@ -1391,16 +1407,21 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     for (size_t ii = 0; ii < validation_points.size(); ++ii) {
       if (sqr_dists[ii] <= inscribed_rad_sq) {
         infeasible_points.push_back(validation_points[ii]);
+      } else {
+        indices_circumscribed.push_back(validation_points[ii]);
       }
     }
 
-    std::sort(infeasible_points.begin(), infeasible_points.end());
-    indices_to_consider.resize(infeasible_points.size());
-    auto it = std::set_difference(infeasible_points.begin(),
-                                  infeasible_points.end(),
-                                  child_counted_pixels->begin(), child_counted_pixels->end(),
-                                  indices_to_consider.begin());
-    indices_to_consider.resize(it - indices_to_consider.begin());
+    // We don't need to filter out parent counted pixels a second time (already
+    // done on validation points)
+    // std::sort(infeasible_points.begin(), infeasible_points.end());
+    // indices_to_consider.resize(infeasible_points.size());
+    // auto it = std::set_difference(infeasible_points.begin(),
+    //                               infeasible_points.end(),
+    //                               child_counted_pixels->begin(), child_counted_pixels->end(),
+    //                               indices_to_consider.begin());
+    // indices_to_consider.resize(it - indices_to_consider.begin());
+    indices_to_consider = infeasible_points;
   }
 
   double nn_score = 0.0;
@@ -1429,6 +1450,23 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       } else {
         nn_score += 1.0;
       }
+    }
+  }
+
+  // Every point within the circumscribed cylinder that has been explained by a
+  // rendered point can be considered accounted for.
+  // TODO: implement a point within mesh method.
+  for (const int ii : indices_circumscribed) {
+    PointT point = observed_cloud_->points[ii];
+    vector<float> sqr_dists;
+    vector<int> indices;
+    int num_neighbors_found = knn_reverse->radiusSearch(point,
+                                                        perch_params_.sensor_resolution,
+                                                        indices,
+                                                        sqr_dists, 1);
+    bool point_unexplained = num_neighbors_found == 0;
+    if (!point_unexplained) {
+      child_counted_pixels->push_back(ii);
     }
   }
 
@@ -1814,19 +1852,25 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     }
   }
 
-  PointCloudPtr gravity_aligned_point_cloud(new PointCloud);
-  gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
-                                  observed_depth_image_);
+  // NOTE: if we don't have an original_point_cloud (which will always exist
+  // when using dealing with real world data), then we will generate a point
+  // cloud using the depth image.
+  if (!original_input_cloud_->empty()) {
+    *observed_cloud_ = *original_input_cloud_;
+  } else {
+    PointCloudPtr gravity_aligned_point_cloud(new PointCloud);
+    gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
+                                    observed_depth_image_);
 
-  if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
-    std::stringstream ss;
-    ss.precision(20);
-    ss << debug_dir_ + "test_cloud.pcd";
-    pcl::PCDWriter writer;
-    writer.writeBinary (ss.str()  , *gravity_aligned_point_cloud);
+    if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
+      std::stringstream ss;
+      ss.precision(20);
+      ss << debug_dir_ + "gravity_aligned_cloud.pcd";
+      pcl::PCDWriter writer;
+      writer.writeBinary (ss.str()  , *gravity_aligned_point_cloud);
+    }
+    *observed_cloud_  = *gravity_aligned_point_cloud;
   }
-
-  *observed_cloud_  = *gravity_aligned_point_cloud;
 
   vector<int> nan_indices;
   downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
@@ -1939,6 +1983,7 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   g_value_map_[env_params_.start_state_id] = 0;
 
   observed_cloud_.reset(new PointCloud);
+  original_input_cloud_.reset(new PointCloud);
   projected_cloud_.reset(new PointCloud);
   observed_organized_cloud_.reset(new PointCloud);
   downsampled_observed_cloud_.reset(new PointCloud);
@@ -1971,18 +2016,20 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
 }
 
 void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
+  ResetEnvironmentState();
 
   LoadObjFiles(model_bank_, input.model_names);
   SetBounds(input.x_min, input.x_max, input.y_min, input.y_max);
   SetTableHeight(input.table_height);
   SetCameraPose(input.camera_pose);
+  ResetEnvironmentState();
+  *original_input_cloud_ = input.cloud;
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
   // if (input.model_repetitions.empty()) {
   //   input.model_repetitions.resize(input.model_names.size(), 1);
   // }
 
-  ResetEnvironmentState();
 
   Eigen::Affine3f cam_to_body;
   cam_to_body.matrix() << 0, 0, 1, 0,
@@ -2004,9 +2051,9 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
     std::stringstream ss;
     ss.precision(20);
-    ss << debug_dir_ + "obs_organized_cloud" << ".pcd";
+    ss << debug_dir_ + "original_input_cloud" << ".pcd";
     pcl::PCDWriter writer;
-    writer.writeBinary (ss.str()  , *observed_organized_cloud_);
+    writer.writeBinary (ss.str()  , *original_input_cloud_);
   }
 
   SetObservation(input.model_names.size(), depth_image);
@@ -2292,6 +2339,45 @@ void EnvObjectRecognition::GetGoalPoses(int true_goal_id,
     assert(it != goal_state.object_states().end());
     object_poses->at(ii) = it->cont_pose();
   }
+}
+
+vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(const vector<int> &solution_state_ids) {
+  // The solution state ids will also include the root state (with id 0) that has no
+  // objects.
+  assert(solution_state_ids.size() == env_params_.num_objects + 1);
+  vector<PointCloudPtr> object_point_clouds;
+  object_point_clouds.resize(env_params_.num_objects);
+
+  vector<int> last_counted_indices;
+  vector<int> delta_counted_indices;
+
+  for (int ii = 1; ii < solution_state_ids.size(); ++ii) {
+    int graph_state_id = solution_state_ids[ii];
+    // Handle goal state differently.
+    if (ii == solution_state_ids.size() - 1) {
+      graph_state_id = GetBestSuccessorID(solution_state_ids[solution_state_ids.size() - 2]);
+    }
+
+    GraphState graph_state;
+    if (adjusted_states_.find(graph_state_id) != adjusted_states_.end()) {
+      graph_state = adjusted_states_[graph_state_id];
+    } else {
+      graph_state = hash_manager_.GetState(graph_state_id);
+    }
+    int object_id = graph_state.object_states().back().id();
+    assert(object_id >= 0 && object_id < env_params_.num_objects);
+
+    vector<int> counted_indices = counted_pixels_map_[graph_state_id];
+    delta_counted_indices.resize(counted_indices.size() - last_counted_indices.size());
+    auto it = std::set_difference(counted_indices.begin(), counted_indices.end(),
+                                  last_counted_indices.begin(), last_counted_indices.end(),
+                                  delta_counted_indices.begin());
+    last_counted_indices = counted_indices;
+
+    PointCloudPtr object_cloud = perception_utils::IndexFilter(original_input_cloud_, delta_counted_indices, false);
+    object_point_clouds[object_id] = object_cloud;
+  }
+  return object_point_clouds;
 }
 
 void EnvObjectRecognition::GenerateSuccessorStates(const GraphState

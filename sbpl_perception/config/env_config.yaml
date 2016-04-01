@@ -2,7 +2,7 @@ search_resolution_translation: 0.1 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
 
 perch_params:
-  sensor_resolution_radius: 0.0075 #m 0.003
+  sensor_resolution_radius: 0.01 #m 0.003
   min_neighbor_points_for_valid_pose: 400 #50
   max_icp_iterations: 5
   use_adaptive_resolution: false

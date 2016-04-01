@@ -221,6 +221,10 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
   return plan_success;
 }
 
+std::vector<PointCloudPtr> ObjectRecognizer::GetObjectPointClouds() const {
+  return last_object_point_clouds_;
+}
+
 bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   bool planning_finished = false;
   bool plan_success = false;
@@ -288,6 +292,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
     last_planning_stats_ = stats_vector;
     EnvStats env_stats = env_obj_->GetEnvStats();
     last_env_stats_ = env_stats;
+    last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
 
     cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
     cout << endl << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
