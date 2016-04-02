@@ -89,9 +89,14 @@ int main(int argc, char **argv) {
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
   vector<Eigen::Affine3f> object_transforms;
-  object_recognizer.LocalizeObjects(input, &object_transforms);
+  const bool found_solution = object_recognizer.LocalizeObjects(input, &object_transforms);
 
   if (IsMaster(world)) {
+    if (!found_solution) {
+      printf("PERCH could not find a solution for the given input\n");
+      return 0;
+    }
+
     pcl::visualization::PCLVisualizer *viewer = new
     pcl::visualization::PCLVisualizer("PERCH Viewer");
     viewer->removeAllPointClouds();
@@ -152,7 +157,5 @@ int main(int argc, char **argv) {
     viewer->spin();
   }
 
-  world->barrier();
   return 0;
 }
-

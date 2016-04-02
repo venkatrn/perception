@@ -1394,7 +1394,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     auto filter_it = std::set_difference(validation_points.begin(), validation_points.end(),
                                   child_counted_pixels->begin(), child_counted_pixels->end(),
                                   filtered_validation_points.begin());
-    indices_to_consider.resize(filter_it - filtered_validation_points.begin());
+    filtered_validation_points.resize(filter_it - filtered_validation_points.begin());
     validation_points = filtered_validation_points;
 
     // The points within the inscribed cylinder are the ones made
@@ -1469,6 +1469,9 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       child_counted_pixels->push_back(ii);
     }
   }
+
+  // Counted pixels always need to be sorted.
+  std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
 
   int source_cost = static_cast<int>(nn_score);
   return source_cost;
@@ -1804,6 +1807,14 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   //   ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
   //   cv::imshow("depth image", c_image);
   //   cv::waitKey(1);
+  // }
+  
+  // Consider occlusions from non-modeled objects.
+  // const unsigned short kOcclusionThreshold = 20; // mm
+  // for (size_t ii = 0; ii < depth_image->size(); ++ii) {
+  //   if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) && depth_image->at(ii) != kKinectMaxDepth) {
+  //     depth_image->at(ii) = kKinectMaxDepth;
+  //   }
   // }
 
   return depth_buffer;
@@ -2373,6 +2384,7 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(const vector<in
                                   last_counted_indices.begin(), last_counted_indices.end(),
                                   delta_counted_indices.begin());
     last_counted_indices = counted_indices;
+    // printf("State %d, Object: %d, Total counted: %d, Delta: %d\n", graph_state_id, object_id, static_cast<int>(counted_indices.size()), static_cast<int>(delta_counted_indices.size()));
 
     PointCloudPtr object_cloud = perception_utils::IndexFilter(original_input_cloud_, delta_counted_indices, false);
     object_point_clouds[object_id] = object_cloud;
