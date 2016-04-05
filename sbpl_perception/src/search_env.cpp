@@ -46,6 +46,13 @@ namespace {
 constexpr bool kUseDepthSensitiveCost = false;
 // The multiplier used in the above definition.
 constexpr double kDepthSensitiveCostMultiplier = 100.0;
+// If true, we will assume that only one object needs to be localized and use a
+// normalized outlier cost function.
+constexpr bool kSingleObjectMode = true;
+// When kSingleObjectMode is true, we will treat every pixel that is not within
+// the object volume as an extraneous occluder if its depth is less than
+// depth(rendered pixel) - kOcclusionThreshold.
+constexpr unsigned short kOcclusionThreshold = 20; // mm
 }  // namespace
 
 namespace sbpl_perception {
@@ -1326,7 +1333,16 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
     nn_score += cost;
   }
 
-  int target_cost = static_cast<int>(nn_score);
+  int target_cost = 0;
+  if (kSingleObjectMode) {
+    if (partial_rendered_cloud->points.empty()) {
+      return 100;
+    } 
+    target_cost = static_cast<int>(nn_score * 100 / partial_rendered_cloud->points.size());
+  } else {
+    target_cost = static_cast<int>(nn_score);
+
+  }
   return target_cost;
 }
 
@@ -1473,7 +1489,16 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   // Counted pixels always need to be sorted.
   std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
 
-  int source_cost = static_cast<int>(nn_score);
+  int source_cost = 0;
+  if (kSingleObjectMode) {
+    if (indices_to_consider.empty()) {
+      return 100;
+    } 
+    source_cost = static_cast<int>(nn_score * 100 / indices_to_consider.size());
+  } else {
+    source_cost = static_cast<int>(nn_score);
+
+  }
   return source_cost;
 }
 
@@ -1482,6 +1507,9 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
                                            const ObjectState &last_object,
                                            const std::vector<int> &counted_pixels,
                                            std::vector<int> *updated_counted_pixels) {
+  if (kSingleObjectMode) {
+    return 0;
+  }
   // Compute the cost of points made infeasible in the observed point cloud.
   pcl::search::KdTree<PointT>::Ptr knn_reverse;
   knn_reverse.reset(new pcl::search::KdTree<PointT>(true));
@@ -1810,12 +1838,13 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   // }
   
   // Consider occlusions from non-modeled objects.
-  // const unsigned short kOcclusionThreshold = 20; // mm
-  // for (size_t ii = 0; ii < depth_image->size(); ++ii) {
-  //   if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) && depth_image->at(ii) != kKinectMaxDepth) {
-  //     depth_image->at(ii) = kKinectMaxDepth;
-  //   }
-  // }
+  if (kSingleObjectMode) {
+    for (size_t ii = 0; ii < depth_image->size(); ++ii) {
+      if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) && depth_image->at(ii) != kKinectMaxDepth) {
+        depth_image->at(ii) = kKinectMaxDepth;
+      }
+    }
+  }
 
   return depth_buffer;
 };

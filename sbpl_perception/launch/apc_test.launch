@@ -48,10 +48,10 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120202.414337.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142149.770360.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142537.928074.txt"/> -->
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1459016717.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1459090037.txt"/> -->
-      <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1459090103.txt"/>
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1459090103.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1459090181.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/apc_input/test1459535267.txt"/>
 
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114628.408278.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/chess_input/2r_1k_1q.txt"/> -->

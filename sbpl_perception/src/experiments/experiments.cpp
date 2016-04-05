@@ -58,7 +58,9 @@ int main(int argc, char **argv) {
     input.camera_pose = parser.camera_pose;
 
     if (kAPC) {
-      input.model_names = parser.model_names;
+      // input.model_names = parser.model_names;
+      input.model_names.clear();
+      input.model_names.push_back(parser.target_object);
     } else {
       std::runtime_error("Currently supporting APC only");
       // input.model_names = parser.ConvertModelNamesInFileToIDs(
