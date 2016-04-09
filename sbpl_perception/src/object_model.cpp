@@ -7,24 +7,34 @@
 
 #include <sbpl_perception/object_model.h>
 
-#include <perception_utils/pcl_typedefs.h>
-#include <perception_utils/pcl_conversions.h>
+#include <kinect_sim/model.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl_ros/transforms.h>
 
+#include <omp.h>
 #include <pcl/common/common.h>
 #include <pcl/conversions.h>
 #include <pcl/filters/filter.h>
-#include <pcl_ros/transforms.h>
 #include <pcl/PCLPointCloud2.h>
-#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/segmentation/extract_polygonal_prism_data.h>
+#include <pcl/surface/vtk_smoothing/vtk_utils.h>
+#include <pcl/surface/convex_hull.h>
 
-#include <kinect_sim/model.h>
+#include <vtkVersion.h>
+#include <vtkPolyData.h>
+#include <vtkPointData.h>
+#include <vtkSmartPointer.h>
+#include <vtkSelectEnclosedPoints.h>
 
 using namespace std;
-
 
 namespace {
 // If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
 constexpr bool kMeshInMillimeters = false; // true for PERCH experiments  
+// Inflate inscribed (and circumscribed) radius of mesh by the following
+// additive amount, when checking whether points lie within the convex
+// footprint or if they are within the volume of the mesh model.
+constexpr double kMeshAdditiveInflation = 0.005; // m
 
 Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
                      pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, bool flipped) {
@@ -50,9 +60,9 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   pcl::getMinMax3D(*cloud_in, min_pt, max_pt);
   double z_translation = min_pt.z;
 
-  std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl 
-    << max_pt.y - min_pt.y << endl
-    << max_pt.z - min_pt.z << endl;
+  // std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl 
+  //   << max_pt.y - min_pt.y << endl
+  //   << max_pt.z - min_pt.z << endl;
 
   // Shift bottom most points to 0-z coordinate
   Eigen::Affine3f transform = Eigen::Affine3f::Identity();
@@ -74,13 +84,102 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   transformPointCloud(*cloud_in, *cloud_out, transform);
 
   pcl::getMinMax3D(*cloud_out, min_pt, max_pt);
-  std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl 
-    << max_pt.y - min_pt.y << endl
-    << max_pt.z - min_pt.z << endl;
+  // std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl 
+  //   << max_pt.y - min_pt.y << endl
+  //   << max_pt.z - min_pt.z << endl;
 
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
   return transform * flipping_transform;
+}
+
+// TODO: move geometry methods to utils file.
+// http://geomalgorithms.com/a03-_inclusion.html#wn_PnPoly()
+// IsLeft(): tests if a point is Left|On|Right of an infinite line.
+//  Input:  three points P0, P1, and P2
+//  Return: >0 for P2 left of the line through P0 and P1
+//          =0 for P2  on the line
+//          <0 for P2  right of the line
+double IsLeft(pcl::PointXYZ p0, pcl::PointXYZ p1, pcl::PointXYZ p2) {
+    return ((p1.x - p0.x) * (p2.y - p0.y) - (p2.x -  p0.x) * (p1.y - p0.y));
+}
+
+// WindingNumber(): winding number test for a point in a polygon
+// Input:   P = a point,
+//          V[] = vertex points of a polygon V[n+1] with V[n]=V[0]
+// Return:  wn = the winding number (=0 only when P is outside)
+int WindingNumber(pcl::PointXYZ p,
+                  const pcl::PointCloud<pcl::PointXYZ> &vertices) {
+  int wn = 0;    // the  winding number counter
+  // loop through all edges of the polygon
+  int num_vertices = vertices.points.size() - 1;
+
+  for (int ii = 0; ii < num_vertices; ++ii) {  // edge from V[i] to  V[i+1]
+    if (vertices.points[ii].y <= p.y) {          // start y <= P.y
+      if (vertices.points[ii + 1].y  > p.y)    // an upward crossing
+        if (IsLeft(vertices.points[ii], vertices.points[ii + 1],
+                   p) > 0) { // P left of  edge
+          ++wn;  // have  a valid up intersect
+        }
+    } else {                      // start y > P.y (no test needed)
+      if (vertices.points[ii + 1].y  <= p.y)   // a downward crossing
+        if (IsLeft(vertices.points[ii], vertices.points[ii + 1],
+                    p) < 0) { // P right of  edge
+          --wn;  // have  a valid down intersect
+        }
+    }
+  }
+  return wn;
+}
+
+// Assumes polygon is explicitly closed, with vertices.points.last() ==
+// vertices.points[0].
+bool IsInPoly(pcl::PointXYZ p,
+                    const pcl::PointCloud<pcl::PointXYZ> &vertices) {
+  return (WindingNumber(p, vertices) != 0);
+}
+
+// This function is copied of PCL 1.8. I have a duplicate here since the implementation
+// of this function has changed between PCL 1.7 and 1.8, pertaining to the input polygon
+// being closed or implicitly closed. In this version, the polygon is assumed to be implicitly 
+// closed (i.e, the last point DOES NOT need to be the same as the first point. 
+// An n-vertex polygon should have polygon.points.size() = n).
+template <typename PointT> bool
+isXYPointIn2DXYPolygonCustom(const PointT &point, const pcl::PointCloud<PointT> &polygon)
+{
+  bool in_poly = false;
+  double x1, x2, y1, y2;
+
+  int nr_poly_points = static_cast<int> (polygon.points.size ());
+  double xold = polygon.points[nr_poly_points - 1].x;
+  double yold = polygon.points[nr_poly_points - 1].y;
+  for (int i = 0; i < nr_poly_points; i++)
+  {
+    double xnew = polygon.points[i].x;
+    double ynew = polygon.points[i].y;
+    if (xnew > xold)
+    {
+      x1 = xold;
+      x2 = xnew;
+      y1 = yold;
+      y2 = ynew;
+    }
+    else
+    {
+      x1 = xnew;
+      x2 = xold;
+      y1 = ynew;
+      y2 = yold;
+    }
+
+    if ( (xnew < point.x) == (point.x <= xold) && (point.y - y1) * (x2 - x1) < (y2 - y1) * (point.x - x1) )
+    {
+      in_poly = !in_poly;
+    }
+    xold = xnew;
+    yold = ynew;
+  }
+  return (in_poly);
 }
 }
 
@@ -114,16 +213,24 @@ void ObjectModel::SetObjectProperties() {
                                              pcl::PointCloud<pcl::PointXYZ>);
   pcl::PointCloud<pcl::PointXYZ>::Ptr base_cloud (new
                                              pcl::PointCloud<pcl::PointXYZ>);
+  pcl::PointCloud<pcl::PointXYZ>::Ptr projected_cloud (new
+                                             pcl::PointCloud<pcl::PointXYZ>);
   pcl::fromPCLPointCloud2(mesh_.cloud, *cloud);
 
   for (size_t ii = 0; ii < cloud->size(); ++ii) {
     auto point = cloud->points[ii];
+    pcl::PointXYZ projected_point = point;
+    projected_point.z = 0.0;
+    projected_cloud->push_back(projected_point);
     if (point.z < 0.01) {
       base_cloud->push_back(point);
     }
   }
   base_cloud->width = base_cloud->points.size();
   base_cloud->height = 1;
+
+  projected_cloud->width = projected_cloud->points.size();
+  projected_cloud->height = 1;
 
   pcl::PointXYZ min_pt, max_pt;
   getMinMax3D(*base_cloud, min_pt, max_pt);
@@ -133,6 +240,37 @@ void ObjectModel::SetObjectProperties() {
   max_x_ = max_pt.x;
   max_y_ = max_pt.y;
   max_z_ = max_pt.z;
+
+  // Compute the convex polygonal footprint.
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull (new pcl::PointCloud<pcl::PointXYZ>);
+  vector<pcl::Vertices> polygons;
+  pcl::ConvexHull<pcl::PointXYZ> convex_hull;
+  convex_hull.setInputCloud(projected_cloud);
+  convex_hull.setDimension(2);
+  convex_hull.reconstruct(*cloud_hull, polygons);
+  // 2D point set should have only one polygon.
+  assert(polygons.size() == 1);
+  convex_hull_footprint_.reset(new pcl::PointCloud<pcl::PointXYZ>);
+  convex_hull_footprint_ = cloud_hull;
+
+  // Inflate the footprint such that the new footprint's inscribed radius is
+  // bigger than the old inscribed radius by 0.5 cm.
+  const double inscribed_rad = GetInscribedRadius();
+  if (inscribed_rad < 1e-5) {
+    printf("Object %s has very small (possibly zero) inscribed radius. Please check that the model is correct\n", name_.c_str());
+    inflation_factor_ = 1.0;
+  } else {
+    inflation_factor_ = 1.0 + (kMeshAdditiveInflation / inscribed_rad);
+  }
+
+  // printf("Footprint\n");
+  // for(const auto &point : convex_hull_footprint_->points) {
+  //   printf("%f %f %f\n,   ", point.x, point.y, point.z);
+  // }
+  // printf("\n");
+  // printf("Polygon size: %d\n", static_cast<int>(polygons[0].vertices.size()));
+  //
+  // printf("Inflation factor for model %s: %f\n", name_.c_str(), inflation_factor_);
 }
 
 double ObjectModel::GetInscribedRadius() const {
@@ -175,4 +313,91 @@ Eigen::Affine3f ObjectModel::GetRawModelToSceneTransform(const ContPose &p, doub
   Eigen::Affine3f model_to_scene_transform;
   model_to_scene_transform.matrix() = transform.matrix() * preprocessing_transform_.matrix();
   return model_to_scene_transform;
+}
+
+vector<bool> ObjectModel::PointsInsideMesh(const vector<Eigen::Vector3d> &points, const ContPose &pose, double table_height) const {
+
+  // Inflate mesh so that we get the points on the boundaries as well.
+  Eigen::Matrix4f transform;
+  transform <<
+            cos(pose.yaw()), -sin(pose.yaw()) , 0, pose.x(),
+                sin(pose.yaw()) , cos(pose.yaw()) , 0, pose.y(),
+                0, 0 , 1 , table_height,
+                0, 0 , 0 , 1;
+  transform.block<3,3>(0,0) = inflation_factor_ * transform.block<3,3>(0,0);
+  auto transformed_mesh = GetTransformedMesh(transform);
+
+  vtkSmartPointer<vtkPolyData> vtk_mesh = vtkSmartPointer<vtkPolyData>::New(); 
+  pcl::VTKUtils::mesh2vtk(*transformed_mesh,vtk_mesh); 
+
+  vtkSmartPointer<vtkPoints> vtk_points = 
+    vtkSmartPointer<vtkPoints>::New();
+	
+	for (const auto &point : points) {
+    vtk_points->InsertNextPoint(point[0], point[1], point[2]);
+  }
+
+  vtkSmartPointer<vtkPolyData> points_polydata = 
+    vtkSmartPointer<vtkPolyData>::New();
+  points_polydata->SetPoints(vtk_points);
+
+  vtkSmartPointer<vtkSelectEnclosedPoints> select_enclosed_points = 
+    vtkSmartPointer<vtkSelectEnclosedPoints>::New();
+#if VTK_MAJOR_VERSION <= 5
+  select_enclosed_points->SetInput(points_polydata);
+#else
+  select_enclosed_points->SetInputData(points_polydata);
+#endif
+#if VTK_MAJOR_VERSION <= 5
+  select_enclosed_points->SetSurface(vtk_mesh.GetPointer());
+#else
+  select_enclosed_points->SetSurfaceData(vtk_mesh.GetPointer());
+#endif
+  select_enclosed_points->Update();
+ 
+  vector<bool> is_inside(points.size(), false);
+  for(size_t ii = 0; ii < points.size(); ++ii) {
+    is_inside[ii] = static_cast<bool>(select_enclosed_points->IsInside(ii));
+  }
+  return is_inside;
+}
+
+vector<bool> ObjectModel::PointsInsideFootprint(const std::vector<Eigen::Vector2d> &points, const ContPose &pose, double table_height) const {
+  Eigen::Matrix4f transform;
+  transform <<
+            cos(pose.yaw()), -sin(pose.yaw()) , 0, pose.x(),
+                sin(pose.yaw()) , cos(pose.yaw()) , 0, pose.y(),
+                0, 0 , 1 , table_height,
+                0, 0 , 0 , 1;
+  transform.block<3,3>(0,0) = inflation_factor_ * transform.block<3,3>(0,0);
+
+  // NOTE: this works only when the transforms are in the XY plane (i.e, we
+  // have an implicit 3 DoF assumption for the models).
+  pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_footprint (new
+                                                 pcl::PointCloud<pcl::PointXYZ>);
+  transformPointCloud(*convex_hull_footprint_, *transformed_footprint, transform);
+
+  vector<bool> is_inside(points.size(), false);
+
+  // Uncomment to explicitly close polygon.
+  // transformed_footprint->points.push_back(transformed_footprint->points[0]);
+
+  #pragma omp parallel for
+  for(size_t ii = 0; ii < points.size(); ++ii) {
+    pcl::PointXYZ pcl_point;
+    pcl_point.x = points[ii][0];
+    pcl_point.y = points[ii][1];
+    pcl_point.z = table_height;
+
+    // NOTE: for this test, transformed_footprint should be an implicitly
+    // closed polygon, i.e, transformed_footprint.points.last() !=
+    // transformed_footprint.points[0].
+    is_inside[ii] = isXYPointIn2DXYPolygonCustom(pcl_point, *transformed_footprint);
+
+    // NOTE: for this test, transformed_footprint should be an explicitly
+    // closed polygon, i.e, transformed_footprint.points.last() ==
+    // transformed_footprint.points[0].
+    // is_inside[ii] = IsInPoly(pcl_point, *transformed_footprint);
+  }
+  return is_inside;
 }

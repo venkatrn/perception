@@ -68,8 +68,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
   argv = new char *[2];
   argv[0] = new char[1];
   argv[1] = new char[1];
-  argv[0] = "0";
-  argv[1] = "1";
+  argv[0] = const_cast<char*>("0");
+  argv[1] = const_cast<char*>("1");
   kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
   kDepthImageHeight, kDepthImageWidth));
   scene_ = kinect_simulator_->scene_;
@@ -1394,7 +1394,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     // Check that this object state is valid, i.e, it has at least
     // perch_params_.min_neighbor_points_for_valid_pose within the circumscribed cylinder.
     // This should be true if we correctly validate successors.
-    const double validation_search_rad =
+    const double validation_search_rad = obj_models_[last_obj_id].GetInflationFactor() *
       obj_models_[last_obj_id].GetCircumscribedRadius();
     int num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
                                                                 validation_search_rad,
@@ -1413,31 +1413,44 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     filtered_validation_points.resize(filter_it - filtered_validation_points.begin());
     validation_points = filtered_validation_points;
 
-    // The points within the inscribed cylinder are the ones made
-    // "infeasible".
-    const double inscribed_rad = obj_models_[last_obj_id].GetInscribedRadius();
-    const double inscribed_rad_sq = inscribed_rad * inscribed_rad;
-    vector<int> infeasible_points;
-    infeasible_points.reserve(validation_points.size());
-
+    vector<Eigen::Vector3d> eig_points(validation_points.size());
+    vector<Eigen::Vector2d> eig2d_points(validation_points.size());
     for (size_t ii = 0; ii < validation_points.size(); ++ii) {
-      if (sqr_dists[ii] <= inscribed_rad_sq) {
-        infeasible_points.push_back(validation_points[ii]);
-      } else {
-        indices_circumscribed.push_back(validation_points[ii]);
-      }
+      PointT point = observed_cloud_->points[validation_points[ii]];
+      eig_points[ii][0] = point.x;
+      eig_points[ii][1] = point.y;
+      eig_points[ii][2] = point.z;
+
+      eig2d_points[ii][0] = point.x;
+      eig2d_points[ii][1] = point.y;
     }
 
-    // We don't need to filter out parent counted pixels a second time (already
-    // done on validation points)
-    // std::sort(infeasible_points.begin(), infeasible_points.end());
-    // indices_to_consider.resize(infeasible_points.size());
-    // auto it = std::set_difference(infeasible_points.begin(),
-    //                               infeasible_points.end(),
-    //                               child_counted_pixels->begin(), child_counted_pixels->end(),
-    //                               indices_to_consider.begin());
-    // indices_to_consider.resize(it - indices_to_consider.begin());
-    indices_to_consider = infeasible_points;
+    // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose(), env_params_.table_height);
+    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(eig2d_points, last_object.cont_pose(), env_params_.table_height);
+
+    indices_to_consider.clear();
+    for (size_t ii = 0; ii < inside_points.size(); ++ii) {
+      if (inside_points[ii]) {
+        indices_to_consider.push_back(validation_points[ii]);
+      }
+    }
+    // printf("Points inside: %zu, total points: %zu\n", indices_to_consider.size(), eig_points.size());
+
+  // The points within the inscribed cylinder are the ones made
+  // "infeasible".
+  //   const double inscribed_rad = obj_models_[last_obj_id].GetInscribedRadius();
+  //   const double inscribed_rad_sq = inscribed_rad * inscribed_rad;
+  //   vector<int> infeasible_points;
+  //   infeasible_points.reserve(validation_points.size());
+  //
+  //   for (size_t ii = 0; ii < validation_points.size(); ++ii) {
+  //     if (sqr_dists[ii] <= inscribed_rad_sq) {
+  //       infeasible_points.push_back(validation_points[ii]);
+  //     } else {
+  //       indices_circumscribed.push_back(validation_points[ii]);
+  //     }
+  //   }
+  //   indices_to_consider = infeasible_points;
   }
 
   double nn_score = 0.0;
@@ -1472,19 +1485,21 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   // Every point within the circumscribed cylinder that has been explained by a
   // rendered point can be considered accounted for.
   // TODO: implement a point within mesh method.
-  for (const int ii : indices_circumscribed) {
-    PointT point = observed_cloud_->points[ii];
-    vector<float> sqr_dists;
-    vector<int> indices;
-    int num_neighbors_found = knn_reverse->radiusSearch(point,
-                                                        perch_params_.sensor_resolution,
-                                                        indices,
-                                                        sqr_dists, 1);
-    bool point_unexplained = num_neighbors_found == 0;
-    if (!point_unexplained) {
-      child_counted_pixels->push_back(ii);
-    }
-  }
+  // int num_valid = 0;
+  // for (const int ii : indices_circumscribed) {
+  //   PointT point = observed_cloud_->points[ii];
+  //   vector<float> sqr_dists;
+  //   vector<int> indices;
+  //   int num_neighbors_found = knn_reverse->radiusSearch(point,
+  //                                                       perch_params_.sensor_resolution,
+  //                                                       indices,
+  //                                                       sqr_dists, 1);
+  //   bool point_unexplained = num_neighbors_found == 0;
+  //   if (!point_unexplained) {
+  //     child_counted_pixels->push_back(ii);
+  //     ++num_valid;
+  //   }
+  // }
 
   // Counted pixels always need to be sorted.
   std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
@@ -1497,7 +1512,6 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     source_cost = static_cast<int>(nn_score * 100 / indices_to_consider.size());
   } else {
     source_cost = static_cast<int>(nn_score);
-
   }
   return source_cost;
 }
@@ -1981,7 +1995,9 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 }
 
 void EnvObjectRecognition::ResetEnvironmentState() {
-  printf("-------------------Resetting Environment State-------------------\n");
+  if (IsMaster(mpi_comm_)) {
+    printf("-------------------Resetting Environment State-------------------\n");
+  }
   GraphState start_state, goal_state;
 
   hash_manager_.Reset();
@@ -1998,9 +2014,9 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   env_params_.goal_state_id = hash_manager_.GetStateIDForceful(goal_state);
 
   if (IsMaster(mpi_comm_)) {
-    std::cout << "goal state is: " << goal_state << std::flush;
-    std::cout << "start id is: " << env_params_.start_state_id << std::flush;
-    std::cout << "goal id is: " << env_params_.goal_state_id << std::flush;
+    std::cout << "Goal state: " << std::endl << goal_state << std::endl;
+    std::cout << "Start state ID: " << env_params_.start_state_id << std::endl;
+    std::cout << "Goal state ID: " << env_params_.goal_state_id << std::endl;
     hash_manager_.Print();
   }
 

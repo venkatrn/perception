@@ -170,11 +170,13 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
                                        std::vector<ContPose> *detected_poses) const {
-  printf("Object recognizer received request to localize %zu objects: \n",
-         input.model_names.size());
 
-  for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
-    printf("Model %zu: %s\n", ii, input.model_names[ii].c_str());
+  if (IsMaster(mpi_world_)) {
+    printf("Object recognizer received request to localize %zu objects: \n",
+          input.model_names.size());
+    for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
+      printf("Model %zu: %s\n", ii, input.model_names[ii].c_str());
+    }
   }
 
   if (kAPC) {
@@ -202,11 +204,13 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
                                        const std::vector<int> &model_ids,
                                        const std::vector<ContPose> &ground_truth_object_poses,
                                        std::vector<ContPose> *detected_poses) const {
-  printf("Object recognizer received request to localize %zu objects: \n",
-         model_ids.size());
 
-  for (size_t ii = 0; ii < model_ids.size(); ++ii) {
-    printf("Model %zu: %d\n", ii, model_ids[ii]);
+  if (IsMaster(mpi_world_)) {
+    printf("Object recognizer received request to localize %zu objects: \n",
+           model_ids.size());
+    for (size_t ii = 0; ii < model_ids.size(); ++ii) {
+      printf("Model %zu: %d\n", ii, model_ids[ii]);
+    }
   }
 
   // TODO: refactor interface for simulated scenes.
@@ -332,4 +336,3 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   return plan_success;
 }
 }  // namespace
-
