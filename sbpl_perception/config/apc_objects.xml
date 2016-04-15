@@ -11,6 +11,76 @@
       symmetric (rotationally symmetric about Z-axis)]  
       -->
 
+      [3lb_dumbbell,
+      $(find sbpl_perception)/data/apc_models/3lb_dumbbell.stl,
+      false,
+      false],
+
+      [40w_lightbulb,
+      $(find sbpl_perception)/data/apc_models/40w_lightbulb.stl,
+      false,
+      false],
+
+      [crayola_crayons,
+      $(find sbpl_perception)/data/apc_models/crayola_crayons.stl,
+      false,
+      false],
+
+      [dove_soap,
+      $(find sbpl_perception)/data/apc_models/dove_soap.stl,
+      false,
+      false],
+
+      [duct_tape,
+      $(find sbpl_perception)/data/apc_models/duct_tape.stl,
+      false,
+      true],
+
+      [elmers_glue,
+      $(find sbpl_perception)/data/apc_models/elmers_glue.stl,
+      false,
+      false],
+
+      [expo_eraser,
+      $(find sbpl_perception)/data/apc_models/expo_eraser.stl,
+      false,
+      false],
+
+      [folgers_coffee,
+      $(find sbpl_perception)/data/apc_models/folgers_coffee.stl,
+      false,
+      true],
+
+      [glucose_tablets,
+      $(find sbpl_perception)/data/apc_models/glucose_tablets.stl,
+      false,
+      true],
+
+      [hanes_socks,
+      $(find sbpl_perception)/data/apc_models/hanes_socks.stl,
+      false,
+      false],
+
+      [kleenex_tissues,
+      $(find sbpl_perception)/data/apc_models/kleenex_tissues.stl,
+      false,
+      false],
+
+      [paper_towels,
+      $(find sbpl_perception)/data/apc_models/paper_towels.stl,
+      false,
+      false],
+
+      [rawlings_baseball,
+      $(find sbpl_perception)/data/apc_models/rawlings_baseball.stl,
+      false,
+      true],
+
+      [staples_index_cards,
+      $(find sbpl_perception)/data/apc_models/staples_index_cards.stl,
+      false,
+      false],
+
       [cheezeit,
       $(find sbpl_perception)/data/apc_models/cheezit_big_original.stl,
       false,
