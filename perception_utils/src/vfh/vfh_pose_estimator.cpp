@@ -10,7 +10,11 @@
 #include <pcl/filters/filter.h>
 
 #include <ros/package.h>
+
+#include <chrono>
 #include <vector>
+
+using namespace std;
 
 /** \brief loads either a .pcd or .ply file into a pointcloud
     \param cloud pointcloud to load data into
@@ -741,6 +745,11 @@ bool VFHPoseEstimator::generateTrainingViewsFromModels(boost::filesystem::path
 
 bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
   //loop over all pcd files in the data directry and calculate vfh features
+  //
+
+  chrono::time_point<chrono::system_clock> start, end;
+  start = chrono::system_clock::now();
+
   PointCloud::Ptr cloud (new PointCloud);
   Eigen::Matrix<float, 4, 1> centroid;
   std::list<CloudInfo> training; //training data list
@@ -926,16 +935,13 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
   index.save (kdtreeIdxFileName);
 
   delete[] data.ptr ();
+
+  end = chrono::system_clock::now();
+  chrono::duration<double> elapsed_seconds = end-start;
+
+  std::cout << "Training VFH classifier took " << elapsed_seconds.count() << " seconds" << std::endl;
+
   pcl::console::print_error (stderr, "Done\n");
 
   return true;
 }
-
-
-
-
-
-
-
-
-
