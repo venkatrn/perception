@@ -925,4 +925,138 @@ void GetRangeImageFromCloud(PointCloudPtr cloud,
                                                  sensorPose, pcl::RangeImage::CAMERA_FRAME,
                                                  noiseLevel, minimumRange);
 }
+
+bool IsPointValid(const PointT &point) { 
+	bool valid = true;
+	if (std::isnan(point.x) ||
+			std::isinf(point.x) ||
+			std::isnan(point.y) ||
+			std::isinf(point.y) ||
+			std::isnan(point.z) ||
+			std::isinf(point.z)) {
+		valid = false;
+	}
+	return valid;
+}
+
+void InpaintDepthImage(const PointCloudPtr &cloud_in, const cv::Mat &mask, double max_range,
+                       cv::Mat &inpainted_depth_image, bool visualize/*=false*/) {
+
+  chrono::time_point<chrono::system_clock> start, end;
+  start = chrono::system_clock::now();
+
+  const int width = cloud_in->width;
+  const int height = cloud_in->height;
+
+  if (height == 1)  {
+    cerr << "Input PCD is not organized " << endl;
+    return;
+  }
+
+  cv::Mat depth_image, depth_image_original;
+  cv::Mat invalid_pixel_mask;
+  depth_image.create(height, width, CV_8UC1);
+  depth_image_original.create(height, width, CV_64FC1);
+  invalid_pixel_mask.create(height, width, CV_8UC1);
+
+  for (int y = 0; y < height; ++y) {
+    auto y_ptr = depth_image.ptr<uchar>(y);
+    auto original_y_ptr = depth_image_original.ptr<double>(y);
+    auto mask_y_ptr = invalid_pixel_mask.ptr<uchar>(y);
+
+    for (int x = 0; x < width; ++x) {
+      const int pcl_index = y * width + x;
+      const PointT point = cloud_in->points[pcl_index];
+      const double depth = point.z;
+      original_y_ptr[x] = depth;
+
+      if (IsPointValid(point)) {
+        mask_y_ptr[x] = 0;
+
+        if (depth < max_range) {
+          y_ptr[x] = static_cast<uchar>(std::min(depth, max_range) * 255 / max_range);
+        }
+      } else {
+        y_ptr[x] = 0;
+        mask_y_ptr[x] = 1;
+      }
+    }
+  }
+
+  const double kResizeScale = 0.1;
+
+  cv::Mat resized_depth_image, resized_inpainted_mask;
+  cv::resize(depth_image, resized_depth_image, cv::Size(), kResizeScale,
+             kResizeScale);
+
+  cv::Mat inpainted_mask = (mask > 0) & (invalid_pixel_mask > 0);
+  cv::resize(inpainted_mask, resized_inpainted_mask, cv::Size(), kResizeScale,
+             kResizeScale);
+
+  static cv::Mat inpainted;
+  cv::inpaint(resized_depth_image, resized_inpainted_mask, inpainted, 5,
+              cv::INPAINT_NS);
+
+  cv::resize(inpainted, inpainted, cv::Size(), 1 / kResizeScale,
+             1 / kResizeScale);
+
+  // Now copy over the inpainted pixels to the original depth image (and
+  // cloud).
+  cv::Mat depth_image_smoothed;
+  depth_image_smoothed = depth_image_original.clone();
+
+  for (int y = 0; y < height; ++y) {
+    auto inpainted_y_ptr = inpainted.ptr<uchar>(y);
+    auto smoothed_y_ptr = depth_image_smoothed.ptr<double>(y);
+    auto mask_y_ptr = inpainted_mask.ptr<uchar>(y);
+
+    for (int x = 0; x < width; ++x) {
+      if (!mask_y_ptr[x]) {
+        continue;
+      }
+
+      const double depth = static_cast<double>(inpainted_y_ptr[x]) * max_range /
+                           255.0;
+      smoothed_y_ptr[x] = depth;
+
+      // float camera_fx_reciprocal = 1.0f / kCameraFX;
+      // float camera_fy_reciprocal = 1.0f / kCameraFY;
+      // PointT point;
+      // point.z = range;
+      // point.x = (static_cast<float>(x) - kCameraCX) * depth * (camera_fx_reciprocal);
+      // point.y = (static_cast<float>(height - 1 - y) - kCameraCY) * depth *
+      //           (camera_fy_reciprocal);
+      // cloud_in->points[OpenCVIndexToPCLIndex(x, y)] = point;
+    }
+  }
+
+  end = chrono::system_clock::now();
+  chrono::duration<double> elapsed_seconds = end - start;
+  cout << "inpainted took " << elapsed_seconds.count() << " seconds\n";
+
+  if (visualize) {
+    cv::namedWindow("Original Depth Image", CV_WINDOW_NORMAL);
+    cv::namedWindow("Inpainted Depth Image", CV_WINDOW_NORMAL);
+    cv::resizeWindow("Original Depth Image", 640, 480);
+    cv::resizeWindow("Inpainted Depth Image", 640, 480);
+
+    // For visualization, ignore points with depth greater than max_range.
+    static cv::Mat c_image;
+    depth_image_original.setTo(0, (depth_image_original > max_range));
+    cv::normalize(depth_image_original, c_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+    cv::applyColorMap(255 - c_image, c_image, cv::COLORMAP_JET);
+    // string fname = kDebugDir + "depth_image.png";
+    // cv::imwrite(fname.c_str(), c_image);
+    cv::imshow("Original Depth Image", c_image);
+
+    depth_image_smoothed.setTo(0, (depth_image_smoothed > max_range));
+    cv::normalize(depth_image_smoothed, c_image, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+    cv::applyColorMap(255 - c_image, c_image, cv::COLORMAP_JET);
+    // fname = kDebugDir + "depth_image_smoothed.png";
+    // cv::imwrite(fname.c_str(), c_image);
+
+    cv::imshow("Inpainted Depth Image", c_image);
+    cv::waitKey(0);
+  }
+}
 }  // namespace perception_utils
