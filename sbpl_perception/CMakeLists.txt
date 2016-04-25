@@ -79,7 +79,7 @@ add_library(${PROJECT_NAME}
 
 target_link_libraries(${PROJECT_NAME} ${MPI_LIBRARIES} ${Boost_LIBRARIES} ${catkin_LIBRARIES}
   ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so -lboost_mpi-mt)
+  libvtkGraphics.so) #-lboost_mpi-mt)
 
 add_executable(real_test src/experiments/experiments.cpp)
 target_link_libraries(real_test ${PROJECT_NAME})
@@ -95,7 +95,6 @@ target_link_libraries(${PROJECT_NAME}_states_test ${PROJECT_NAME})
 
 catkin_add_gtest(${PROJECT_NAME}_hash_manager_test tests/hash_manager_test.cpp)
 target_link_libraries(${PROJECT_NAME}_hash_manager_test ${PROJECT_NAME})
-
 
 #####################################################################
 # Needed only for experiments and debugging.

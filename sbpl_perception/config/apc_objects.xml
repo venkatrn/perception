@@ -81,6 +81,26 @@
       false,
       false],
 
+      [plush_puppies_squeakin_eggs,
+      $(find sbpl_perception)/data/apc_models/plush_puppies_squeakin_eggs.stl,
+      false,
+      false],
+
+      [turtle_sippy_cup,
+      $(find sbpl_perception)/data/apc_models/turtle_sippy_cup.stl,
+      false,
+      false],
+
+      [beefhide_bones,
+      $(find sbpl_perception)/data/apc_models/beefhide_bones.stl,
+      false,
+      false],
+
+      [clorox_brush,
+      $(find sbpl_perception)/data/apc_models/clorox_brush.stl,
+      false,
+      false],
+
       [cheezeit,
       $(find sbpl_perception)/data/apc_models/cheezit_big_original.stl,
       false,

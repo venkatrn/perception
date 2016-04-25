@@ -57,12 +57,23 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/test1459535496.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/test1459535603.txt"/> -->
 
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460403061.txt"/> -->
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460404075.txt"/> -->
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460404641.txt"/> -->
-      <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460411333.txt"/>
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460412095.txt"/> -->
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460419184.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904102.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904163.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904352.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904526.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904618.txt"/> <!&#45;&#45; model is incorrectly scaled&#45;&#45;> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904879.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904949.txt"/> --> <!-- orientation change-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905278.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905467.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905601.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905966.txt"/>
+
+      <!-- doesn't work-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904229.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904784.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905359.txt"/> -->
+
 
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114628.408278.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/chess_input/2r_1k_1q.txt"/> -->
