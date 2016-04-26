@@ -20,6 +20,8 @@
 #include <pcl/surface/vtk_smoothing/vtk_utils.h>
 #include <pcl/surface/convex_hull.h>
 
+#include <opencv2/highgui/highgui.hpp>
+
 #include <vtkVersion.h>
 #include <vtkPolyData.h>
 #include <vtkPointData.h>
@@ -35,6 +37,8 @@ constexpr bool kMeshInMillimeters = false; // true for PERCH experiments
 // additive amount, when checking whether points lie within the convex
 // footprint or if they are within the volume of the mesh model.
 constexpr double kMeshAdditiveInflation = 0.005; // m
+// Resolution for the footprint.
+constexpr double kFootprintRes = 0.0005; // m
 
 Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
                      pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, bool flipped) {
@@ -181,6 +185,15 @@ isXYPointIn2DXYPolygonCustom(const PointT &point, const pcl::PointCloud<PointT> 
   }
   return (in_poly);
 }
+
+cv::Point WorldPointToRasterPoint(double x, double y, double half_side) {
+  cv::Point cv_point;
+  cv_point.x = static_cast<int>(std::round((-y + half_side) /
+                                     kFootprintRes));
+  cv_point.y = static_cast<int>(std::round((-x + half_side) /
+                                     kFootprintRes));
+  return cv_point;
+}
 }
 
 ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name, const bool symmetric, const bool flipped) {
@@ -190,6 +203,7 @@ ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name, const 
   mesh_ = *mesh_out;
   symmetric_ = symmetric;
   name_ = name;
+  cloud_.reset(new PointCloud);
   SetObjectProperties();
 }
 
@@ -271,6 +285,24 @@ void ObjectModel::SetObjectProperties() {
   // printf("Polygon size: %d\n", static_cast<int>(polygons[0].vertices.size()));
   //
   // printf("Inflation factor for model %s: %f\n", name_.c_str(), inflation_factor_);
+  
+  // Rasterize the footprint for fast point-within-footprint checking
+  const double half_side = (GetCircumscribedRadius() + kMeshAdditiveInflation);
+  const int cv_side = static_cast<int>(2.0 * half_side / kFootprintRes);
+  footprint_raster_.create(cv_side, cv_side, CV_8UC1);
+  vector<cv::Point> cv_points;
+  cv_points.reserve(convex_hull_footprint_->points.size());
+  for(const auto &point : convex_hull_footprint_->points) {
+    cv::Point cv_point = WorldPointToRasterPoint(point.x, point.y, half_side);
+    cv_points.push_back(cv_point);
+  }
+  footprint_raster_.setTo(0);
+  cv::fillConvexPoly(footprint_raster_, cv_points.data(), cv_points.size(), 255);
+  cv::imwrite("/usr0/home/venkatrn/hydro_workspace/src/perception/sbpl_perception/visualization/footprint.png", footprint_raster_);
+}
+
+void ObjectModel::SetObjectPointCloud(const PointCloudPtr &cloud) {
+  transformPointCloud(*cloud, *cloud_, preprocessing_transform_);
 }
 
 double ObjectModel::GetInscribedRadius() const {
@@ -313,6 +345,16 @@ Eigen::Affine3f ObjectModel::GetRawModelToSceneTransform(const ContPose &p, doub
   Eigen::Affine3f model_to_scene_transform;
   model_to_scene_transform.matrix() = transform.matrix() * preprocessing_transform_.matrix();
   return model_to_scene_transform;
+}
+
+bool ObjectModel::PointInsideRasterizedFootprint(double x, double y) const {
+  const double half_side = (GetCircumscribedRadius() + kMeshAdditiveInflation);
+  cv::Point cv_point = WorldPointToRasterPoint(x, y, half_side);
+  const double side = footprint_raster_.rows;
+  if (cv_point.x < 0 || cv_point.x >= side || cv_point.y < 0 || cv_point.y >= side) {
+    return false;
+  }
+  return (footprint_raster_.at<uchar>(cv_point.y, cv_point.x) == 255);
 }
 
 vector<bool> ObjectModel::PointsInsideMesh(const vector<Eigen::Vector3d> &points, const ContPose &pose, double table_height) const {
@@ -363,36 +405,49 @@ vector<bool> ObjectModel::PointsInsideMesh(const vector<Eigen::Vector3d> &points
 }
 
 vector<bool> ObjectModel::PointsInsideFootprint(const std::vector<Eigen::Vector2d> &points, const ContPose &pose, double table_height) const {
-  Eigen::Matrix4f transform;
-  transform <<
+  Eigen::Affine3f transform;
+  transform.matrix() <<
             cos(pose.yaw()), -sin(pose.yaw()) , 0, pose.x(),
                 sin(pose.yaw()) , cos(pose.yaw()) , 0, pose.y(),
                 0, 0 , 1 , table_height,
                 0, 0 , 0 , 1;
-  transform.block<3,3>(0,0) = inflation_factor_ * transform.block<3,3>(0,0);
+  transform.matrix().block<3,3>(0,0) = inflation_factor_ * transform.matrix().block<3,3>(0,0);
 
   // NOTE: this works only when the transforms are in the XY plane (i.e, we
   // have an implicit 3 DoF assumption for the models).
-  pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_footprint (new
-                                                 pcl::PointCloud<pcl::PointXYZ>);
-  transformPointCloud(*convex_hull_footprint_, *transformed_footprint, transform);
+  // pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_footprint (new
+  //                                                pcl::PointCloud<pcl::PointXYZ>);
+  // transformPointCloud(*convex_hull_footprint_, *transformed_footprint, transform);
 
   vector<bool> is_inside(points.size(), false);
 
   // Uncomment to explicitly close polygon.
   // transformed_footprint->points.push_back(transformed_footprint->points[0]);
-
-  #pragma omp parallel for
+  
+  Eigen::Affine3f inverse_transform  = transform.inverse();
+  vector<Eigen::Vector2d> transformed_points(points.size());
   for(size_t ii = 0; ii < points.size(); ++ii) {
+    Eigen::Vector4f homogeneous_point, transfomed_homogeneous_point;
+    homogeneous_point << points[ii][0], points[ii][1], 0, 1;
+    transfomed_homogeneous_point = inverse_transform * homogeneous_point;
+    transformed_points[ii][0] = transfomed_homogeneous_point[0];
+    transformed_points[ii][1] = transfomed_homogeneous_point[1];
+  }
+
+  // #pragma omp parallel for
+  for(size_t ii = 0; ii < transformed_points.size(); ++ii) {
     pcl::PointXYZ pcl_point;
-    pcl_point.x = points[ii][0];
-    pcl_point.y = points[ii][1];
-    pcl_point.z = table_height;
+    pcl_point.x = transformed_points[ii][0];
+    pcl_point.y = transformed_points[ii][1];
+    // pcl_point.z = table_height;
+    pcl_point.z = 0;
 
     // NOTE: for this test, transformed_footprint should be an implicitly
     // closed polygon, i.e, transformed_footprint.points.last() !=
     // transformed_footprint.points[0].
-    is_inside[ii] = isXYPointIn2DXYPolygonCustom(pcl_point, *transformed_footprint);
+    // is_inside[ii] = isXYPointIn2DXYPolygonCustom(pcl_point, *transformed_footprint);
+    is_inside[ii] = isXYPointIn2DXYPolygonCustom(pcl_point, *convex_hull_footprint_);
+    // is_inside[ii] = PointInsideRasterizedFootprint(pcl_point.x, pcl_point.y);
 
     // NOTE: for this test, transformed_footprint should be an explicitly
     // closed polygon, i.e, transformed_footprint.points.last() ==

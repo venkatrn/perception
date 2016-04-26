@@ -63,6 +63,13 @@ struct ModelMetaData {
   bool flipped;
   // Is model symmetric about z-axis.
   bool symmetric;
+  // Model symmetry mode
+  // 0 - Not rotationally symmetric
+  // 1 - Rotationally symmetric up to 180 degrees (e.g., cuboids)
+  // 2 - Fully rotationally symmetric (360 degrees)
+  int symmetry_mode;
+  // Search resolution (translation) to use for this object.
+  double search_resolution;
 };
 
 // A container for environment statistics.
@@ -76,7 +83,7 @@ typedef std::vector<Heuristic> Heuristics;
 typedef std::unordered_map<std::string, ModelMetaData> ModelBank;
 
 void SetModelMetaData(const std::string &name, const std::string &file,
-                      const bool flipped, const bool symmetric, ModelMetaData *model_meta_data);
+                      const bool flipped, const bool symmetric, const int symmetry_mode, const double search_resolution, ModelMetaData *model_meta_data);
 
 ModelMetaData GetMetaDataFromModelFilename(const ModelBank& model_bank, std::string &model_file);
 

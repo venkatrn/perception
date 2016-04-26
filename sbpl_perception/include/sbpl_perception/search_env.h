@@ -69,6 +69,7 @@ struct PERCHParams {
   // for that state to be considered as valid.
   int min_neighbor_points_for_valid_pose;
   int max_icp_iterations;
+  double icp_max_correspondence;
   bool use_rcnn_heuristic;
   bool use_adaptive_resolution;
 

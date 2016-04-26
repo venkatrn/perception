@@ -103,6 +103,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
     private_nh.param("min_neighbor_points_for_valid_pose",
                      perch_params_.min_neighbor_points_for_valid_pose, 50);
     private_nh.param("max_icp_iterations", perch_params_.max_icp_iterations, 10);
+    private_nh.param("icp_max_correspondence", perch_params_.icp_max_correspondence, 0.05);
     private_nh.param("use_adaptive_resolution",
                      perch_params_.use_adaptive_resolution, false);
     private_nh.param("use_rcnn_heuristic", perch_params_.use_rcnn_heuristic, true);
@@ -119,6 +120,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Min Points for Valid Pose: %d\n",
            perch_params_.min_neighbor_points_for_valid_pose);
     printf("Max ICP Iterations: %d\n", perch_params_.max_icp_iterations);
+    printf("ICP Max Correspondence: %f\n", perch_params_.icp_max_correspondence);
     printf("RCNN Heuristic: %d\n", perch_params_.use_rcnn_heuristic);
     printf("Vis Expansions: %d\n", perch_params_.vis_expanded_states);
     printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
@@ -157,7 +159,7 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFile (model_meta_data.file.c_str(), mesh);
 
-    ObjectModel obj_model(mesh, model_meta_data.file.c_str(),
+    ObjectModel obj_model(mesh, model_meta_data.name,
                           model_meta_data.symmetric,
                           model_meta_data.flipped);
     obj_models_.push_back(obj_model);
@@ -190,11 +192,16 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
 
   double grid_cell_circumscribing_radius = 0.0;
 
+  auto it = model_bank_.find(obj_models_[model_id].name());
+  assert (it != model_bank_.end());
+  const auto &model_meta_data = it->second;
+  const double search_resolution = model_meta_data.search_resolution;
+
   if (after_refinement) {
     grid_cell_circumscribing_radius = 0.0;
   } else {
-    grid_cell_circumscribing_radius = std::hypot(env_params_.res / 2.0,
-                                                 env_params_.res / 2.0);
+    grid_cell_circumscribing_radius = std::hypot(search_resolution / 2.0,
+                                                 search_resolution / 2.0);
   }
 
   const double search_rad = std::max(
@@ -2182,7 +2189,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
 
   // TODO: make all of the following algorithm parameters and place in a config file.
   // Set the max correspondence distance (e.g., correspondences with higher distances will be ignored)
-  icp.setMaxCorrespondenceDistance(env_params_.res / 2);
+  icp.setMaxCorrespondenceDistance(perch_params_.icp_max_correspondence);
   // Set the maximum number of iterations (criterion 1)
   icp.setMaximumIterations(perch_params_.max_icp_iterations);
   // Set the transformation epsilon (criterion 2)
@@ -2264,15 +2271,21 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
     #pragma omp parallel for
 
     for (int model_id : model_ids) {
+
+      auto model_bank_it = model_bank_.find(obj_models_[model_id].name());
+      assert (model_bank_it != model_bank_.end());
+      const auto &model_meta_data = model_bank_it->second;
+      const double search_resolution = model_meta_data.search_resolution;
+
       cout << "Greedy ICP for model: " << model_id << endl;
       #pragma omp parallel for
 
       for (double x = env_params_.x_min; x <= env_params_.x_max;
-           x += env_params_.res) {
+           x += search_resolution) {
         #pragma omp parallel for
 
         for (double y = env_params_.y_min; y <= env_params_.y_max;
-             y += env_params_.res) {
+             y += search_resolution) {
           #pragma omp parallel for
 
           for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
@@ -2325,10 +2338,13 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
             succ_id++;
 
             // Skip multiple orientations for symmetric objects
-            if (obj_models_[model_id].symmetric()) {
+            if (obj_models_[model_id].symmetric() || model_meta_data.symmetry_mode == 2) {
               break;
             }
-
+            // If 180 degree symmetric, then iterate only between 0 and 180.
+            if (model_meta_data.symmetry_mode == 1 && theta > (M_PI + env_params_.theta_res)) {
+              break; 
+            }
           }
         }
       }
@@ -2455,8 +2471,13 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
       continue;
     }
 
+    auto model_bank_it = model_bank_.find(obj_models_[ii].name());
+    assert (model_bank_it != model_bank_.end());
+    const auto &model_meta_data = model_bank_it->second;
+    const double search_resolution = model_meta_data.search_resolution;
+
     const double res = perch_params_.use_adaptive_resolution ?
-                       obj_models_[ii].GetInscribedRadius() : env_params_.res;
+                       obj_models_[ii].GetInscribedRadius() : search_resolution;
 
     for (double x = env_params_.x_min; x <= env_params_.x_max;
          x += res) {
@@ -2476,8 +2497,12 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           succ_states->push_back(s);
 
           // If symmetric object, don't iterate over all thetas
-          if (obj_models_[ii].symmetric()) {
+          if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
             break;
+          }
+          // If 180 degree symmetric, then iterate only between 0 and 180.
+          if (model_meta_data.symmetry_mode == 1 && theta > (M_PI + env_params_.theta_res)) {
+            break; 
           }
         }
       }

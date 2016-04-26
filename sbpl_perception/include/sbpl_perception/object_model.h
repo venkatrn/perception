@@ -14,11 +14,15 @@
 
 #include <Eigen/Geometry>
 
+#include <opencv/cv.h>
+#include <opencv2/core/core.hpp>
+
 #include <pcl/PolygonMesh.h>
 
 class ObjectModel {
  public:
   ObjectModel(const pcl::PolygonMesh &mesh, const std::string name, const bool symmetric, const bool flipped);
+  void SetObjectPointCloud(const PointCloudPtr &cloud);
 
   double GetInscribedRadius() const;
 
@@ -83,6 +87,9 @@ class ObjectModel {
 
  private:
   pcl::PolygonMesh mesh_;
+  // A point cloud of the object (not just the vertices of the mesh!)
+  // corresponding to mesh_
+  PointCloudPtr cloud_;
   bool symmetric_;
   std::string name_;
   double min_x_, min_y_, min_z_; // Bounding box in default orientation
@@ -93,5 +100,9 @@ class ObjectModel {
   // radius. This is used in methods that check if a point is within the
   // footprint or volume of the mesh.
   double inflation_factor_;
+  // Rasterized footprint.
+  cv::Mat footprint_raster_;
   void SetObjectProperties();
+  // Check if world point is within rasterizred footprint.
+  bool PointInsideRasterizedFootprint(double x, double y) const;
 };

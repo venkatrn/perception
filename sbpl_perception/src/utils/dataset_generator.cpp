@@ -126,20 +126,27 @@ DatasetGenerator::DatasetGenerator(int argc, char **argv) : output_dir_("") {
   for (int ii = 0; ii < model_bank_list.size(); ++ii) {
     auto &object_data = model_bank_list[ii];
     ROS_ASSERT(object_data.getType() == XmlRpc::XmlRpcValue::TypeArray);
-    ROS_ASSERT(object_data.size() == 4);
+    ROS_ASSERT(object_data.size() == 6);
     ROS_ASSERT(object_data[0].getType() == XmlRpc::XmlRpcValue::TypeString);
     ROS_ASSERT(object_data[1].getType() == XmlRpc::XmlRpcValue::TypeString);
     ROS_ASSERT(object_data[2].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
     ROS_ASSERT(object_data[3].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
+    ROS_ASSERT(object_data[4].getType() == XmlRpc::XmlRpcValue::TypeInt);
+    ROS_ASSERT(object_data[5].getType() == XmlRpc::XmlRpcValue::TypeDouble);
 
     ModelMetaData model_meta_data;
     SetModelMetaData(static_cast<string>(object_data[0]),
-                     static_cast<string>(object_data[1]), static_cast<bool>(object_data[2]),
-                     static_cast<bool>(object_data[3]), &model_meta_data);
+                     static_cast<string>(object_data[1]),
+                     static_cast<bool>(object_data[2]),
+                     static_cast<bool>(object_data[3]),
+                     static_cast<int>(object_data[4]),
+                     static_cast<double>(object_data[5]),
+                     &model_meta_data);
     model_bank[model_meta_data.name] = model_meta_data;
-    printf("%s: %s, %d, %d\n", model_meta_data.name.c_str(),
+    printf("%s: %s, %d, %d, %d, %f\n", model_meta_data.name.c_str(),
            model_meta_data.file.c_str(), model_meta_data.flipped,
-           model_meta_data.symmetric);
+           model_meta_data.symmetric, model_meta_data.symmetry_mode,
+           model_meta_data.search_resolution);
   }
 
   // Now create the models.
