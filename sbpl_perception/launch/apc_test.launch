@@ -67,12 +67,10 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905278.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905467.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905601.txt"/> -->
-      <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905966.txt"/>
-
-      <!-- doesn't work-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905966.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904229.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904784.txt"/> -->
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905359.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905359.txt"/>
 
 
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114628.408278.txt"/> -->

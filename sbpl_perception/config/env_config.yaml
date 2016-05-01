@@ -1,4 +1,4 @@
-search_resolution_translation: 0.1 # m 0.04
+search_resolution_translation: 0.01 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
 
 perch_params:
@@ -11,5 +11,5 @@ perch_params:
 
   ## Visualization and Debugging
   visualize_expanded_states: false
-  print_expanded_states: false
+  print_expanded_states: true
   debug_verbose: false # unused

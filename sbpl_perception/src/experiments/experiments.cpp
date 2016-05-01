@@ -90,11 +90,41 @@ int main(int argc, char **argv) {
   ObjectRecognizer object_recognizer(world);
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
-  vector<Eigen::Affine3f> object_transforms;
-  const bool found_solution = object_recognizer.LocalizeObjects(input, &object_transforms);
+  vector<Eigen::Affine3f> object_transforms, temp_object_transforms;
+  vector<PointCloudPtr> object_point_clouds;
+  double best_solution_cost = std::numeric_limits<double>::max();
+
+  const double kHeightResolution = 0.01; //m (1 cm)
+  vector<double> heights = {input.table_height,
+                            input.table_height + kHeightResolution,
+                            input.table_height + 2.0 * kHeightResolution
+                           };
+
+  for (double height : heights) {
+    input.table_height = height;
+    const bool found_solution = object_recognizer.LocalizeObjects(input,
+                                                                  &temp_object_transforms);
+
+    if (IsMaster(world)) {
+      if (!found_solution) {
+        continue;
+      }
+
+      const double solution_cost =
+        object_recognizer.GetLastPlanningEpisodeStats()[0].cost;
+
+      std::cout << "Solution cost: " << solution_cost << std::endl;
+
+      if (solution_cost < best_solution_cost) {
+        best_solution_cost = solution_cost;
+        object_transforms = temp_object_transforms;
+        object_point_clouds = object_recognizer.GetObjectPointClouds();
+      }
+    }
+  }
 
   if (IsMaster(world)) {
-    if (!found_solution) {
+    if (object_transforms.empty()) {
       printf("PERCH could not find a solution for the given input\n");
       return 0;
     }
@@ -113,9 +143,9 @@ int main(int argc, char **argv) {
     std::cout << "Output transforms:\n";
 
     const ModelBank &model_bank = object_recognizer.GetModelBank();
-    const vector<PointCloudPtr> object_point_clouds = object_recognizer.GetObjectPointClouds();
 
-		srand(time(0));
+    srand(time(0));
+
     for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
       string model_name = input.model_names[ii];
       std::cout << "Object: " << model_name << std::endl;
@@ -143,8 +173,10 @@ int main(int argc, char **argv) {
                       "support_surface");
       viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY,
                                           0.2, "support_surface");
-      viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
-                                          pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME, "support_surface");
+      viewer->setShapeRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
+        pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME,
+        "support_surface");
       // viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
       //                                     pcl::visualization::PCL_VISUALIZER_SHADING_GOURAUD, "support_surface");
 
