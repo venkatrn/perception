@@ -36,7 +36,7 @@ constexpr bool kMeshInMillimeters = false; // true for PERCH experiments
 // Inflate inscribed (and circumscribed) radius of mesh by the following
 // additive amount, when checking whether points lie within the convex
 // footprint or if they are within the volume of the mesh model.
-constexpr double kMeshAdditiveInflation = 0.005; // m
+constexpr double kMeshAdditiveInflation = 0.01; // m
 // Resolution for the footprint.
 constexpr double kFootprintRes = 0.0005; // m
 
