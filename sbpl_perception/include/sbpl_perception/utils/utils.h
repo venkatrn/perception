@@ -70,6 +70,11 @@ struct ModelMetaData {
   int symmetry_mode;
   // Search resolution (translation) to use for this object.
   double search_resolution;
+  // Num variants of the STL model (e.g., upside down, sideways etc).
+  // If the model file is xyz.stl and there are n variants, then we assume
+  // that the files xyz1.stl, xyz2.stl,...xyzn.stl exist (in addition to
+  // xyz.stl)
+  int num_variants;
 };
 
 // A container for environment statistics.
@@ -83,7 +88,7 @@ typedef std::vector<Heuristic> Heuristics;
 typedef std::unordered_map<std::string, ModelMetaData> ModelBank;
 
 void SetModelMetaData(const std::string &name, const std::string &file,
-                      const bool flipped, const bool symmetric, const int symmetry_mode, const double search_resolution, ModelMetaData *model_meta_data);
+                      bool flipped, bool symmetric, int symmetry_mode, double search_resolution, int num_variants, ModelMetaData *model_meta_data);
 
 ModelMetaData GetMetaDataFromModelFilename(const ModelBank& model_bank, std::string &model_file);
 
@@ -149,6 +154,18 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
     ar &input.y_max;
     ar &input.table_height;
     ar &input.heuristics_dir;
+}
+
+template<class Archive>
+void serialize(Archive &ar, sbpl_perception::ModelMetaData &model_meta_data,
+               const unsigned int version) {
+  ar &model_meta_data.name;
+  ar &model_meta_data.file;
+  ar &model_meta_data.flipped;
+  ar &model_meta_data.symmetric;
+  ar &model_meta_data.symmetry_mode;
+  ar &model_meta_data.search_resolution;
+  ar &model_meta_data.num_variants;
 }
 } // namespace serialization
 } // namespace boost

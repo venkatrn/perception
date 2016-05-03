@@ -38,9 +38,9 @@ void ConfigParser::Parse(const string &config_file) {
   // Read input point cloud.
   pcd_file_path = boost::lexical_cast<string>(line.c_str());
 
-  // Convert to absolute path.
+  // TODO: Convert to absolute path.
   if (kAPC) {
-    pcd_file_path = ros::package::getPath("sbpl_perception") + "/data/apc_input/" +
+    pcd_file_path = ros::package::getPath("sbpl_perception") + "/data/perchinput/" +
                     pcd_file_path;
     boost::filesystem::path pcd_path(pcd_file_path);
     if(!boost::filesystem::exists(pcd_path)) {

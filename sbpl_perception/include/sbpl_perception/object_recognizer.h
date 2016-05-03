@@ -58,6 +58,7 @@ class ObjectRecognizer {
   MHAReplanParams planner_params_;
 
   EnvConfig env_config_;
+  ModelBank model_bank_;
 
   bool RunPlanner(std::vector<ContPose> *detected_poses) const;
 };

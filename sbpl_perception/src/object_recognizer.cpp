@@ -20,20 +20,6 @@ const string kDebugDir = ros::package::getPath("sbpl_perception") +
 const bool kAPC = true;
 }  // namespace
 
-namespace boost {
-namespace serialization {
-
-template<class Archive>
-void serialize(Archive &ar, sbpl_perception::ModelMetaData &model_meta_data,
-               const unsigned int version) {
-  ar &model_meta_data.name;
-  ar &model_meta_data.file;
-  ar &model_meta_data.flipped;
-  ar &model_meta_data.symmetric;
-}
-} // namespace serialization
-} // namespace boost
-
 namespace sbpl_perception {
 ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
                                    mpi_world) : planner_params_(0.0) {
@@ -76,18 +62,27 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
     ROS_ASSERT(model_bank_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
     printf("Model bank has %d models:\n", model_bank_list.size());
-    model_bank_vector.resize(model_bank_list.size());
+    model_bank_vector.reserve(model_bank_list.size());
 
     for (int ii = 0; ii < model_bank_list.size(); ++ii) {
       auto &object_data = model_bank_list[ii];
       ROS_ASSERT(object_data.getType() == XmlRpc::XmlRpcValue::TypeArray);
-      ROS_ASSERT(object_data.size() == 6);
+      ROS_ASSERT(object_data.size() == 7);
+      // ID
       ROS_ASSERT(object_data[0].getType() == XmlRpc::XmlRpcValue::TypeString);
+      // Path to model.
       ROS_ASSERT(object_data[1].getType() == XmlRpc::XmlRpcValue::TypeString);
+      // Flipped?
       ROS_ASSERT(object_data[2].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
+      // Rotationally symmetric?
+      // TODO: deprecate in favor of symmetry mode
       ROS_ASSERT(object_data[3].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
+      // Symmetry mode
       ROS_ASSERT(object_data[4].getType() == XmlRpc::XmlRpcValue::TypeInt);
+      // Search resolution
       ROS_ASSERT(object_data[5].getType() == XmlRpc::XmlRpcValue::TypeDouble);
+      // Num variants
+      ROS_ASSERT(object_data[6].getType() == XmlRpc::XmlRpcValue::TypeInt);
 
       ModelMetaData model_meta_data;
       SetModelMetaData(static_cast<string>(object_data[0]),
@@ -96,12 +91,31 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
                        static_cast<bool>(object_data[3]),
                        static_cast<int>(object_data[4]),
                        static_cast<double>(object_data[5]),
+                       static_cast<int>(object_data[6]),
                        &model_meta_data);
-      model_bank_vector[ii] = model_meta_data;
-      printf("%s: %s, %d, %d, %d, %f\n", model_meta_data.name.c_str(),
-             model_meta_data.file.c_str(), model_meta_data.flipped,
-             model_meta_data.symmetric, model_meta_data.symmetry_mode,
-             model_meta_data.search_resolution);
+      model_bank_vector.push_back(model_meta_data);
+
+      if (kAPC) {
+        // Make 'n' models for the n num_variants.
+        ModelMetaData tweaked_model_meta_data;
+        const string &filename = model_meta_data.file;
+
+        for (int variant_num = 1;
+             variant_num <= model_meta_data.num_variants; ++variant_num) {
+          tweaked_model_meta_data = model_meta_data;
+          tweaked_model_meta_data.file.replace(filename.size() - 4, 4,
+                                               std::to_string(variant_num) + ".stl");
+          tweaked_model_meta_data.name = model_meta_data.name + std::to_string(
+                                           variant_num);
+
+          printf("%s: %s, %d, %d, %d, %f, %d\n", tweaked_model_meta_data.name.c_str(),
+                 tweaked_model_meta_data.file.c_str(), tweaked_model_meta_data.flipped,
+                 tweaked_model_meta_data.symmetric, tweaked_model_meta_data.symmetry_mode,
+                 tweaked_model_meta_data.search_resolution,
+                 tweaked_model_meta_data.num_variants);
+          model_bank_vector.push_back(tweaked_model_meta_data);
+        }
+      }
     }
 
     // Load planner config params.
@@ -137,11 +151,13 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   env_config_.res = search_resolution_translation;
   env_config_.theta_res = search_resolution_yaw;
 
-  ModelBank model_bank;
+  model_bank_.clear();
+
   for (const auto &meta_data : model_bank_vector) {
-    model_bank[meta_data.name] = meta_data;
+    model_bank_[meta_data.name] = meta_data;
   }
-  env_config_.model_bank = model_bank;
+
+  env_config_.model_bank = model_bank_;
   // Set model files
   env_obj_.reset(new EnvObjectRecognition(mpi_world_));
   env_obj_->Initialize(env_config_);
@@ -179,11 +195,14 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
   if (IsMaster(mpi_world_)) {
     printf("Object recognizer received request to localize %zu objects: \n",
-          input.model_names.size());
+           input.model_names.size());
+
     for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
       printf("Model %zu: %s\n", ii, input.model_names[ii].c_str());
     }
   }
+
+  RecognitionInput tweaked_input = input;
 
   if (kAPC) {
     Eigen::Affine3f cam_to_body;
@@ -192,16 +211,68 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
                        0, -1, 0, 0,
                        0, 0, 0, 1;
     Eigen::Isometry3d camera_pose;
-    RecognitionInput tweaked_input = input;
     tweaked_input.camera_pose = input.camera_pose.matrix() *
-                        cam_to_body.inverse().matrix().cast<double>();;
-    env_obj_->SetInput(tweaked_input);
+                                cam_to_body.inverse().matrix().cast<double>();;
+  };
+
+  bool plan_success = false;
+
+  if (kAPC) {
+    // If APC, iterate over multiple heights and object model variations.
+    const double kHeightResolution = 0.01; //m (1 cm)
+    vector<double> heights = {input.table_height,
+                              input.table_height + kHeightResolution,
+                              input.table_height + 2.0 * kHeightResolution
+                             };
+    double best_solution_cost = std::numeric_limits<double>::max();
+    vector<PointCloudPtr> object_point_clouds;
+    vector<ContPose> best_detected_poses;
+
+    assert(static_cast<int>(input.model_names.size()) == 1);
+    const string &target_object = input.model_names[0];
+    auto model_bank_it = model_bank_.find(target_object);
+    assert(model_bank_it != model_bank_.end());
+    const int num_variants = model_bank_it->second.num_variants;
+    cout << target_object << " has " << num_variants << " variants!!!" << endl;
+
+    for (int variant_num = 1; variant_num <= num_variants; ++variant_num) {
+      tweaked_input.model_names[0] = target_object + std::to_string(variant_num);
+
+      for (double height : heights) {
+        tweaked_input.table_height = height;
+        env_obj_->SetInput(tweaked_input);
+        // Wait until all processes are ready for the planning phase.
+        mpi_world_->barrier();
+        const bool iteration_plan_success = RunPlanner(detected_poses);
+
+        plan_success |= iteration_plan_success;
+
+        if (IsMaster(mpi_world_)) {
+          double solution_cost = std::numeric_limits<double>::max();
+
+          if (iteration_plan_success) {
+            solution_cost = last_planning_stats_[0].cost;
+            std::cout << "Solution cost: " << solution_cost << std::endl;
+          }
+
+          if (iteration_plan_success && solution_cost < best_solution_cost) {
+            best_solution_cost = solution_cost;
+            best_detected_poses = *detected_poses;
+            object_point_clouds = last_object_point_clouds_;
+          }
+        }
+      }
+    }
+
+    last_object_point_clouds_ = object_point_clouds;
+    *detected_poses = best_detected_poses;
+    // TODO: accumulate env and planning stats over iterations.
   } else {
-    env_obj_->SetInput(input);
+    env_obj_->SetInput(tweaked_input);
+    // Wait until all processes are ready for the planning phase.
+    mpi_world_->barrier();
+    plan_success = RunPlanner(detected_poses);
   }
-  // Wait until all processes are ready for the planning phase.
-  mpi_world_->barrier();
-  const bool plan_success = RunPlanner(detected_poses);
 
   return plan_success;
 }
@@ -214,6 +285,7 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
   if (IsMaster(mpi_world_)) {
     printf("Object recognizer received request to localize %zu objects: \n",
            model_ids.size());
+
     for (size_t ii = 0; ii < model_ids.size(); ++ii) {
       printf("Model %zu: %d\n", ii, model_ids[ii]);
     }
@@ -342,3 +414,5 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   return plan_success;
 }
 }  // namespace
+
+

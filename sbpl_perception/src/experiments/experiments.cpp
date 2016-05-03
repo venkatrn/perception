@@ -138,38 +138,12 @@ int main(int argc, char **argv) {
   ObjectRecognizer object_recognizer(world);
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
-  vector<Eigen::Affine3f> object_transforms, temp_object_transforms;
+  vector<Eigen::Affine3f> object_transforms;
   vector<PointCloudPtr> object_point_clouds;
-  double best_solution_cost = std::numeric_limits<double>::max();
+  const bool found_solution = object_recognizer.LocalizeObjects(input,
+                                                                &object_transforms);
+  object_point_clouds = object_recognizer.GetObjectPointClouds();
 
-  const double kHeightResolution = 0.01; //m (1 cm)
-  vector<double> heights = {input.table_height,
-                            input.table_height + kHeightResolution,
-                            input.table_height + 2.0 * kHeightResolution
-                           };
-
-  for (double height : heights) {
-    input.table_height = height;
-    const bool found_solution = object_recognizer.LocalizeObjects(input,
-                                                                  &temp_object_transforms);
-
-    if (IsMaster(world)) {
-      if (!found_solution) {
-        continue;
-      }
-
-      const double solution_cost =
-        object_recognizer.GetLastPlanningEpisodeStats()[0].cost;
-
-      std::cout << "Solution cost: " << solution_cost << std::endl;
-
-      if (solution_cost < best_solution_cost) {
-        best_solution_cost = solution_cost;
-        object_transforms = temp_object_transforms;
-        object_point_clouds = object_recognizer.GetObjectPointClouds();
-      }
-    }
-  }
 
   if (IsMaster(world)) {
     if (object_transforms.empty()) {

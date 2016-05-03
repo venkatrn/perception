@@ -9,318 +9,358 @@
       flipped (up-side down in the images wrt to the model),
       symmetric (rotationally symmetric about Z-axis)]  
       -->
-        [
-        dove_beauty_bar,
-        $(find sbpl_perception)/data/apc_models/dove_beauty_bar.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        rawlings_baseball,
-        $(find sbpl_perception)/data/apc_models/rawlings_baseball.stl,
-        false,
-        true,
-        2,
-        0.03
-        ],
-        [
-        clorox_utility_brush,
-        $(find sbpl_perception)/data/apc_models/clorox_utility_brush.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        dr_browns_bottle_brush,
-        $(find sbpl_perception)/data/apc_models/dr_browns_bottle_brush.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        dasani_water_bottle,
-        $(find sbpl_perception)/data/apc_models/dasani_water_bottle.stl,
-        false,
-        true,
-        2,
-        0.1
-        ],
-        [
-        easter_turtle_sippy,
-        $(find sbpl_perception)/data/apc_models/easter_turtle_sippy.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        cherokee_easy_tee_shirt,
-        $(find sbpl_perception)/data/apc_models/cherokee_easy_tee_shirt.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        folgers_classic_roast_coffee,
-        $(find sbpl_perception)/data/apc_models/folgers_classic_roast_coffee.stl,
-        false,
-        true,
-        2,
-        0.1
-        ],
-        [
-        crayola_24_ct,
-        $(find sbpl_perception)/data/apc_models/crayola_24_ct.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        peva_shower_curtain_liner,
-        $(find sbpl_perception)/data/apc_models/peva_shower_curtain_liner.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        barkely_hide_bones,
-        $(find sbpl_perception)/data/apc_models/barkely_hide_bones.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        kyjen_squeakin_eggs_plush_puppies,
-        $(find sbpl_perception)/data/apc_models/kyjen_squeakin_eggs_plush_puppies.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        expo_dry_erase_board_eraser,
-        $(find sbpl_perception)/data/apc_models/expo_dry_erase_board_eraser.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        scotch_duct_tape,
-        $(find sbpl_perception)/data/apc_models/scotch_duct_tape.stl,
-        false,
-        true,
-        2,
-        0.03
-        ],
-        [
-        jane_eyre_dvd,
-        $(find sbpl_perception)/data/apc_models/jane_eyre_dvd.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        scotch_bubble_mailer,
-        $(find sbpl_perception)/data/apc_models/scotch_bubble_mailer.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        woods_extension_cord,
-        $(find sbpl_perception)/data/apc_models/woods_extension_cord.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        womens_knit_gloves,
-        $(find sbpl_perception)/data/apc_models/womens_knit_gloves.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        cool_shot_glue_sticks,
-        $(find sbpl_perception)/data/apc_models/cool_shot_glue_sticks.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        elmers_washable_no_run_school_glue,
-        $(find sbpl_perception)/data/apc_models/elmers_washable_no_run_school_glue.stl,
-        false,
-        true,
-        2,
-        0.1
-        ],
-        [
-        staples_index_cards,
-        $(find sbpl_perception)/data/apc_models/staples_index_cards.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        laugh_out_loud_joke_book,
-        $(find sbpl_perception)/data/apc_models/laugh_out_loud_joke_book.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        i_am_a_bunny_book,
-        $(find sbpl_perception)/data/apc_models/i_am_a_bunny_book.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        kleenex_tissue_box,
-        $(find sbpl_perception)/data/apc_models/kleenex_tissue_box.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        soft_white_lightbulb,
-        $(find sbpl_perception)/data/apc_models/soft_white_lightbulb.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        kleenex_paper_towels,
-        $(find sbpl_perception)/data/apc_models/kleenex_paper_towels.stl,
-        false,
-        false,
-        1,
-        0.15
-        ],
-        [
-        rolodex_jumbo_pencil_cup,
-        $(find sbpl_perception)/data/apc_models/rolodex_jumbo_pencil_cup.stl,
-        false,
-        true,
-        2,
-        0.1
-        ],
-        [
-        ticonderoga_12_pencils,
-        $(find sbpl_perception)/data/apc_models/ticonderoga_12_pencils.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        platinum_pets_dog_bowl,
-        $(find sbpl_perception)/data/apc_models/platinum_pets_dog_bowl.stl,
-        false,
-        true,
-        2,
-        0.1
-        ],
-        [
-        hanes_tube_socks,
-        $(find sbpl_perception)/data/apc_models/hanes_tube_socks.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        creativity_chenille_stems,
-        $(find sbpl_perception)/data/apc_models/creativity_chenille_stems.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        fiskars_scissors_red,
-        $(find sbpl_perception)/data/apc_models/fiskars_scissors_red.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        cloud_b_plush_bear,
-        $(find sbpl_perception)/data/apc_models/cloud_b_plush_bear.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        safety_first_outlet_plugs,
-        $(find sbpl_perception)/data/apc_models/safety_first_outlet_plugs.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        fitness_gear_3lb_dumbbell,
-        $(find sbpl_perception)/data/apc_models/fitness_gear_3lb_dumbbell.stl,
-        false,
-        false,
-        1,
-        0.03
-        ],
-        [
-        oral_b_toothbrush_green,
-        $(find sbpl_perception)/data/apc_models/oral_b_toothbrush_green.stl,
-        false,
-        false,
-        1,
-        0.1
-        ],
-        [
-        up_glucose_bottle,
-        $(find sbpl_perception)/data/apc_models/up_glucose_bottle.stl,
-        false,
-        true,
-        2,
-        0.1
-        ],
-        [
-        command_hooks,
-        $(find sbpl_perception)/data/apc_models/command_hooks.stl,
-        false,
-        false,
-        0,
-        0.1
-        ],
-        [
-        oral_b_toothbrush_red,
-        $(find sbpl_perception)/data/apc_models/oral_b_toothbrush_red.stl,
-        false,
-        false,
-        1,
-        0.1
-        ]
-        ]
+    [
+    dove_beauty_bar,
+    $(find sbpl_perception)/data/apc_models/dove_beauty_bar.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    rawlings_baseball,
+    $(find sbpl_perception)/data/apc_models/rawlings_baseball.stl,
+    false,
+    true,
+    2,
+    0.03,
+    1
+    ],
+    [
+    clorox_utility_brush,
+    $(find sbpl_perception)/data/apc_models/clorox_utility_brush.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    dr_browns_bottle_brush,
+    $(find sbpl_perception)/data/apc_models/dr_browns_bottle_brush.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    dasani_water_bottle,
+    $(find sbpl_perception)/data/apc_models/dasani_water_bottle.stl,
+    false,
+    true,
+    2,
+    0.1,
+    1
+    ],
+    [
+    easter_turtle_sippy,
+    $(find sbpl_perception)/data/apc_models/easter_turtle_sippy.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    cherokee_easy_tee_shirt,
+    $(find sbpl_perception)/data/apc_models/cherokee_easy_tee_shirt.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    folgers_classic_roast_coffee,
+    $(find sbpl_perception)/data/apc_models/folgers_classic_roast_coffee.stl,
+    false,
+    true,
+    2,
+    0.1,
+    1
+    ],
+    [
+    crayola_24_ct,
+    $(find sbpl_perception)/data/apc_models/crayola_24_ct.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    peva_shower_curtain_liner,
+    $(find sbpl_perception)/data/apc_models/peva_shower_curtain_liner.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    barkely_hide_bones,
+    $(find sbpl_perception)/data/apc_models/barkely_hide_bones.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    kyjen_squeakin_eggs_plush_puppies,
+    $(find sbpl_perception)/data/apc_models/kyjen_squeakin_eggs_plush_puppies.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    expo_dry_erase_board_eraser,
+    $(find sbpl_perception)/data/apc_models/expo_dry_erase_board_eraser.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    scotch_duct_tape,
+    $(find sbpl_perception)/data/apc_models/scotch_duct_tape.stl,
+    false,
+    true,
+    2,
+    0.1,
+    1
+    ],
+    [
+    jane_eyre_dvd,
+    $(find sbpl_perception)/data/apc_models/jane_eyre_dvd.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    scotch_bubble_mailer,
+    $(find sbpl_perception)/data/apc_models/scotch_bubble_mailer.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    woods_extension_cord,
+    $(find sbpl_perception)/data/apc_models/woods_extension_cord.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    womens_knit_gloves,
+    $(find sbpl_perception)/data/apc_models/womens_knit_gloves.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    cool_shot_glue_sticks,
+    $(find sbpl_perception)/data/apc_models/cool_shot_glue_sticks.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    elmers_washable_no_run_school_glue,
+    $(find sbpl_perception)/data/apc_models/elmers_washable_no_run_school_glue.stl,
+    false,
+    true,
+    2,
+    0.1,
+    1
+    ],
+    [
+    staples_index_cards,
+    $(find sbpl_perception)/data/apc_models/staples_index_cards.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    laugh_out_loud_joke_book,
+    $(find sbpl_perception)/data/apc_models/laugh_out_loud_joke_book.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    i_am_a_bunny_book,
+    $(find sbpl_perception)/data/apc_models/i_am_a_bunny_book.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    kleenex_tissue_box,
+    $(find sbpl_perception)/data/apc_models/kleenex_tissue_box.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    soft_white_lightbulb,
+    $(find sbpl_perception)/data/apc_models/soft_white_lightbulb.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    kleenex_paper_towels,
+    $(find sbpl_perception)/data/apc_models/kleenex_paper_towels.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    rolodex_jumbo_pencil_cup,
+    $(find sbpl_perception)/data/apc_models/rolodex_jumbo_pencil_cup.stl,
+    false,
+    true,
+    2,
+    0.1,
+    1
+    ],
+    [
+    ticonderoga_12_pencils,
+    $(find sbpl_perception)/data/apc_models/ticonderoga_12_pencils.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    platinum_pets_dog_bowl,
+    $(find sbpl_perception)/data/apc_models/platinum_pets_dog_bowl.stl,
+    false,
+    true,
+    2,
+    0.1,
+    1
+    ],
+    [
+    hanes_tube_socks,
+    $(find sbpl_perception)/data/apc_models/hanes_tube_socks.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    creativity_chenille_stems,
+    $(find sbpl_perception)/data/apc_models/creativity_chenille_stems.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    fiskars_scissors_red,
+    $(find sbpl_perception)/data/apc_models/fiskars_scissors_red.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    cloud_b_plush_bear,
+    $(find sbpl_perception)/data/apc_models/cloud_b_plush_bear.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    safety_first_outlet_plugs,
+    $(find sbpl_perception)/data/apc_models/safety_first_outlet_plugs.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    fitness_gear_3lb_dumbbell,
+    $(find sbpl_perception)/data/apc_models/fitness_gear_3lb_dumbbell.stl,
+    false,
+    false,
+    1,
+    0.03,
+    1
+    ],
+    [
+    oral_b_toothbrush_green,
+    $(find sbpl_perception)/data/apc_models/oral_b_toothbrush_green.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ],
+    [
+    up_glucose_bottle,
+    $(find sbpl_perception)/data/apc_models/up_glucose_bottle.stl,
+    false,
+    true,
+    2,
+    0.1,
+    1
+    ],
+    [
+    command_hooks,
+    $(find sbpl_perception)/data/apc_models/command_hooks.stl,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ],
+    [
+    oral_b_toothbrush_red,
+    $(find sbpl_perception)/data/apc_models/oral_b_toothbrush_red.stl,
+    false,
+    false,
+    1,
+    0.1,
+    1
+    ]
+
+    ]
   </rosparam>
 </launch>
