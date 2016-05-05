@@ -46,16 +46,19 @@ int main(int argc, char **argv) {
 
   boost::filesystem::path config_file_path = argv[1];
   boost::filesystem::path output_file_poses = argv[2];
+  boost::filesystem::path output_file_stats = argv[3];
 
   if (!boost::filesystem::is_regular_file(config_file_path)) {
     cerr << "Invalid config file" << endl;
     return -1;
   }
 
-  ofstream fs_poses;
+  ofstream fs_poses, fs_stats;
 
   if (IsMaster(world)) {
     fs_poses.open (output_file_poses.string().c_str(),
+                   std::ofstream::out | std::ofstream::app);
+    fs_stats.open (output_file_stats.string().c_str(),
                    std::ofstream::out | std::ofstream::app);
   }
 
@@ -121,7 +124,12 @@ int main(int argc, char **argv) {
 
   if (IsMaster(world)) {
     auto env_obj = object_recognizer.GetMutableEnvironment();
+
+	  chrono::time_point<chrono::system_clock> start, end;
+    start = chrono::system_clock::now();
     auto greedy_state = env_obj->ComputeGreedyICPPoses();
+		end = chrono::system_clock::now();
+		chrono::duration<double> elapsed_seconds = end-start;
 
     for (const auto &object_state : greedy_state.object_states()) {
       auto pose = object_state.cont_pose();
@@ -140,7 +148,11 @@ int main(int argc, char **argv) {
                " " << pose.yaw() << endl;
     }
 
+    fs_stats << input_id << endl;
+    fs_stats << elapsed_seconds.count() << endl;
+
     fs_poses.close();
+		fs_stats.close();
   }
 
   return 0;

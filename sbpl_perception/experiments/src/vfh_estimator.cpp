@@ -17,6 +17,7 @@
 #include <boost/filesystem.hpp>
 
 #include <algorithm>
+#include <chrono>
 
 using namespace perception_utils;
 using namespace std;
@@ -232,14 +233,15 @@ int main(int argc, char **argv) {
   // }
   // string config_file = argv[1];
 
-  if (argc < 3) {
-    cerr << "Usage: ./vfh_estimator <path_to_config_dir> <path_to_output_file>"
+  if (argc < 4) {
+    cerr << "Usage: ./vfh_estimator <path_to_config_dir> <path_output_file_poses> <path_output_state_file>"
          << endl;
     return -1;
   }
 
   boost::filesystem::path config_dir = argv[1];
   boost::filesystem::path output_file = argv[2];
+  boost::filesystem::path output_file_stats = argv[3];
 
   ros::init(argc, argv, "ourcvfh_estimator");
   ros::NodeHandle private_nh("~");
@@ -281,10 +283,16 @@ int main(int argc, char **argv) {
   }
 
 
-  ofstream fs;
+  ofstream fs, fs_stats;
   fs.open (output_file.string().c_str());
 
   if (!fs.is_open () || fs.fail ()) {
+    return (false);
+  }
+
+  fs_stats.open (output_file_stats.string().c_str(),
+                 std::ofstream::out | std::ofstream::app);
+  if (!fs_stats.is_open () || fs_stats.fail ()) {
     return (false);
   }
 
@@ -330,6 +338,10 @@ int main(int argc, char **argv) {
       train_obj_models.push_back(train_obj_model);
     }
 
+    // Start measuring computation time.
+	  chrono::time_point<chrono::system_clock> start, end;
+    start = chrono::system_clock::now();
+
     VFHPoseEstimator pose_estimator;
     float roll, pitch, yaw;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_colorless (new
@@ -345,6 +357,7 @@ int main(int argc, char **argv) {
       fs << config_file << endl;
       for (size_t ii = 0; ii < parser.model_files.size(); ++ii) {
         fs << "-1" << " " << "-1" << " " << "-1" << " " << "-1" << endl;
+        fs_stats << "-1" << endl;
       }
       continue;
     }
@@ -438,6 +451,13 @@ int main(int argc, char **argv) {
     vector<int> left_mates, right_mates;
     MinCostMatching(cost_matrix, left_mates, right_mates);
 
+
+    // Stop measuring computation time.
+		end = chrono::system_clock::now();
+		chrono::duration<double> elapsed_seconds = end-start;
+    fs_stats << config_file << endl;
+    fs_stats << elapsed_seconds.count() << endl;
+
     PointCloudPtr composed_cloud(new PointCloud);
 
     fs << config_file << endl;
@@ -503,6 +523,7 @@ int main(int argc, char **argv) {
     writer.writeBinary (ss.str()  , *composed_cloud);
   }
   fs.close();
+  fs_stats.close();
 
   return 0;
 }
