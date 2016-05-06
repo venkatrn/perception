@@ -53,6 +53,9 @@ constexpr bool kSingleObjectMode = true;
 // the object volume as an extraneous occluder if its depth is less than
 // depth(rendered pixel) - kOcclusionThreshold.
 constexpr unsigned short kOcclusionThreshold = 20; // mm
+// Tolerance used when deciding the footprint of the object in a given pose is
+// out of bounds of the supporting place.
+constexpr double kFootprintTolerance = 0.05; // m
 }  // namespace
 
 namespace sbpl_perception {
@@ -232,6 +235,17 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
 
     if ((p.x() - obj_pose.x()) * (p.x() - obj_pose.x()) + (p.y() - obj_pose.y()) *
         (p.y() - obj_pose.y()) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
+      return false;
+    }
+  }
+
+  // Check if the footprint is contained with the support surface bounds.
+  auto footprint = obj_models_[model_id].GetFootprint(p, env_params_.table_height); 
+  for (const auto &point : footprint->points) {
+    if (point.x < env_params_.x_min - kFootprintTolerance ||
+        point.x > env_params_.x_max + kFootprintTolerance ||
+        point.y < env_params_.y_min - kFootprintTolerance ||
+        point.y > env_params_.y_max + kFootprintTolerance) {
       return false;
     }
   }
@@ -2423,6 +2437,18 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(const vector<in
   vector<int> last_counted_indices;
   vector<int> delta_counted_indices;
 
+  // Create Eigen types of input cloud.
+  vector<Eigen::Vector3d> eig_points(original_input_cloud_->points.size());
+  std::transform(original_input_cloud_->points.begin(),
+                original_input_cloud_->points.end(),
+                eig_points.begin(), [](const PointT &pcl_point) {
+                Eigen::Vector3d eig_point;
+                eig_point[0] = pcl_point.x;
+                eig_point[1] = pcl_point.y;
+                eig_point[2] = pcl_point.z;
+                return eig_point;
+                });
+
   for (int ii = 1; ii < solution_state_ids.size(); ++ii) {
     int graph_state_id = solution_state_ids[ii];
     // Handle goal state differently.
@@ -2439,16 +2465,18 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(const vector<in
     int object_id = graph_state.object_states().back().id();
     assert(object_id >= 0 && object_id < env_params_.num_objects);
 
-    vector<int> counted_indices = counted_pixels_map_[graph_state_id];
-    delta_counted_indices.resize(counted_indices.size() - last_counted_indices.size());
-    auto it = std::set_difference(counted_indices.begin(), counted_indices.end(),
-                                  last_counted_indices.begin(), last_counted_indices.end(),
-                                  delta_counted_indices.begin());
-    last_counted_indices = counted_indices;
-    // printf("State %d, Object: %d, Total counted: %d, Delta: %d\n", graph_state_id, object_id, static_cast<int>(counted_indices.size()), static_cast<int>(delta_counted_indices.size()));
-
-    PointCloudPtr object_cloud = perception_utils::IndexFilter(original_input_cloud_, delta_counted_indices, false);
+    const vector<bool> inside_mesh = obj_models_[object_id].PointsInsideMesh(eig_points, graph_state.object_states().back().cont_pose(), env_params_.table_height);
+    vector<int> inside_mesh_indices;
+    inside_mesh_indices.reserve(inside_mesh.size());
+    for (size_t ii = 0; ii < inside_mesh.size(); ++ii) {
+      if (inside_mesh[ii]) {
+        inside_mesh_indices.push_back(static_cast<int>(ii));
+      }
+    }
+    PointCloudPtr object_cloud = perception_utils::IndexFilter(original_input_cloud_, inside_mesh_indices, false);
     object_point_clouds[object_id] = object_cloud;
+
+
   }
   return object_point_clouds;
 }

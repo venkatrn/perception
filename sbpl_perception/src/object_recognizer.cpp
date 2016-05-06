@@ -26,6 +26,10 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
   mpi_world_ = mpi_world;
 
+  if (kAPC) {
+    best_variant_idx_ = 0;
+  }
+
   vector<ModelMetaData> model_bank_vector;
   double search_resolution_translation = 0.0;
   double search_resolution_yaw = 0.0;
@@ -234,6 +238,7 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
     assert(model_bank_it != model_bank_.end());
     const int num_variants = model_bank_it->second.num_variants;
     cout << target_object << " has " << num_variants << " variants!!!" << endl;
+    best_variant_idx_ = 1;
 
     for (int variant_num = 1; variant_num <= num_variants; ++variant_num) {
       tweaked_input.model_names[0] = target_object + std::to_string(variant_num);
@@ -256,6 +261,7 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
           }
 
           if (iteration_plan_success && solution_cost < best_solution_cost) {
+            best_variant_idx_ = variant_num;
             best_solution_cost = solution_cost;
             best_detected_poses = *detected_poses;
             object_point_clouds = last_object_point_clouds_;

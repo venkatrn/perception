@@ -264,8 +264,8 @@ void ObjectModel::SetObjectProperties() {
   convex_hull.reconstruct(*cloud_hull, polygons);
   // 2D point set should have only one polygon.
   assert(polygons.size() == 1);
-  convex_hull_footprint_.reset(new pcl::PointCloud<pcl::PointXYZ>);
-  convex_hull_footprint_ = cloud_hull;
+  convex_hull_footprint_.reset(new PointCloud);
+  pcl::copyPointCloud(*cloud_hull, *convex_hull_footprint_);
 
   // Inflate the footprint such that the new footprint's inscribed radius is
   // bigger than the old inscribed radius by 0.5 cm.
@@ -436,7 +436,7 @@ vector<bool> ObjectModel::PointsInsideFootprint(const std::vector<Eigen::Vector2
 
   // #pragma omp parallel for
   for(size_t ii = 0; ii < transformed_points.size(); ++ii) {
-    pcl::PointXYZ pcl_point;
+    PointT pcl_point;
     pcl_point.x = transformed_points[ii][0];
     pcl_point.y = transformed_points[ii][1];
     // pcl_point.z = table_height;
@@ -455,4 +455,21 @@ vector<bool> ObjectModel::PointsInsideFootprint(const std::vector<Eigen::Vector2
     // is_inside[ii] = IsInPoly(pcl_point, *transformed_footprint);
   }
   return is_inside;
+}
+
+PointCloudPtr ObjectModel::GetFootprint(const ContPose &pose, double table_height, bool use_inflation/*=false*/) const {
+  Eigen::Affine3f transform;
+  transform.matrix() <<
+            cos(pose.yaw()), -sin(pose.yaw()) , 0, pose.x(),
+                sin(pose.yaw()) , cos(pose.yaw()) , 0, pose.y(),
+                0, 0 , 1 , table_height,
+                0, 0 , 0 , 1;
+
+  if (use_inflation) {
+    transform.matrix().block<3,3>(0,0) = inflation_factor_ * transform.matrix().block<3,3>(0,0);
+  }
+
+  PointCloudPtr transformed_footprint (new PointCloud);
+  transformPointCloud(*convex_hull_footprint_, *transformed_footprint, transform);
+  return transformed_footprint;
 }

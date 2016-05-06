@@ -45,8 +45,10 @@ class ObjectRecognizer {
   std::shared_ptr<EnvObjectRecognition> GetMutableEnvironment() {
     return env_obj_;
   }
+
+  int GetBestVariantIndex() {return best_variant_idx_;}
  private:
-  mutable std::shared_ptr<EnvObjectRecognition> env_obj_;
+  std::shared_ptr<EnvObjectRecognition> env_obj_;
   mutable std::unique_ptr<MHAPlanner> planner_;
   mutable std::vector<PlannerStats> last_planning_stats_;
   mutable EnvStats last_env_stats_;
@@ -61,5 +63,8 @@ class ObjectRecognizer {
   ModelBank model_bank_;
 
   bool RunPlanner(std::vector<ContPose> *detected_poses) const;
+
+  // For APC.
+  mutable int best_variant_idx_;
 };
 }  // namespace

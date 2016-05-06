@@ -143,6 +143,7 @@ int main(int argc, char **argv) {
   const bool found_solution = object_recognizer.LocalizeObjects(input,
                                                                 &object_transforms);
   object_point_clouds = object_recognizer.GetObjectPointClouds();
+  int best_variant_idx = object_recognizer.GetBestVariantIndex();
 
 
   if (IsMaster(world)) {
@@ -169,7 +170,7 @@ int main(int argc, char **argv) {
     srand(time(0));
 
     for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
-      string model_name = input.model_names[ii];
+      string model_name = input.model_names[ii] + std::to_string(best_variant_idx);
       std::cout << "Object: " << model_name << std::endl;
       std::cout << object_transforms[ii].matrix() << std::endl << std::endl;
       string model_file = model_bank.at(model_name).file;

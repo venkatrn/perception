@@ -39,6 +39,10 @@ class ObjectModel {
   // Returns true if point is within the convex hull of the 2D-projected mesh model, where the model has been
   // transformed by the given pose and height.
   std::vector<bool> PointsInsideFootprint(const std::vector<Eigen::Vector2d> &points, const ContPose &pose, double table_height) const;
+
+  // Return the convex-hull footprint of the object at the pose of the object. 
+  PointCloudPtr GetFootprint(const ContPose &pose, double table_height, bool use_inflation=false) const;
+  
   static void TransformPolyMesh(const pcl::PolygonMesh::Ptr
                        &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform);
   // Accessors
@@ -94,7 +98,7 @@ class ObjectModel {
   std::string name_;
   double min_x_, min_y_, min_z_; // Bounding box in default orientation
   double max_x_, max_y_, max_z_;
-  pcl::PointCloud<pcl::PointXYZ>::Ptr convex_hull_footprint_; // Convex polygon footprint for the object in default orientation.
+  PointCloudPtr convex_hull_footprint_; // Convex polygon footprint for the object in default orientation.
   Eigen::Affine3f preprocessing_transform_;
   // Inflation factor for the mesh, which is a function of the inscribed
   // radius. This is used in methods that check if a point is within the
