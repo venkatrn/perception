@@ -55,7 +55,7 @@ constexpr bool kSingleObjectMode = true;
 constexpr unsigned short kOcclusionThreshold = 20; // mm
 // Tolerance used when deciding the footprint of the object in a given pose is
 // out of bounds of the supporting place.
-constexpr double kFootprintTolerance = 0.05; // m
+constexpr double kFootprintTolerance = 0.02; // m
 }  // namespace
 
 namespace sbpl_perception {
@@ -1386,6 +1386,9 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
   // TODO: make principled
   if (full_rendered_cloud->points.empty()) {
+    if (kSingleObjectMode) {
+      return 100;
+    }
     return 100000;
   }
 
@@ -1528,7 +1531,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
   int source_cost = 0;
   if (kSingleObjectMode) {
-    if (indices_to_consider.empty()) {
+    // if (indices_to_consider.empty()) {
+    if (static_cast<int>(indices_to_consider.size()) < perch_params_.min_neighbor_points_for_valid_pose) {
       return 100;
     } 
     source_cost = static_cast<int>(nn_score * 100 / indices_to_consider.size());

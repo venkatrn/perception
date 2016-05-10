@@ -63,7 +63,7 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904526.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904618.txt"/> <!&#45;&#45; model is incorrectly scaled&#45;&#45;> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904879.txt"/> -->
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904949.txt"/> --> <!-- orientation change-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904949.txt"/> <!&#45;&#45; orientation change&#45;&#45;> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905278.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905467.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905601.txt"/> -->
@@ -71,7 +71,12 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904229.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904784.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905359.txt"/> -->
-      <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1462053786_perch.txt"/>
+
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462064522_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462054875_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462057862_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462057962_perch.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462058013_perch.txt"/>
 
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462052875_perch.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462053738_perch.txt"/> -->

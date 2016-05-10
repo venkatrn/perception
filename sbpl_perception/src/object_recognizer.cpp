@@ -99,27 +99,29 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
                        &model_meta_data);
       model_bank_vector.push_back(model_meta_data);
 
-      if (kAPC) {
-        // Make 'n' models for the n num_variants.
-        ModelMetaData tweaked_model_meta_data;
-        const string &filename = model_meta_data.file;
-
-        for (int variant_num = 1;
-             variant_num <= model_meta_data.num_variants; ++variant_num) {
-          tweaked_model_meta_data = model_meta_data;
-          tweaked_model_meta_data.file.replace(filename.size() - 4, 4,
-                                               std::to_string(variant_num) + ".stl");
-          tweaked_model_meta_data.name = model_meta_data.name + std::to_string(
-                                           variant_num);
-
-          printf("%s: %s, %d, %d, %d, %f, %d\n", tweaked_model_meta_data.name.c_str(),
-                 tweaked_model_meta_data.file.c_str(), tweaked_model_meta_data.flipped,
-                 tweaked_model_meta_data.symmetric, tweaked_model_meta_data.symmetry_mode,
-                 tweaked_model_meta_data.search_resolution,
-                 tweaked_model_meta_data.num_variants);
-          model_bank_vector.push_back(tweaked_model_meta_data);
-        }
-      }
+      // We now require the model bank to list a separate entity for every
+      // variant of the object.
+      // if (kAPC) {
+      //   // Make 'n' models for the n num_variants.
+      //   ModelMetaData tweaked_model_meta_data;
+      //   const string &filename = model_meta_data.file;
+      //
+      //   for (int variant_num = 1;
+      //        variant_num <= model_meta_data.num_variants; ++variant_num) {
+      //     tweaked_model_meta_data = model_meta_data;
+      //     tweaked_model_meta_data.file.replace(filename.size() - 4, 4,
+      //                                          std::to_string(variant_num) + ".stl");
+      //     tweaked_model_meta_data.name = model_meta_data.name + std::to_string(
+      //                                      variant_num);
+      //
+      //     printf("%s: %s, %d, %d, %d, %f, %d\n", tweaked_model_meta_data.name.c_str(),
+      //            tweaked_model_meta_data.file.c_str(), tweaked_model_meta_data.flipped,
+      //            tweaked_model_meta_data.symmetric, tweaked_model_meta_data.symmetry_mode,
+      //            tweaked_model_meta_data.search_resolution,
+      //            tweaked_model_meta_data.num_variants);
+      //     model_bank_vector.push_back(tweaked_model_meta_data);
+      //   }
+      // }
     }
 
     // Load planner config params.
@@ -182,13 +184,18 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
   assert(detected_poses.size() == input.model_names.size());
 
-  const auto &models = env_obj_->obj_models_;
-  object_transforms->resize(input.model_names.size());
+  if (kAPC) {
+    object_transforms->push_back(best_transform_);
 
-  for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
-    const auto &obj_model = models[ii];
-    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
-                                  detected_poses[ii], input.table_height);
+  } else {
+    const auto &models = env_obj_->obj_models_;
+    object_transforms->resize(input.model_names.size());
+
+    for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
+      const auto &obj_model = models[ii];
+      object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
+                                    detected_poses[ii], input.table_height);
+    }
   }
 
   return plan_success;
@@ -224,9 +231,9 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
   if (kAPC) {
     // If APC, iterate over multiple heights and object model variations.
     const double kHeightResolution = 0.01; //m (1 cm)
-    vector<double> heights = {input.table_height,
-                              input.table_height + kHeightResolution,
-                              input.table_height + 2.0 * kHeightResolution
+    vector<double> heights = {input.table_height - kHeightResolution,
+                              input.table_height,
+                              input.table_height + kHeightResolution
                              };
     double best_solution_cost = std::numeric_limits<double>::max();
     vector<PointCloudPtr> object_point_clouds;
@@ -237,7 +244,8 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
     auto model_bank_it = model_bank_.find(target_object);
     assert(model_bank_it != model_bank_.end());
     const int num_variants = model_bank_it->second.num_variants;
-    cout << target_object << " has " << num_variants << " variants!!!" << endl;
+    cout << target_object << " has " << num_variants << " variants." << endl;
+
     best_variant_idx_ = 1;
 
     for (int variant_num = 1; variant_num <= num_variants; ++variant_num) {
@@ -265,6 +273,8 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
             best_solution_cost = solution_cost;
             best_detected_poses = *detected_poses;
             object_point_clouds = last_object_point_clouds_;
+            best_transform_ = env_obj_->obj_models_[0].GetRawModelToSceneTransform(
+                                best_detected_poses[0], height);
           }
         }
       }
@@ -421,3 +431,4 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   return plan_success;
 }
 }  // namespace
+

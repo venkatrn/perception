@@ -52,7 +52,10 @@ class ObjectRecognizer {
   mutable std::unique_ptr<MHAPlanner> planner_;
   mutable std::vector<PlannerStats> last_planning_stats_;
   mutable EnvStats last_env_stats_;
+
+  // For APC.
   mutable std::vector<PointCloudPtr> last_object_point_clouds_;
+  mutable Eigen::Affine3f best_transform_;
 
 
   std::shared_ptr<boost::mpi::communicator> mpi_world_;
