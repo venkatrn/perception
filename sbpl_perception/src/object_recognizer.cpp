@@ -350,44 +350,45 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       ROS_INFO("Size of solution: %d", static_cast<int>(solution_state_ids.size()));
     } else {
       ROS_INFO("No solution found");
-      return false;
     }
 
-    for (size_t ii = 0; ii < solution_state_ids.size(); ++ii) {
-      printf("%d: %d\n", static_cast<int>(ii), solution_state_ids[ii]);
+    if (plan_success) {
+      for (size_t ii = 0; ii < solution_state_ids.size(); ++ii) {
+        printf("%d: %d\n", static_cast<int>(ii), solution_state_ids[ii]);
+      }
+
+      assert(solution_state_ids.size() > 1);
+
+      // Obtain the goal poses.
+      int goal_state_id = env_obj_->GetBestSuccessorID(
+                            solution_state_ids[solution_state_ids.size() - 2]);
+      printf("Goal state ID is %d\n", goal_state_id);
+      env_obj_->PrintState(goal_state_id,
+                           env_obj_->GetDebugDir() + string("goal_state.png"));
+      env_obj_->GetGoalPoses(goal_state_id, detected_poses);
+
+      cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;
+
+      for (const auto &pose : *detected_poses) {
+        cout << pose.x() << " " << pose.y() << " " << env_obj_->GetTableHeight() << " "
+             << pose.yaw() << endl;
+      }
+
+      // Planning episode statistics.
+      vector<PlannerStats> stats_vector;
+      planner_->get_search_stats(&stats_vector);
+      last_planning_stats_ = stats_vector;
+      EnvStats env_stats = env_obj_->GetEnvStats();
+      last_env_stats_ = env_stats;
+      last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
+
+      cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
+      cout << endl << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
+           << "Cost" << endl;
+      cout << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "  <<
+           stats_vector[0].expands
+           << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
     }
-
-    assert(solution_state_ids.size() > 1);
-
-    // Obtain the goal poses.
-    int goal_state_id = env_obj_->GetBestSuccessorID(
-                          solution_state_ids[solution_state_ids.size() - 2]);
-    printf("Goal state ID is %d\n", goal_state_id);
-    env_obj_->PrintState(goal_state_id,
-                         env_obj_->GetDebugDir() + string("goal_state.png"));
-    env_obj_->GetGoalPoses(goal_state_id, detected_poses);
-
-    cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;
-
-    for (const auto &pose : *detected_poses) {
-      cout << pose.x() << " " << pose.y() << " " << env_obj_->GetTableHeight() << " "
-           << pose.yaw() << endl;
-    }
-
-    // Planning episode statistics.
-    vector<PlannerStats> stats_vector;
-    planner_->get_search_stats(&stats_vector);
-    last_planning_stats_ = stats_vector;
-    EnvStats env_stats = env_obj_->GetEnvStats();
-    last_env_stats_ = env_stats;
-    last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
-
-    cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
-    cout << endl << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
-         << "Cost" << endl;
-    cout << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "  <<
-         stats_vector[0].expands
-         << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
 
     planning_finished = true;
 
@@ -420,5 +421,3 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   return plan_success;
 }
 }  // namespace
-
-
