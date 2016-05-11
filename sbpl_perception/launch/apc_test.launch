@@ -14,6 +14,7 @@
     <node pkg="sbpl_perception" type="real_test" name="real_test" output="screen" launch-prefix="mpirun -n 8" respawn="false">
       <rosparam command="load" file="$(find sbpl_perception)/config/env_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/planner_config.yaml" />
+      <rosparam command="load" file="$(find sbpl_perception)/config/apc_config.yaml" />
       <param name="image_debug" value="$(arg image_debug)"/>
 
       <!-- 4 glasses-->
@@ -76,7 +77,8 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462054875_perch.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462057862_perch.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462057962_perch.txt"/> -->
-      <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462058013_perch.txt"/>
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462058013_perch.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462063749_perch.txt"/>
 
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462052875_perch.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462053738_perch.txt"/> -->

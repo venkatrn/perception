@@ -229,12 +229,30 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
   bool plan_success = false;
 
   if (kAPC) {
-    // If APC, iterate over multiple heights and object model variations.
-    const double kHeightResolution = 0.01; //m (1 cm)
-    vector<double> heights = {input.table_height - kHeightResolution,
-                              input.table_height,
-                              input.table_height + kHeightResolution
-                             };
+    vector<double> support_height_deltas = {0};
+    int solution_criterion = 0;
+
+    if (IsMaster(mpi_world_)) {
+      ros::NodeHandle private_nh("~apc_params");
+
+      private_nh.param("support_height_deltas", support_height_deltas,
+                       std::vector<double>(1, 0));
+      private_nh.param("solution_criterion", solution_criterion, 0);
+
+      cout << "Iterating over " << support_height_deltas.size() << " support heights"
+           << endl;
+      cout << "Solution criterion " << solution_criterion << endl;
+    }
+
+    broadcast(*mpi_world_, support_height_deltas, kMasterRank);
+    broadcast(*mpi_world_, solution_criterion, kMasterRank);
+
+    vector<double> heights(support_height_deltas.size());
+
+    for (size_t ii = 0; ii < support_height_deltas.size(); ++ii) {
+      heights[ii] = input.table_height + support_height_deltas[ii];
+    }
+
     double best_solution_cost = std::numeric_limits<double>::max();
     vector<PointCloudPtr> object_point_clouds;
     vector<ContPose> best_detected_poses;
@@ -248,9 +266,11 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
     best_variant_idx_ = 1;
 
+    // Iterate over multiple object variants.
     for (int variant_num = 1; variant_num <= num_variants; ++variant_num) {
       tweaked_input.model_names[0] = target_object + std::to_string(variant_num);
 
+      // Iterate over multiple support heights.
       for (double height : heights) {
         tweaked_input.table_height = height;
         env_obj_->SetInput(tweaked_input);
@@ -264,8 +284,19 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
           double solution_cost = std::numeric_limits<double>::max();
 
           if (iteration_plan_success) {
-            solution_cost = last_planning_stats_[0].cost;
-            std::cout << "Solution cost: " << solution_cost << std::endl;
+            if (solution_criterion == 0) {
+              solution_cost = static_cast<double>(last_planning_stats_[0].cost);
+            } else if (solution_criterion == 1) {
+              // Use number of points within object as solution cost
+              solution_cost = -(static_cast<double>
+                                (last_object_point_clouds_[0]->points.size()));
+
+            } else {
+              cout << "Unknown solution criterion!" << endl;
+              return false;
+            }
+
+            cout << "Solution cost: " << solution_cost << std::endl;
           }
 
           if (iteration_plan_success && solution_cost < best_solution_cost) {
@@ -431,4 +462,5 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   return plan_success;
 }
 }  // namespace
+
 
