@@ -54,7 +54,7 @@ The states 'expanded' as well as the goal state will be saved under sbpl_percept
 roslaunch sbpl_perception demo.launch image_debug:=true
 ```
 You should see the following input depth and output depth images under sbpl_perception/visualization:
-![alt tag]( "https://sbpl.net/shared/Venkat/sbpl_perception/github_resources/demo_input.png Input Depth Image")
+![image](https://sbpl.net/shared/Venkat/sbpl_perception/github_resources/demo_input.png)
 ![alt tag]( "https://sbpl.net/shared/Venkat/sbpl_perception/github_resources/demo_output.png Output Depth Image")
 
 Configuration parameters for the algorithm can be found under sbpl_perception/config/demo_env_config.yaml and sbpl_perception/config/demo_planner_config.yaml, along with descriptions of those parameters.
