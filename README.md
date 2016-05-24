@@ -55,8 +55,8 @@ roslaunch sbpl_perception demo.launch image_debug:=true
 ```
 You should see the following input depth and output depth images under sbpl_perception/visualization:
 
-![image](https://sbpl.net/shared/Venkat/sbpl_perception/github_resources/demo_input.png)
-![](https://sbpl.net/shared/Venkat/sbpl_perception/github_resources/demo_output.png)
+![](https://cloud.githubusercontent.com/assets/1756204/15489006/ca12e31c-2129-11e6-9eed-4b984dd081fc.png)
+![](https://cloud.githubusercontent.com/assets/1756204/15489005/ca10b7e0-2129-11e6-966e-b75c6a43ff3d.png)
 
 Configuration parameters for the algorithm can be found under sbpl_perception/config/demo_env_config.yaml and sbpl_perception/config/demo_planner_config.yaml, along with descriptions of those parameters.
 
