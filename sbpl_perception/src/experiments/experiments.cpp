@@ -128,6 +128,16 @@ int main(int argc, char **argv) {
     }
 
     input.cloud = *cloud_in;
+
+    // Setup constraint cloud (leave empty if no constraints)
+    // constraint_cloud should be unorganized and the points must be in world frame (same 
+    // frame as input.cloud).
+    // Example usage for localizing glucose bottle in 1462063749_perch.txt:
+    // PointT constraint_point;
+    // constraint_point.x  = 1.121807;
+    // constraint_point.y = 0.318550;
+    // constraint_point.z = 0.651061;
+    // input.constraint_cloud.points.push_back(constraint_point);
   }
 
 

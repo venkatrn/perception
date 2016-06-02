@@ -51,6 +51,13 @@ struct RecognitionInput {
   // roi_x_bbox.txt and roi_x_det.txt, where x \in [1, #ROIs] in the depth
   // image. Refer to RCNNHeuristicFactory for more details.
   std::string heuristics_dir;
+  // Optional: A constraining point cloud. The solution (object pose) returned
+  // by PERCH is required to encompass at least 1 point from the set of points
+  // in the constraint_cloud. If empty, then this constraint is not used.
+  // NOTE: this is applicable only when using PERCH in single object mode.
+  // TODO: generalize this as a per-object heuristic instead for the
+  // multi-object case.
+  PointCloud constraint_cloud;
 };
 
 // A container for the holding the meta-data associated with a 3D model.
@@ -154,6 +161,7 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
     ar &input.y_max;
     ar &input.table_height;
     ar &input.heuristics_dir;
+    ar &input.constraint_cloud;
 }
 
 template<class Archive>

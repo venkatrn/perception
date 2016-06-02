@@ -39,6 +39,8 @@ class ObjectModel {
   // Returns true if point is within the convex hull of the 2D-projected mesh model, where the model has been
   // transformed by the given pose and height.
   std::vector<bool> PointsInsideFootprint(const std::vector<Eigen::Vector2d> &points, const ContPose &pose, double table_height) const;
+  std::vector<bool> PointsInsideFootprint(const PointCloudPtr &cloud, const ContPose &pose, double table_height) const;
+
 
   // Return the convex-hull footprint of the object at the pose of the object. 
   PointCloudPtr GetFootprint(const ContPose &pose, double table_height, bool use_inflation=false) const;

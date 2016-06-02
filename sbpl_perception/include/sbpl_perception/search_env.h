@@ -281,6 +281,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<unsigned short> observed_depth_image_;
   PointCloudPtr original_input_cloud_, observed_cloud_, downsampled_observed_cloud_,
                 observed_organized_cloud_, projected_cloud_;
+  // Refer RecognitionInput::constraint_cloud for details.
+  // This is an unorganized point cloud.
+  PointCloudPtr constraint_cloud_, projected_constraint_cloud_;
 
   bool image_debug_;
   // Print outputs/debug info to this directory. Assumes that directory exists.

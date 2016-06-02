@@ -78,6 +78,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
   scene_ = kinect_simulator_->scene_;
   observed_cloud_.reset(new PointCloud);
   original_input_cloud_.reset(new PointCloud);
+  constraint_cloud_.reset(new PointCloud);
+  projected_constraint_cloud_.reset(new PointCloud);
   projected_cloud_.reset(new PointCloud);
   observed_organized_cloud_.reset(new PointCloud);
   downsampled_observed_cloud_.reset(new PointCloud);
@@ -182,13 +184,13 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
 }
 
 bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
-                                       ContPose p, bool after_refinement = false) const {
+                                       ContPose pose, bool after_refinement = false) const {
   vector<int> indices;
   vector<float> sqr_dists;
   PointT point;
 
-  point.x = p.x();
-  point.y = p.y();
+  point.x = pose.x();
+  point.y = pose.y();
   point.z = env_params_.table_height;
   // point.z = (obj_models_[model_id].max_z()  - obj_models_[model_id].min_z()) /
   //           2.0 + env_params_.table_height;
@@ -233,19 +235,37 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
 
     rad_2 = obj_models_[obj_id].GetInscribedRadius();
 
-    if ((p.x() - obj_pose.x()) * (p.x() - obj_pose.x()) + (p.y() - obj_pose.y()) *
-        (p.y() - obj_pose.y()) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
+    if ((pose.x() - obj_pose.x()) * (pose.x() - obj_pose.x()) + (pose.y() - obj_pose.y()) *
+        (pose.y() - obj_pose.y()) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
       return false;
     }
   }
 
   // Check if the footprint is contained with the support surface bounds.
-  auto footprint = obj_models_[model_id].GetFootprint(p, env_params_.table_height); 
+  auto footprint = obj_models_[model_id].GetFootprint(pose, env_params_.table_height); 
   for (const auto &point : footprint->points) {
     if (point.x < env_params_.x_min - kFootprintTolerance ||
         point.x > env_params_.x_max + kFootprintTolerance ||
         point.y < env_params_.y_min - kFootprintTolerance ||
         point.y > env_params_.y_max + kFootprintTolerance) {
+      return false;
+    }
+  }
+
+  // Check if the footprint at this object pose contains at least one of the
+  // constraint points. Is constraint_cloud is empty, then we will bypass this
+  // check.
+  if (!constraint_cloud_->empty()) {
+    vector<bool> points_inside = obj_models_[model_id].PointsInsideFootprint(projected_constraint_cloud_, pose, env_params_.table_height);
+    int num_inside = 0;
+    for (size_t ii = 0; ii < points_inside.size(); ++ii) {
+      if (points_inside[ii]) {
+        ++num_inside;
+      }
+    }
+    // TODO: allow for more sophisticated validation? If not, then implement a
+    // AnyPointInsideFootprint method to speed up checking.
+    if (num_inside == 0) {
       return false;
     }
   }
@@ -1977,6 +1997,12 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     projected_cloud_->points[ii].z = env_params_.table_height;
   }
 
+  // Project the constraint cloud as well.
+  *projected_constraint_cloud_ = *constraint_cloud_;
+  for (size_t ii = 0; ii < projected_constraint_cloud_->size(); ++ii) {
+    projected_constraint_cloud_->points[ii].z = env_params_.table_height;
+  }
+
   projected_knn_.reset(new pcl::search::KdTree<PointT>(true));
   projected_knn_->setInputCloud(projected_cloud_);
 
@@ -2106,6 +2132,8 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   SetCameraPose(input.camera_pose);
   ResetEnvironmentState();
   *original_input_cloud_ = input.cloud;
+  *constraint_cloud_ = input.constraint_cloud;
+
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
   // if (input.model_repetitions.empty()) {

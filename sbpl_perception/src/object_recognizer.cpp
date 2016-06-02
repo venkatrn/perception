@@ -266,6 +266,11 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
     best_variant_idx_ = 1;
 
+    // We need to accumulate planning time for each iteration over model type
+    // over table height
+    double total_time = 0.0;
+    int total_expands = 0;
+
     // Iterate over multiple object variants.
     for (int variant_num = 1; variant_num <= num_variants; ++variant_num) {
       tweaked_input.model_names[0] = target_object + std::to_string(variant_num);
@@ -282,6 +287,8 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
         if (IsMaster(mpi_world_)) {
           double solution_cost = std::numeric_limits<double>::max();
+          total_time += last_planning_stats_[0].time;
+          total_expands += last_planning_stats_[0].expands;
 
           if (iteration_plan_success) {
             if (solution_criterion == 0) {
@@ -295,8 +302,7 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
               cout << "Unknown solution criterion!" << endl;
               return false;
             }
-
-            cout << "Solution cost: " << solution_cost << std::endl;
+            cout << "Iteration solution cost: " << solution_cost << std::endl;
           }
 
           if (iteration_plan_success && solution_cost < best_solution_cost) {
@@ -313,7 +319,15 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
     last_object_point_clouds_ = object_point_clouds;
     *detected_poses = best_detected_poses;
-    // TODO: accumulate env and planning stats over iterations.
+    if (IsMaster(mpi_world_)) {
+      last_planning_stats_[0].time = total_time;
+      last_planning_stats_[0].cost = best_solution_cost;
+      last_planning_stats_[0].expands = total_expands;
+      cout << endl << "-----------------------------------------------" << endl; 
+      cout << "Total PERCH Time: " << total_time << " Solution Cost: " << best_solution_cost << endl;
+      cout << "-----------------------------------------------" << endl;
+      // TODO: accumulate env stats over iterations as well.
+    }
   } else {
     env_obj_->SetInput(tweaked_input);
     // Wait until all processes are ready for the planning phase.
@@ -424,7 +438,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
 
       cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
-      cout << endl << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
+      cout << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
            << "Cost" << endl;
       cout << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "  <<
            stats_vector[0].expands

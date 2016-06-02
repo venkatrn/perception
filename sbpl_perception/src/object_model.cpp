@@ -457,6 +457,15 @@ vector<bool> ObjectModel::PointsInsideFootprint(const std::vector<Eigen::Vector2
   return is_inside;
 }
 
+vector<bool> ObjectModel::PointsInsideFootprint(const PointCloudPtr &cloud, const ContPose &pose, double table_height) const {
+  vector<Eigen::Vector2d> eigen_points(cloud->size());
+  for (size_t ii = 0; ii < cloud->size(); ++ii) {
+    eigen_points[ii][0] = cloud->points[ii].x;
+    eigen_points[ii][1] = cloud->points[ii].y;
+  }
+  return PointsInsideFootprint(eigen_points, pose, table_height);
+}
+
 PointCloudPtr ObjectModel::GetFootprint(const ContPose &pose, double table_height, bool use_inflation/*=false*/) const {
   Eigen::Affine3f transform;
   transform.matrix() <<
