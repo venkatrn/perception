@@ -28,7 +28,7 @@ cd ~/my_workspace
 wstool init src
 wstool merge -t src perch.rosinstall
 wstool update -t src
-catkin_make
+catkin_make -DCMAKE_BUILD_TYPE=Release
 ```
 
 Demo
