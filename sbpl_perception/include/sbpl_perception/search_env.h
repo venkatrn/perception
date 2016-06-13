@@ -68,6 +68,9 @@ struct PERCHParams {
   // Number of points that should be near the (x,y,table height) of the object
   // for that state to be considered as valid.
   int min_neighbor_points_for_valid_pose;
+  // Minimum number of points in the constraint cloud that should be enclosed
+  // by the object's volume for that pose to be considered as valid.
+  int min_points_for_constraint_cloud;
   int max_icp_iterations;
   double icp_max_correspondence;
   bool use_rcnn_heuristic;
@@ -83,6 +86,7 @@ struct PERCHParams {
     ar &initialized;
     ar &sensor_resolution;
     ar &min_neighbor_points_for_valid_pose;
+    ar &min_points_for_constraint_cloud;
     ar &max_icp_iterations;
     ar &use_rcnn_heuristic;
     ar &use_adaptive_resolution;

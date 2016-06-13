@@ -1,9 +1,11 @@
+# NOTE: this param is not used for APC , since we have object-specific parameters
 search_resolution_translation: 0.01 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
 
 perch_params:
   sensor_resolution_radius: 0.003 #m 0.003
   min_neighbor_points_for_valid_pose: 200 #50
+  min_points_for_constraint_cloud: 50
   max_icp_iterations: 20
   icp_max_correspondence: 0.05 #m
   use_adaptive_resolution: false

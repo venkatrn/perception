@@ -71,8 +71,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
   argv = new char *[2];
   argv[0] = new char[1];
   argv[1] = new char[1];
-  argv[0] = const_cast<char*>("0");
-  argv[1] = const_cast<char*>("1");
+  argv[0] = const_cast<char *>("0");
+  argv[1] = const_cast<char *>("1");
   kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
   kDepthImageHeight, kDepthImageWidth));
   scene_ = kinect_simulator_->scene_;
@@ -107,8 +107,11 @@ EnvObjectRecognition::EnvObjectRecognition(const
                      0.003);
     private_nh.param("min_neighbor_points_for_valid_pose",
                      perch_params_.min_neighbor_points_for_valid_pose, 50);
+    private_nh.param("min_points_for_constraint_cloud",
+                     perch_params_.min_points_for_constraint_cloud, 50);
     private_nh.param("max_icp_iterations", perch_params_.max_icp_iterations, 10);
-    private_nh.param("icp_max_correspondence", perch_params_.icp_max_correspondence, 0.05);
+    private_nh.param("icp_max_correspondence",
+                     perch_params_.icp_max_correspondence, 0.05);
     private_nh.param("use_adaptive_resolution",
                      perch_params_.use_adaptive_resolution, false);
     private_nh.param("use_rcnn_heuristic", perch_params_.use_rcnn_heuristic, true);
@@ -124,6 +127,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Sensor Resolution Radius: %f\n", perch_params_.sensor_resolution);
     printf("Min Points for Valid Pose: %d\n",
            perch_params_.min_neighbor_points_for_valid_pose);
+    printf("Min Points for Constraint Cloud: %d\n",
+           perch_params_.min_points_for_constraint_cloud);
     printf("Max ICP Iterations: %d\n", perch_params_.max_icp_iterations);
     printf("ICP Max Correspondence: %f\n", perch_params_.icp_max_correspondence);
     printf("RCNN Heuristic: %d\n", perch_params_.use_rcnn_heuristic);
@@ -159,6 +164,7 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
       printf("Model %s not found in model bank\n", model_name.c_str());
       exit(1);
     }
+
     const ModelMetaData &model_meta_data = model_bank_it->second;
 
     pcl::PolygonMesh mesh;
@@ -235,14 +241,17 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
 
     rad_2 = obj_models_[obj_id].GetInscribedRadius();
 
-    if ((pose.x() - obj_pose.x()) * (pose.x() - obj_pose.x()) + (pose.y() - obj_pose.y()) *
+    if ((pose.x() - obj_pose.x()) * (pose.x() - obj_pose.x()) +
+        (pose.y() - obj_pose.y()) *
         (pose.y() - obj_pose.y()) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
       return false;
     }
   }
 
   // Check if the footprint is contained with the support surface bounds.
-  auto footprint = obj_models_[model_id].GetFootprint(pose, env_params_.table_height); 
+  auto footprint = obj_models_[model_id].GetFootprint(pose,
+                                                      env_params_.table_height);
+
   for (const auto &point : footprint->points) {
     if (point.x < env_params_.x_min - kFootprintTolerance ||
         point.x > env_params_.x_max + kFootprintTolerance ||
@@ -256,16 +265,23 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   // constraint points. Is constraint_cloud is empty, then we will bypass this
   // check.
   if (!constraint_cloud_->empty()) {
-    vector<bool> points_inside = obj_models_[model_id].PointsInsideFootprint(projected_constraint_cloud_, pose, env_params_.table_height);
+    vector<bool> points_inside = obj_models_[model_id].PointsInsideFootprint(
+                                   projected_constraint_cloud_, pose, env_params_.table_height);
     int num_inside = 0;
+
     for (size_t ii = 0; ii < points_inside.size(); ++ii) {
       if (points_inside[ii]) {
         ++num_inside;
       }
     }
+
     // TODO: allow for more sophisticated validation? If not, then implement a
     // AnyPointInsideFootprint method to speed up checking.
-    if (num_inside == 0) {
+    const double min_points = std::min(
+                                perch_params_.min_points_for_constraint_cloud,
+                                static_cast<int>(constraint_cloud_->points.size()));
+
+    if (num_inside < min_points) {
       return false;
     }
   }
@@ -671,6 +687,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   printf("Lazily expanding state: %d with %zu objects\n",
          source_state_id,
          source_state.NumObjects());
+
   if (perch_params_.print_expanded_states) {
     string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
     PrintState(source_state_id, fname);
@@ -1375,16 +1392,21 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   }
 
   int target_cost = 0;
+
   if (kSingleObjectMode) {
     // if (partial_rendered_cloud->points.empty()) {
-    if (static_cast<int>(partial_rendered_cloud->points.size()) < perch_params_.min_neighbor_points_for_valid_pose) {
+    if (static_cast<int>(partial_rendered_cloud->points.size()) <
+        perch_params_.min_neighbor_points_for_valid_pose) {
       return 100;
-    } 
-    target_cost = static_cast<int>(nn_score * 100 / partial_rendered_cloud->points.size());
+    }
+
+    target_cost = static_cast<int>(nn_score * 100 /
+                                   partial_rendered_cloud->points.size());
   } else {
     target_cost = static_cast<int>(nn_score);
 
   }
+
   return target_cost;
 }
 
@@ -1409,6 +1431,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     if (kSingleObjectMode) {
       return 100;
     }
+
     return 100000;
   }
 
@@ -1439,7 +1462,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     // Check that this object state is valid, i.e, it has at least
     // perch_params_.min_neighbor_points_for_valid_pose within the circumscribed cylinder.
     // This should be true if we correctly validate successors.
-    const double validation_search_rad = obj_models_[last_obj_id].GetInflationFactor() *
+    const double validation_search_rad =
+      obj_models_[last_obj_id].GetInflationFactor() *
       obj_models_[last_obj_id].GetCircumscribedRadius();
     int num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
                                                                 validation_search_rad,
@@ -1452,14 +1476,17 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     vector<int> filtered_validation_points;
     filtered_validation_points.resize(validation_points.size());
     std::sort(validation_points.begin(), validation_points.end());
-    auto filter_it = std::set_difference(validation_points.begin(), validation_points.end(),
-                                  child_counted_pixels->begin(), child_counted_pixels->end(),
-                                  filtered_validation_points.begin());
-    filtered_validation_points.resize(filter_it - filtered_validation_points.begin());
+    auto filter_it = std::set_difference(validation_points.begin(),
+                                         validation_points.end(),
+                                         child_counted_pixels->begin(), child_counted_pixels->end(),
+                                         filtered_validation_points.begin());
+    filtered_validation_points.resize(filter_it -
+                                      filtered_validation_points.begin());
     validation_points = filtered_validation_points;
 
     vector<Eigen::Vector3d> eig_points(validation_points.size());
     vector<Eigen::Vector2d> eig2d_points(validation_points.size());
+
     for (size_t ii = 0; ii < validation_points.size(); ++ii) {
       PointT point = observed_cloud_->points[validation_points[ii]];
       eig_points[ii][0] = point.x;
@@ -1471,31 +1498,34 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     }
 
     // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose(), env_params_.table_height);
-    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(eig2d_points, last_object.cont_pose(), env_params_.table_height);
+    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
+                                   eig2d_points, last_object.cont_pose(), env_params_.table_height);
 
     indices_to_consider.clear();
+
     for (size_t ii = 0; ii < inside_points.size(); ++ii) {
       if (inside_points[ii]) {
         indices_to_consider.push_back(validation_points[ii]);
       }
     }
+
     // printf("Points inside: %zu, total points: %zu\n", indices_to_consider.size(), eig_points.size());
 
-  // The points within the inscribed cylinder are the ones made
-  // "infeasible".
-  //   const double inscribed_rad = obj_models_[last_obj_id].GetInscribedRadius();
-  //   const double inscribed_rad_sq = inscribed_rad * inscribed_rad;
-  //   vector<int> infeasible_points;
-  //   infeasible_points.reserve(validation_points.size());
-  //
-  //   for (size_t ii = 0; ii < validation_points.size(); ++ii) {
-  //     if (sqr_dists[ii] <= inscribed_rad_sq) {
-  //       infeasible_points.push_back(validation_points[ii]);
-  //     } else {
-  //       indices_circumscribed.push_back(validation_points[ii]);
-  //     }
-  //   }
-  //   indices_to_consider = infeasible_points;
+    // The points within the inscribed cylinder are the ones made
+    // "infeasible".
+    //   const double inscribed_rad = obj_models_[last_obj_id].GetInscribedRadius();
+    //   const double inscribed_rad_sq = inscribed_rad * inscribed_rad;
+    //   vector<int> infeasible_points;
+    //   infeasible_points.reserve(validation_points.size());
+    //
+    //   for (size_t ii = 0; ii < validation_points.size(); ++ii) {
+    //     if (sqr_dists[ii] <= inscribed_rad_sq) {
+    //       infeasible_points.push_back(validation_points[ii]);
+    //     } else {
+    //       indices_circumscribed.push_back(validation_points[ii]);
+    //     }
+    //   }
+    //   indices_to_consider = infeasible_points;
   }
 
   double nn_score = 0.0;
@@ -1550,15 +1580,19 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
 
   int source_cost = 0;
+
   if (kSingleObjectMode) {
     // if (indices_to_consider.empty()) {
-    if (static_cast<int>(indices_to_consider.size()) < perch_params_.min_neighbor_points_for_valid_pose) {
+    if (static_cast<int>(indices_to_consider.size()) <
+        perch_params_.min_neighbor_points_for_valid_pose) {
       return 100;
-    } 
+    }
+
     source_cost = static_cast<int>(nn_score * 100 / indices_to_consider.size());
   } else {
     source_cost = static_cast<int>(nn_score);
   }
+
   return source_cost;
 }
 
@@ -1570,6 +1604,7 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
   if (kSingleObjectMode) {
     return 0;
   }
+
   // Compute the cost of points made infeasible in the observed point cloud.
   pcl::search::KdTree<PointT>::Ptr knn_reverse;
   knn_reverse.reset(new pcl::search::KdTree<PointT>(true));
@@ -1676,6 +1711,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedOrganizedPointCloud(
 
   for (int ii = 0; ii < kNumPixels; ++ii) {
     auto &point = cloud->points[VectorIndexToPCLIndex(ii)];
+
     // Skip if empty pixel
     if (depth_image[ii] == kKinectMaxDepth) {
       point.x = NAN;
@@ -1896,11 +1932,12 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   //   cv::imshow("depth image", c_image);
   //   cv::waitKey(1);
   // }
-  
+
   // Consider occlusions from non-modeled objects.
   if (kSingleObjectMode) {
     for (size_t ii = 0; ii < depth_image->size(); ++ii) {
-      if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) && depth_image->at(ii) != kKinectMaxDepth) {
+      if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) &&
+          depth_image->at(ii) != kKinectMaxDepth) {
         depth_image->at(ii) = kKinectMaxDepth;
       }
     }
@@ -1969,6 +2006,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
       pcl::PCDWriter writer;
       writer.writeBinary (ss.str()  , *gravity_aligned_point_cloud);
     }
+
     *observed_cloud_  = *gravity_aligned_point_cloud;
   }
 
@@ -1999,6 +2037,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   // Project the constraint cloud as well.
   *projected_constraint_cloud_ = *constraint_cloud_;
+
   for (size_t ii = 0; ii < projected_constraint_cloud_->size(); ++ii) {
     projected_constraint_cloud_->points[ii].z = env_params_.table_height;
   }
@@ -2050,6 +2089,7 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   if (IsMaster(mpi_comm_)) {
     printf("-------------------Resetting Environment State-------------------\n");
   }
+
   GraphState start_state, goal_state;
 
   hash_manager_.Reset();
@@ -2388,9 +2428,11 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
             if (obj_models_[model_id].symmetric() || model_meta_data.symmetry_mode == 2) {
               break;
             }
+
             // If 180 degree symmetric, then iterate only between 0 and 180.
-            if (model_meta_data.symmetry_mode == 1 && theta > (M_PI + env_params_.theta_res)) {
-              break; 
+            if (model_meta_data.symmetry_mode == 1 &&
+                theta > (M_PI + env_params_.theta_res)) {
+              break;
             }
           }
         }
@@ -2460,7 +2502,8 @@ void EnvObjectRecognition::GetGoalPoses(int true_goal_id,
   }
 }
 
-vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(const vector<int> &solution_state_ids) {
+vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(
+  const vector<int> &solution_state_ids) {
   // The solution state ids will also include the root state (with id 0) that has no
   // objects.
   assert(solution_state_ids.size() == env_params_.num_objects + 1);
@@ -2473,44 +2516,54 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(const vector<in
   // Create Eigen types of input cloud.
   vector<Eigen::Vector3d> eig_points(original_input_cloud_->points.size());
   std::transform(original_input_cloud_->points.begin(),
-                original_input_cloud_->points.end(),
-                eig_points.begin(), [](const PointT &pcl_point) {
-                Eigen::Vector3d eig_point;
-                eig_point[0] = pcl_point.x;
-                eig_point[1] = pcl_point.y;
-                eig_point[2] = pcl_point.z;
-                return eig_point;
-                });
+                 original_input_cloud_->points.end(),
+  eig_points.begin(), [](const PointT & pcl_point) {
+    Eigen::Vector3d eig_point;
+    eig_point[0] = pcl_point.x;
+    eig_point[1] = pcl_point.y;
+    eig_point[2] = pcl_point.z;
+    return eig_point;
+  });
 
   for (int ii = 1; ii < solution_state_ids.size(); ++ii) {
     int graph_state_id = solution_state_ids[ii];
+
     // Handle goal state differently.
     if (ii == solution_state_ids.size() - 1) {
-      graph_state_id = GetBestSuccessorID(solution_state_ids[solution_state_ids.size() - 2]);
+      graph_state_id = GetBestSuccessorID(
+                         solution_state_ids[solution_state_ids.size() - 2]);
     }
 
     GraphState graph_state;
+
     if (adjusted_states_.find(graph_state_id) != adjusted_states_.end()) {
       graph_state = adjusted_states_[graph_state_id];
     } else {
       graph_state = hash_manager_.GetState(graph_state_id);
     }
+
     int object_id = graph_state.object_states().back().id();
     assert(object_id >= 0 && object_id < env_params_.num_objects);
 
-    const vector<bool> inside_mesh = obj_models_[object_id].PointsInsideMesh(eig_points, graph_state.object_states().back().cont_pose(), env_params_.table_height);
+    const vector<bool> inside_mesh = obj_models_[object_id].PointsInsideMesh(
+                                       eig_points, graph_state.object_states().back().cont_pose(),
+                                       env_params_.table_height);
     vector<int> inside_mesh_indices;
     inside_mesh_indices.reserve(inside_mesh.size());
+
     for (size_t ii = 0; ii < inside_mesh.size(); ++ii) {
       if (inside_mesh[ii]) {
         inside_mesh_indices.push_back(static_cast<int>(ii));
       }
     }
-    PointCloudPtr object_cloud = perception_utils::IndexFilter(original_input_cloud_, inside_mesh_indices, false);
+
+    PointCloudPtr object_cloud = perception_utils::IndexFilter(
+                                   original_input_cloud_, inside_mesh_indices, false);
     object_point_clouds[object_id] = object_cloud;
 
 
   }
+
   return object_point_clouds;
 }
 
@@ -2561,9 +2614,11 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
             break;
           }
+
           // If 180 degree symmetric, then iterate only between 0 and 180.
-          if (model_meta_data.symmetry_mode == 1 && theta > (M_PI + env_params_.theta_res)) {
-            break; 
+          if (model_meta_data.symmetry_mode == 1 &&
+              theta > (M_PI + env_params_.theta_res)) {
+            break;
           }
         }
       }
@@ -2625,6 +2680,7 @@ vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
   return masked_depth_image;
 }
 }  // namespace
+
 
 
 
