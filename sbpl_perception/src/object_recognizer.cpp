@@ -317,8 +317,11 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
       }
     }
 
-    last_object_point_clouds_ = object_point_clouds;
-    *detected_poses = best_detected_poses;
+    if (plan_success) {
+      last_object_point_clouds_ = object_point_clouds;
+      *detected_poses = best_detected_poses;
+    }
+
     if (IsMaster(mpi_world_)) {
       last_planning_stats_[0].time = total_time;
       last_planning_stats_[0].cost = best_solution_cost;
@@ -401,6 +404,13 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
                                     static_cast<MHAReplanParams>(planner_params_), &sol_cost);
     ROS_INFO("Done planning");
 
+    // Planning episode statistics.
+    vector<PlannerStats> stats_vector;
+    planner_->get_search_stats(&stats_vector);
+    last_planning_stats_ = stats_vector;
+    EnvStats env_stats = env_obj_->GetEnvStats();
+    last_env_stats_ = env_stats;
+
     if (plan_success) {
       ROS_INFO("Size of solution: %d", static_cast<int>(solution_state_ids.size()));
     } else {
@@ -429,12 +439,6 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
              << pose.yaw() << endl;
       }
 
-      // Planning episode statistics.
-      vector<PlannerStats> stats_vector;
-      planner_->get_search_stats(&stats_vector);
-      last_planning_stats_ = stats_vector;
-      EnvStats env_stats = env_obj_->GetEnvStats();
-      last_env_stats_ = env_stats;
       last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
 
       cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
