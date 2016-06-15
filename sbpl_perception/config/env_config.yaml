@@ -1,6 +1,8 @@
-# NOTE: this param is not used for APC , since we have object-specific parameters
+# NOTE: the param "search_resolution_translation" is not used for APC , since we have object-specific parameters
 search_resolution_translation: 0.01 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
+
+use_full_object_point_cloud: true
 
 perch_params:
   sensor_resolution_radius: 0.003 #m 0.003

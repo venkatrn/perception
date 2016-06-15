@@ -69,5 +69,6 @@ class ObjectRecognizer {
 
   // For APC.
   mutable int best_variant_idx_;
+  bool use_full_object_point_cloud_;
 };
 }  // namespace
