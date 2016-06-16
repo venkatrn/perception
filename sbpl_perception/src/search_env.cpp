@@ -1868,13 +1868,16 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     }
   }
 
+  if (mpi_comm_->rank() == kMasterRank) {
+    PrintImage(debug_dir_ + string("input_depth_image.png"), observed_depth_image_);
+  }
+
   if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
     std::stringstream ss;
     ss.precision(20);
     ss << debug_dir_ + "obs_cloud" << ".pcd";
     pcl::PCDWriter writer;
     writer.writeBinary (ss.str()  , *observed_cloud_);
-    PrintImage(debug_dir_ + string("ground_truth.png"), observed_depth_image_);
   }
 
 
