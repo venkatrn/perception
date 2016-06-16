@@ -507,8 +507,13 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
     }
   }
 
+  mpi_world_->barrier();
   broadcast(*mpi_world_, plan_success, kMasterRank);
-  broadcast(*mpi_world_, *detected_poses, kMasterRank);
+
+  if (plan_success) {
+    broadcast(*mpi_world_, *detected_poses, kMasterRank);
+  }
+
   mpi_world_->barrier();
   return plan_success;
 }
