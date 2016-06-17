@@ -61,3 +61,19 @@ You should see the following input depth and output depth images under sbpl_perc
 Configuration parameters for the algorithm can be found under sbpl_perception/config/demo_env_config.yaml and sbpl_perception/config/demo_planner_config.yaml, along with descriptions of those parameters.
 
 To pull changes from all related repositories in one go, run ```wstool update -t src```.
+
+Running Experiments
+-------------------
+
+To reproduce results from our <a href="http://www.cs.cmu.edu/~venkatrn/papers/rss16.pdf">RSS '16 paper</a>:
+
+```bash
+roscd sbpl_perception 
+chmod +x data/scripts/dowload_experiment_data.sh
+./data/scripts/download_experiment_data.sh
+./experiments/scripts/run_experiments.sh
+```
+
+This will a) download the test scenes to sbpl_perception/data/experiment_input and the precomputed RCNN heuristics to sbpl_perception/heuristics, b) run the experiments script to generate results for a run of lazy D2P with 8 processors for parallelization and other default parameters in the run_experiments.sh script. Statistical output will be saved to sbpl_perception/experiments/results_\<timestamp\>/ and visualization output (output depth images) will be saved to sbpl_perception/visualization/perch_poses_\<config_parameters\>/. You can modify the settings in run_experiments.sh to sweep across several combinations of parameters including lazy/non-lazy, use RCNN-heuristics/no heuristics, planner suboptimality bound, search resolution, maximum ICP iterations, and number of processors available for parallelization.
+
+
