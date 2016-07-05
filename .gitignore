@@ -11,6 +11,9 @@ bugs.txt
 *.jpeg
 *.avi
 *.mp4
+*.pdf
+*.eps
+*.svg
 
 #flann files
 *.list
