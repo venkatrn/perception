@@ -11,6 +11,7 @@
 #endif
 
 #include <pcl/common/time.h>
+#include <kinect_sim/camera_constants.h>
 #include <kinect_sim/range_likelihood.h>
 
 #include <ros/package.h>
@@ -183,15 +184,15 @@ pcl::simulation::RangeLikelihood::RangeLikelihood (int rows, int cols,
   // Set Default Camera Intrinstic Parameters. techquad
   // Correspond closely to those stated here:
   // http://www.ros.org/wiki/kinect_calibration/technical
-  camera_width_ = 640;
-  camera_height_ = 480;
-  camera_fx_ = 576.09757860f;
-  camera_fy_ = 576.09757860f;
-  camera_cx_ = 321.06398107f;
-  camera_cy_ = 242.97676897f;
+  camera_width_ = kCameraWidth;
+  camera_height_ = kCameraHeight;
+  camera_fx_ = kCameraFX;
+  camera_fy_ = kCameraFY;
+  camera_cx_ = kCameraCX;
+  camera_cy_ = kCameraCY;
 
-  z_near_ = 0.1f; //ZNEAR
-  z_far_ = 20.0f;
+  z_near_ = kZNear; //ZNEAR
+  z_far_ = kZFar;
 
   which_cost_function_ = 2; // default to commonly used meter based function
 

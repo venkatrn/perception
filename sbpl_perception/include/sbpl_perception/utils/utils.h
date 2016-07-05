@@ -4,6 +4,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/contrib/contrib.hpp>
 #include <perception_utils/pcl_typedefs.h>
+#include <perception_utils/pcl_serialization.h>
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/object_state.h>
 
@@ -11,12 +12,13 @@
 
 #include <functional>
 #include <string>
+#include <unordered_map>
 
 namespace sbpl_perception {
 
 // Depth image parameters (TODO: read in from config file).
-constexpr int kDepthImageHeight = 480;
-constexpr int kDepthImageWidth = 640;
+constexpr int kDepthImageHeight = 424;
+constexpr int kDepthImageWidth = 512;
 constexpr int kNumPixels = kDepthImageWidth * kDepthImageHeight;
 
 // The max-range (no return) value in a depth image produced by
@@ -36,7 +38,7 @@ constexpr int kMasterRank = 0;
 // A container for the input parameters for object recognition.
 struct RecognitionInput {
   // The input point cloud in world frame. *MUST* be an organized point cloud.
-  PointCloudPtr cloud;
+  PointCloud cloud;
   // The IDs of the object models present in the scene.
   std::vector<std::string> model_names;
   // Camera pose relative to world origin.
@@ -49,6 +51,13 @@ struct RecognitionInput {
   // roi_x_bbox.txt and roi_x_det.txt, where x \in [1, #ROIs] in the depth
   // image. Refer to RCNNHeuristicFactory for more details.
   std::string heuristics_dir;
+  // Optional: A constraining point cloud. The solution (object pose) returned
+  // by PERCH is required to encompass at least 1 point from the set of points
+  // in the constraint_cloud. If empty, then this constraint is not used.
+  // NOTE: this is applicable only when using PERCH in single object mode.
+  // TODO: generalize this as a per-object heuristic instead for the
+  // multi-object case.
+  PointCloud constraint_cloud;
 };
 
 // A container for the holding the meta-data associated with a 3D model.
@@ -61,6 +70,18 @@ struct ModelMetaData {
   bool flipped;
   // Is model symmetric about z-axis.
   bool symmetric;
+  // Model symmetry mode
+  // 0 - Not rotationally symmetric
+  // 1 - Rotationally symmetric up to 180 degrees (e.g., cuboids)
+  // 2 - Fully rotationally symmetric (360 degrees)
+  int symmetry_mode;
+  // Search resolution (translation) to use for this object.
+  double search_resolution;
+  // Num variants of the STL model (e.g., upside down, sideways etc).
+  // If the model file is xyz.stl and there are n variants, then we assume
+  // that the files xyz1.stl, xyz2.stl,...xyzn.stl exist (in addition to
+  // xyz.stl)
+  int num_variants;
 };
 
 // A container for environment statistics.
@@ -71,10 +92,10 @@ struct EnvStats {
 
 typedef std::function<int(const GraphState &state)> Heuristic;
 typedef std::vector<Heuristic> Heuristics;
-typedef std::vector<ModelMetaData> ModelBank;
+typedef std::unordered_map<std::string, ModelMetaData> ModelBank;
 
 void SetModelMetaData(const std::string &name, const std::string &file,
-                      const bool flipped, const bool symmetric, ModelMetaData *model_meta_data);
+                      bool flipped, bool symmetric, int symmetry_mode, double search_resolution, int num_variants, ModelMetaData *model_meta_data);
 
 ModelMetaData GetMetaDataFromModelFilename(const ModelBank& model_bank, std::string &model_file);
 
@@ -123,5 +144,36 @@ void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y);
 // MPI-utilties
 bool IsMaster(std::shared_ptr<boost::mpi::communicator> mpi_world);
 
+} // namespace
+
+namespace boost {
+namespace serialization {
+
+template<class Archive>
+void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
+               const unsigned int version) {
+    ar &input.cloud;
+    ar &input.model_names;
+    ar &input.camera_pose;
+    ar &input.x_min;
+    ar &input.x_max;
+    ar &input.y_min;
+    ar &input.y_max;
+    ar &input.table_height;
+    ar &input.heuristics_dir;
+    ar &input.constraint_cloud;
 }
-// namespace
+
+template<class Archive>
+void serialize(Archive &ar, sbpl_perception::ModelMetaData &model_meta_data,
+               const unsigned int version) {
+  ar &model_meta_data.name;
+  ar &model_meta_data.file;
+  ar &model_meta_data.flipped;
+  ar &model_meta_data.symmetric;
+  ar &model_meta_data.symmetry_mode;
+  ar &model_meta_data.search_resolution;
+  ar &model_meta_data.num_variants;
+}
+} // namespace serialization
+} // namespace boost

@@ -115,17 +115,17 @@ target_link_libraries(${PROJECT_NAME}_hash_manager_test ${PROJECT_NAME})
 #   experiments/src/ground_truth_parser.cpp)
 # target_link_libraries(ground_truth_parser ${PROJECT_NAME})
 
-add_executable(vfh_estimator
-  experiments/src/vfh_estimator.cpp)
-target_link_libraries(vfh_estimator ${PROJECT_NAME})
+# add_executable(vfh_estimator
+#   experiments/src/vfh_estimator.cpp)
+# target_link_libraries(vfh_estimator ${PROJECT_NAME})
 
 add_executable(perch
   experiments/src/perch.cpp)
 target_link_libraries(perch ${PROJECT_NAME})
 
-add_executable(greedy_icp
-  experiments/src/greedy_icp.cpp)
-target_link_libraries(greedy_icp ${PROJECT_NAME})
+# add_executable(greedy_icp
+#   experiments/src/greedy_icp.cpp)
+# target_link_libraries(greedy_icp ${PROJECT_NAME})
 
 # add_executable(experiments/view_generator
 #   experiments/src/view_generator.cpp)

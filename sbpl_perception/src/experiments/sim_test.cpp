@@ -13,6 +13,8 @@
 #include <chrono>
 #include <memory>
 #include <random>
+#include <string>
+#include <utility>
 
 using namespace std;
 using namespace sbpl_perception;
@@ -25,8 +27,8 @@ void GenerateRandomPoses(const RecognitionInput &input,
   // unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
   // unsigned seed = -1912274402;
   // unsigned seed = 1754182800
-  unsigned seed = -838481029; 
-  
+  unsigned seed = -838481029;
+
   // unsigned seed = -1912274402;
   printf("Random seed: %d\n", seed);
   // Good seeds.
@@ -83,6 +85,7 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "simulation_tests");
     ros::NodeHandle nh("~");
   }
+
   ObjectRecognizer object_recognizer(world);
 
   // Setup camera
@@ -115,9 +118,11 @@ int main(int argc, char **argv) {
   RecognitionInput input;
   const auto &model_bank = object_recognizer.GetModelBank();
   input.model_names.resize(model_bank.size());
-  std::transform(model_bank.begin(), model_bank.end(), input.model_names.begin(), [](const ModelMetaData &model_meta_data) {
-      return model_meta_data.name;
-      });
+  std::transform(model_bank.begin(), model_bank.end(),
+                 input.model_names.begin(), [](const std::pair<string, ModelMetaData>
+  &bank_item) {
+    return bank_item.first;
+  });
   input.x_min = min_x;
   input.x_max = max_x;
   input.y_min = min_y;
@@ -128,20 +133,24 @@ int main(int argc, char **argv) {
   const int kNumTests = 1;
 
   for (int ii = 0; ii < kNumTests; ++ii) {
-  vector<int> model_ids;
-  vector<ContPose> ground_truth_poses;
+    vector<int> model_ids;
+    vector<ContPose> ground_truth_poses;
 
-  if (world->rank() == kMasterRank) {
-    GenerateRandomPoses(input, &model_ids, &ground_truth_poses);
+    if (world->rank() == kMasterRank) {
+      GenerateRandomPoses(input, &model_ids, &ground_truth_poses);
+    }
+
+    broadcast(*world, model_ids, kMasterRank);
+    broadcast(*world, ground_truth_poses, kMasterRank);
+    world->barrier();
+
+    vector<ContPose> detected_poses;
+    object_recognizer.LocalizeObjects(input, model_ids, ground_truth_poses,
+                                      &detected_poses);
+
+    // TODO: Do something with detected poses (compute error metric etc.)
   }
-  broadcast(*world, model_ids, kMasterRank);
-  broadcast(*world, ground_truth_poses, kMasterRank);
-  world->barrier();
 
-  vector<ContPose> detected_poses;
-  object_recognizer.LocalizeObjects(input, model_ids, ground_truth_poses, &detected_poses);
-
-  // TODO: Do something with detected poses (compute error metric etc.)
-  }
   return 0;
 }
+

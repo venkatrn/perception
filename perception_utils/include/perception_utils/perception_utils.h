@@ -1,5 +1,4 @@
 #pragma once
-
 /**
  * @file perception_utils.h
  * @brief Various perception utilities
@@ -12,6 +11,13 @@
 #include <pcl/range_image/range_image_planar.h>
 #include <pcl/segmentation/organized_multi_plane_segmentation.h>
 #include <pcl/visualization/pcl_visualizer.h>
+
+#include <opencv/highgui.h>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/contrib/contrib.hpp>
+#include <opencv2/photo/photo.hpp>
+
+#include <chrono>
 
 namespace perception_utils {
 // Euclidean cluster extraction params
@@ -124,6 +130,21 @@ void DisplayPlanarRegions(pcl::visualization::PCLVisualizer &viewer,
 
 void GetRangeImageFromCloud(PointCloudPtr cloud,
                             pcl::visualization::PCLVisualizer &viewer, pcl::RangeImagePlanar *range_image);
-} /** perception_utils **/
 
+/**@brief Is point valid (i.e, no NaNs or Infs)**/
+bool IsPointValid(const PointT &point);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// OpenCV utils.
+
+// "Inpaints" a depth image to fill holes from specularity etc.
+// cloud_in: organized point cloud in camera frame, units in meters.
+// mask: uchar matrix that says which pixels should be inpainted (values > 0
+// are treated as true).
+// max_range: points with range > max_range are treated as no-returns
+// inpainted_depth_image: the output depth image, double type with units in
+// meters.
+void InpaintDepthImage(const PointCloudPtr &cloud_in, const cv::Mat &mask,
+                       double max_range, cv::Mat &inpainted_depth_image, bool visualize = false);
+} /** perception_utils **/
 

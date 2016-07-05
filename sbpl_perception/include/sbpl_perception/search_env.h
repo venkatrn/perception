@@ -49,7 +49,7 @@ struct EnvConfig {
   // Search resolution.
   double res, theta_res;
   // The model-bank.
-  std::vector<ModelMetaData> model_bank;
+  ModelBank model_bank;
 };
 
 struct EnvParams {
@@ -68,7 +68,11 @@ struct PERCHParams {
   // Number of points that should be near the (x,y,table height) of the object
   // for that state to be considered as valid.
   int min_neighbor_points_for_valid_pose;
+  // Minimum number of points in the constraint cloud that should be enclosed
+  // by the object's volume for that pose to be considered as valid.
+  int min_points_for_constraint_cloud;
   int max_icp_iterations;
+  double icp_max_correspondence;
   bool use_rcnn_heuristic;
   bool use_adaptive_resolution;
 
@@ -82,6 +86,7 @@ struct PERCHParams {
     ar &initialized;
     ar &sensor_resolution;
     ar &min_neighbor_points_for_valid_pose;
+    ar &min_points_for_constraint_cloud;
     ar &max_icp_iterations;
     ar &use_rcnn_heuristic;
     ar &use_adaptive_resolution;
@@ -102,7 +107,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Load the object models to be used in the search episode. model_bank contains
   // metadata of *all* models, and model_ids is the list of models that are
   // present in the current scene.
-  void LoadObjFiles(const std::vector<ModelMetaData> &model_bank,
+  void LoadObjFiles(const ModelBank &model_bank,
                     const std::vector<std::string> &model_names);
 
   void PrintState(int state_id, std::string fname);
@@ -209,6 +214,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   const EnvStats &GetEnvStats();
   void GetGoalPoses(int true_goal_id, std::vector<ContPose> *object_poses);
+  std::vector<PointCloudPtr> GetObjectPointClouds(const std::vector<int>
+                                                  &solution_state_ids);
 
   int NumHeuristics() const;
 
@@ -217,8 +224,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   Heuristics rcnn_heuristics_;
   PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short>
                                             &depth_image);
-  PointCloudPtr GetGravityAlignedOrganizedPointCloud(const std::vector<unsigned short>
-                                            &depth_image);
+  PointCloudPtr GetGravityAlignedOrganizedPointCloud(const
+                                                     std::vector<unsigned short>
+                                                     &depth_image);
 
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
@@ -235,7 +243,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   ConfigParser parser_;
 
   // Model bank.
-  std::vector<ModelMetaData> model_bank_;
+  ModelBank model_bank_;
 
   // The MPI communicator.
   std::shared_ptr<boost::mpi::communicator> mpi_comm_;
@@ -257,9 +265,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, unsigned short> minz_map_;
   std::unordered_map<int, unsigned short> maxz_map_;
   std::unordered_map<int, int> g_value_map_;
-  std::unordered_map<int, std::vector<int>>
-                                         counted_pixels_map_; // Keep track of the pixels we have accounted for in cost computation for a given state
-
+  // Keep track of the observed pixels we have accounted for in cost computation for a given state.
+  // This includes all points in the observed point cloud that fall within the volume of objects assigned 
+  // so far in the state. For the last level states, this *does not* include the points that 
+  // lie outside the union volumes of all assigned objects.
+  std::unordered_map<int, std::vector<int>> counted_pixels_map_;
   // Maps state hash to depth image.
   std::unordered_map<GraphState, std::vector<unsigned short>>
                                                            unadjusted_single_object_depth_image_cache_;
@@ -273,8 +283,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<int> valid_indices_;
 
   std::vector<unsigned short> observed_depth_image_;
-  PointCloudPtr observed_cloud_, downsampled_observed_cloud_,
+  PointCloudPtr original_input_cloud_, observed_cloud_, downsampled_observed_cloud_,
                 observed_organized_cloud_, projected_cloud_;
+  // Refer RecognitionInput::constraint_cloud for details.
+  // This is an unorganized point cloud.
+  PointCloudPtr constraint_cloud_, projected_constraint_cloud_;
 
   bool image_debug_;
   // Print outputs/debug info to this directory. Assumes that directory exists.
@@ -320,9 +333,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // NOTE: updated_counted_pixels should always be equal to the number of
   // points in the input point cloud.
   int GetLastLevelCost(const PointCloudPtr full_rendered_cloud,
-                    const ObjectState &last_object,
-                    const std::vector<int> &counted_pixels,
-                    std::vector<int> *updated_counted_pixels);
+                       const ObjectState &last_object,
+                       const std::vector<int> &counted_pixels,
+                       std::vector<int> *updated_counted_pixels);
 
   // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any
   // additional renderings. This requires the true source depth image and
@@ -384,5 +397,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 };
 } // namespace
+
 
 

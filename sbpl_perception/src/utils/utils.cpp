@@ -6,22 +6,26 @@ using std::vector;
 namespace sbpl_perception {
 
 void SetModelMetaData(const string &name, const string &file,
-                      const bool flipped, const bool symmetric, ModelMetaData *model_meta_data) {
+                      bool flipped,  bool symmetric,  int symmetry_mode,  double search_resolution, int num_variants, ModelMetaData *model_meta_data) {
   model_meta_data->name = name;
   model_meta_data->file = file;
   model_meta_data->flipped = flipped;
   model_meta_data->symmetric = symmetric;
+  model_meta_data->symmetry_mode = symmetry_mode;
+  model_meta_data->search_resolution = search_resolution;
+  model_meta_data->num_variants = num_variants;
 }
 
 ModelMetaData GetMetaDataFromModelFilename(const ModelBank& model_bank, std::string &model_file) {
-  for (const auto &meta_data : model_bank) {
+  for (const auto &bank_item : model_bank) {
+    const ModelMetaData &meta_data = bank_item.second; 
     if (meta_data.file.compare(model_file) == 0) {
       return meta_data;
     }
   }
   ModelMetaData matched_meta_data;
   printf("Model file %s not found in model bank\n", model_file.c_str());
-  SetModelMetaData("", "", false, false, &matched_meta_data);
+  SetModelMetaData("", "", false, false, 0, 0.0, 1, &matched_meta_data);
   return matched_meta_data;
 }
 

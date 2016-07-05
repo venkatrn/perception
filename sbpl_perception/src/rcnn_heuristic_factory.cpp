@@ -49,7 +49,7 @@ RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input,
   Eigen::Affine3f transform;
   transform.matrix() = recognition_input_.camera_pose.matrix().cast<float>();
   transform = cam_to_body.inverse() * transform.inverse();
-  transformPointCloud(*recognition_input_.cloud, *depth_img_cloud,
+  transformPointCloud(recognition_input_.cloud, *depth_img_cloud,
                       transform);
 
   auto depth_image = OrganizedPointCloudToKinectDepthImage(
@@ -220,9 +220,11 @@ void RCNNHeuristicFactory::SaveROIsToDisk(const boost::filesystem::path
   std::vector<pcl::PointIndices> cluster_indices;
   // An image where every pixel stores the cluster index.
   std::vector<int> cluster_labels;
-  perception_utils::DoEuclideanClustering(recognition_input_.cloud,
+  PointCloudPtr input_cloud_ptr(new PointCloud);
+  *input_cloud_ptr = recognition_input_.cloud;
+  perception_utils::DoEuclideanClustering(input_cloud_ptr,
                                           &cluster_clouds, &cluster_indices);
-  cluster_labels.resize(recognition_input_.cloud->size(), 0);
+  cluster_labels.resize(recognition_input_.cloud.size(), 0);
 
   vector<vector<cv::Point>> cv_clusters(cluster_indices.size());
 
@@ -391,7 +393,7 @@ ContPose RCNNHeuristicFactory::GetPoseFromBBox(const cv::Mat &depth_image,
 
   for (const auto &point : points_in_bbox) {
     int pcl_index = OpenCVIndexToPCLIndex(point.x, point.y);
-    PointT world_point = recognition_input_.cloud->points[pcl_index];
+    PointT world_point = recognition_input_.cloud.points[pcl_index];
     world_point.z = 0;
     Eigen::Vector3d world_point_eig(world_point.x, world_point.y, world_point.z);
     projected_centroid += world_point_eig;

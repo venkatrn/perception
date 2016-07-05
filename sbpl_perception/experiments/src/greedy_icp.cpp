@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
 
   world->barrier();
 
-  input.cloud = cloud_in;
+  input.cloud = *cloud_in;
 
   object_recognizer.GetMutableEnvironment()->SetInput(input);
 

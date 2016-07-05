@@ -27,7 +27,12 @@ class ObjectRecognizer {
                        const std::vector<ContPose> &ground_truth_object_poses,
                        std::vector<ContPose> *detected_poses) const;
 
-  const std::vector<ModelMetaData> &GetModelBank() const {
+  // Return the points in the input point cloud corresponding to each object.
+  // The returned vector is of size input.model_names.size(). Note: This method
+  // should be called right after LocalizeObjects.
+  std::vector<PointCloudPtr> GetObjectPointClouds() const;  
+
+  const ModelBank &GetModelBank() const {
     return env_config_.model_bank;
   }
   const std::vector<PlannerStats> &GetLastPlanningEpisodeStats() const {
@@ -40,18 +45,30 @@ class ObjectRecognizer {
   std::shared_ptr<EnvObjectRecognition> GetMutableEnvironment() {
     return env_obj_;
   }
+
+  int GetBestVariantIndex() {return best_variant_idx_;}
  private:
-  mutable std::shared_ptr<EnvObjectRecognition> env_obj_;
+  std::shared_ptr<EnvObjectRecognition> env_obj_;
   mutable std::unique_ptr<MHAPlanner> planner_;
   mutable std::vector<PlannerStats> last_planning_stats_;
   mutable EnvStats last_env_stats_;
+
+  // For APC.
+  mutable std::vector<PointCloudPtr> last_object_point_clouds_;
+  mutable Eigen::Affine3f best_transform_;
+
 
   std::shared_ptr<boost::mpi::communicator> mpi_world_;
 
   MHAReplanParams planner_params_;
 
   EnvConfig env_config_;
+  ModelBank model_bank_;
 
   bool RunPlanner(std::vector<ContPose> *detected_poses) const;
+
+  // For APC.
+  mutable int best_variant_idx_;
+  bool use_full_object_point_cloud_;
 };
 }  // namespace

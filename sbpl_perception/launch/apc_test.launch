@@ -1,0 +1,92 @@
+<launch>
+  <master auto="start"/>
+  <param name="/use_sim_time" value="true"/>
+
+  <arg name="image_debug" default="false" />
+  <arg name="debug" default="false" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <!-- <arg     if="$(arg debug)" name="launch_prefix" value="gdb &#45;&#45;ex run &#45;&#45;args" /> -->
+  <arg if="$(arg debug)" name="launch_prefix" value="xterm -e gdb --args" />
+
+  <include file="$(find sbpl_perception)/config/apc_objects.xml"/>
+
+  <!-- <node pkg="sbpl_perception" type="experiments" name="experiments" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
+    <node pkg="sbpl_perception" type="real_test" name="real_test" output="screen" launch-prefix="mpirun -n 8" respawn="false">
+      <rosparam command="load" file="$(find sbpl_perception)/config/env_config.yaml" />
+      <rosparam command="load" file="$(find sbpl_perception)/config/planner_config.yaml" />
+      <rosparam command="load" file="$(find sbpl_perception)/config/apc_config.yaml" />
+      <param name="image_debug" value="$(arg image_debug)"/>
+
+      <!-- 4 glasses-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120006.581890.txt"/> <!&#45;&#45;incorrect&#45;&#45;> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114557.353958.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114827.329624.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/>  -->
+      <!--4 small objects-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
+
+      <!--3 separated objects-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142303.479339.txt"/> -->
+
+      <!--DONE-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114846.520256.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142031.994106.txt"/> -->
+      <!--Good example with one misleading heuristic-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142049.534583.txt"/> -->
+
+      <!--Contact objects-->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114051.053321.txt"/> -->
+
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114413.016266.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115302.940896.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115946.415206.txt"/> -->
+
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> <!&#45;&#45;long!!&#45;&#45;> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120142.169847.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120147.910222.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120202.414337.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142149.770360.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142537.928074.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1459090037.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1459090103.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1459090181.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/test1459535267.txt"/> -->
+
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/test1459535402.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/test1459535496.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/test1459535603.txt"/> -->
+
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904102.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904163.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904352.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904526.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904618.txt"/> <!&#45;&#45; model is incorrectly scaled&#45;&#45;> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904879.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904949.txt"/> <!&#45;&#45; orientation change&#45;&#45;> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905278.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905467.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905601.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905966.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904229.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460904784.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/apc_input/1460905359.txt"/> -->
+
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462064522_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462054875_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462057862_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462057962_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462058013_perch.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462063749_perch.txt"/>
+
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462052875_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462053738_perch.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/perchinput/1462052809_perch.txt"/> -->
+
+
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114628.408278.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/chess_input/2r_1k_1q.txt"/> -->
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/chess_input/6p_2r_1k_1q_1n_1b.txt"/> -->
+    </node>
+  </launch>
