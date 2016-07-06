@@ -19,6 +19,7 @@
 #include <pcl/segmentation/extract_polygonal_prism_data.h>
 #include <pcl/surface/vtk_smoothing/vtk_utils.h>
 #include <pcl/surface/convex_hull.h>
+#include <ros/package.h>
 
 #include <opencv2/highgui/highgui.hpp>
 
@@ -32,13 +33,15 @@ using namespace std;
 
 namespace {
 // If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
-constexpr bool kMeshInMillimeters = false; // true for PERCH experiments  
+constexpr bool kMeshInMillimeters = true; // true for PERCH experiments  
 // Inflate inscribed (and circumscribed) radius of mesh by the following
 // additive amount, when checking whether points lie within the convex
 // footprint or if they are within the volume of the mesh model.
 constexpr double kMeshAdditiveInflation = 0.01; // m
 // Resolution for the footprint.
 constexpr double kFootprintRes = 0.0005; // m
+const string kDebugDir = ros::package::getPath("sbpl_perception") +
+                             "/visualization/";
 
 Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
                      pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, bool flipped) {
@@ -194,7 +197,7 @@ cv::Point WorldPointToRasterPoint(double x, double y, double half_side) {
                                      kFootprintRes));
   return cv_point;
 }
-}
+} // namespace
 
 ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name, const bool symmetric, const bool flipped) {
   pcl::PolygonMesh::Ptr mesh_in(new pcl::PolygonMesh(mesh));
@@ -247,7 +250,7 @@ void ObjectModel::SetObjectProperties() {
   projected_cloud->height = 1;
 
   pcl::PointXYZ min_pt, max_pt;
-  getMinMax3D(*base_cloud, min_pt, max_pt);
+  getMinMax3D(*cloud, min_pt, max_pt);
   min_x_ = min_pt.x;
   min_y_ = min_pt.y;
   min_z_ = min_pt.z;
@@ -298,7 +301,7 @@ void ObjectModel::SetObjectProperties() {
   }
   footprint_raster_.setTo(0);
   cv::fillConvexPoly(footprint_raster_, cv_points.data(), cv_points.size(), 255);
-  cv::imwrite("/usr0/home/venkatrn/hydro_workspace/src/perception/sbpl_perception/visualization/footprint.png", footprint_raster_);
+  cv::imwrite(kDebugDir + string("footprint_") + name_ + string(".png"), footprint_raster_);
 }
 
 void ObjectModel::SetObjectPointCloud(const PointCloudPtr &cloud) {

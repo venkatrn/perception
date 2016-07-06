@@ -15,9 +15,6 @@ namespace {
 constexpr int kPlanningFinishedTag = 1;
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
-// For the APC setup, we need to correct the camera pose matrix to remove the
-// camera-body to camera-optical frame transform.
-const bool kAPC = true;
 }  // namespace
 
 namespace sbpl_perception {
@@ -25,10 +22,6 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
                                    mpi_world) : planner_params_(0.0) {
 
   mpi_world_ = mpi_world;
-
-  if (kAPC) {
-    best_variant_idx_ = 0;
-  }
 
   vector<ModelMetaData> model_bank_vector;
   double search_resolution_translation = 0.0;
@@ -55,11 +48,6 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
                      search_resolution_translation, 0.04);
     private_nh.param("search_resolution_yaw", search_resolution_yaw,
                      0.3926991);
-
-    if (kAPC) {
-      private_nh.param("use_full_object_point_cloud", use_full_object_point_cloud_,
-                       false);
-    }
 
     XmlRpc::XmlRpcValue model_bank_list;
 
@@ -105,6 +93,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
       model_bank_vector.push_back(model_meta_data);
 
     }
+
     // Load planner config params.
     private_nh.param("inflation_epsilon", planner_params_.inflation_eps, 10.0);
     private_nh.param("max_planning_time", planner_params_.max_time, 60.0);
@@ -165,18 +154,14 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
   assert(detected_poses.size() == input.model_names.size());
 
-  if (kAPC) {
-    object_transforms->push_back(best_transform_);
 
-  } else {
-    const auto &models = env_obj_->obj_models_;
-    object_transforms->resize(input.model_names.size());
+  const auto &models = env_obj_->obj_models_;
+  object_transforms->resize(input.model_names.size());
 
-    for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
-      const auto &obj_model = models[ii];
-      object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
-                                    detected_poses[ii], input.table_height);
-    }
+  for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
+    const auto &obj_model = models[ii];
+    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
+                                  detected_poses[ii], input.table_height);
   }
 
   return plan_success;
@@ -198,156 +183,11 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
   RecognitionInput tweaked_input = input;
 
-  if (kAPC) {
-    Eigen::Affine3f cam_to_body;
-    cam_to_body.matrix() << 0, 0, 1, 0,
-                       -1, 0, 0, 0,
-                       0, -1, 0, 0,
-                       0, 0, 0, 1;
-    Eigen::Isometry3d camera_pose;
-    tweaked_input.camera_pose = input.camera_pose.matrix() *
-                                cam_to_body.inverse().matrix().cast<double>();;
-  };
-
   bool plan_success = false;
-
-  if (kAPC) {
-    vector<double> support_height_deltas = {0};
-    int solution_criterion = 0;
-
-    if (IsMaster(mpi_world_)) {
-      ros::NodeHandle private_nh("~apc_params");
-
-      private_nh.param("support_height_deltas", support_height_deltas,
-                       std::vector<double>(1, 0));
-      private_nh.param("solution_criterion", solution_criterion, 0);
-
-      cout << "Iterating over " << support_height_deltas.size() << " support heights"
-           << endl;
-      cout << "Solution criterion " << solution_criterion << endl;
-    }
-
-    broadcast(*mpi_world_, support_height_deltas, kMasterRank);
-    broadcast(*mpi_world_, solution_criterion, kMasterRank);
-
-    vector<double> heights(support_height_deltas.size());
-
-    for (size_t ii = 0; ii < support_height_deltas.size(); ++ii) {
-      heights[ii] = input.table_height + support_height_deltas[ii];
-    }
-
-    double best_solution_cost = std::numeric_limits<double>::max();
-    vector<PointCloudPtr> object_point_clouds;
-    vector<ContPose> best_detected_poses;
-
-    assert(static_cast<int>(input.model_names.size()) == 1);
-    const string &target_object = input.model_names[0];
-    auto model_bank_it = model_bank_.find(target_object);
-    assert(model_bank_it != model_bank_.end());
-    const int num_variants = model_bank_it->second.num_variants;
-    cout << target_object << " has " << num_variants << " variants." << endl;
-
-    best_variant_idx_ = 1;
-
-    // We need to accumulate planning time for each iteration over model type
-    // over table height
-    double total_time = 0.0;
-    int total_expands = 0;
-
-    // Iterate over multiple object variants.
-    for (int variant_num = 1; variant_num <= num_variants; ++variant_num) {
-      tweaked_input.model_names[0] = target_object + std::to_string(variant_num);
-
-      // Iterate over multiple support heights.
-      for (double height : heights) {
-        tweaked_input.table_height = height;
-        env_obj_->SetInput(tweaked_input);
-        // Wait until all processes are ready for the planning phase.
-        mpi_world_->barrier();
-        const bool iteration_plan_success = RunPlanner(detected_poses);
-
-        plan_success |= iteration_plan_success;
-
-        if (IsMaster(mpi_world_)) {
-          double solution_cost = std::numeric_limits<double>::max();
-          total_time += last_planning_stats_[0].time;
-          total_expands += last_planning_stats_[0].expands;
-
-          if (iteration_plan_success) {
-            if (solution_criterion == 0) {
-              solution_cost = static_cast<double>(last_planning_stats_[0].cost);
-            } else if (solution_criterion == 1) {
-              // Use number of points within object as solution cost
-              solution_cost = -(static_cast<double>
-                                (last_object_point_clouds_[0]->points.size()));
-
-            } else {
-              cout << "Unknown solution criterion!" << endl;
-              return false;
-            }
-
-            cout << "Iteration solution cost: " << solution_cost << std::endl;
-          }
-
-          if (iteration_plan_success && solution_cost < best_solution_cost) {
-            best_variant_idx_ = variant_num;
-            best_solution_cost = solution_cost;
-            best_detected_poses = *detected_poses;
-            object_point_clouds = last_object_point_clouds_;
-            best_transform_ = env_obj_->obj_models_[0].GetRawModelToSceneTransform(
-                                best_detected_poses[0], height);
-          }
-        }
-      }
-    }
-
-    if (plan_success) {
-
-      if (use_full_object_point_cloud_) {
-        // Load pcd from disk and apply transform.
-        string model_name = target_object + std::to_string(best_variant_idx_);
-        string model_file = model_bank_.at(model_name).file;
-        string pcd_file = model_file;
-        pcd_file.replace(pcd_file.size() - 3, 3, "pcd");
-        // Read the input PCD file from disk.
-        pcl::PointCloud<PointT>::Ptr model_cloud(new PointCloud);
-
-        if (pcl::io::loadPCDFile<PointT>(pcd_file.c_str(), *model_cloud) != 0) {
-          if (IsMaster(mpi_world_)) {
-            cerr << "Could not find the PCD file " << pcd_file <<
-                 " . Check if you have the pcd files corresponding to the object model variants in the same folder as the object models"
-                 << endl;
-          }
-          return -1;
-        }
-
-        // Transform the pcd to the scene.
-        transformPointCloud(*model_cloud, *model_cloud, best_transform_);
-        last_object_point_clouds_.clear();
-        last_object_point_clouds_.push_back(model_cloud);
-      } else {
-        last_object_point_clouds_ = object_point_clouds;
-      }
-
-      *detected_poses = best_detected_poses;
-    }
-
-    if (IsMaster(mpi_world_)) {
-      last_planning_stats_[0].time = total_time;
-      last_planning_stats_[0].cost = best_solution_cost;
-      last_planning_stats_[0].expands = total_expands;
-      cout << endl << "-----------------------------------------------" << endl;
-      cout << "Total PERCH Time: " << total_time << " Solution Cost: " <<
-           best_solution_cost << endl;
-      cout << "-----------------------------------------------" << endl;
-      // TODO: accumulate env stats over iterations as well.
-    }
-  } else {
-    env_obj_->SetInput(tweaked_input);
-    // Wait until all processes are ready for the planning phase.
-    mpi_world_->barrier();
-    plan_success = RunPlanner(detected_poses);
-  }
+  env_obj_->SetInput(tweaked_input);
+  // Wait until all processes are ready for the planning phase.
+  mpi_world_->barrier();
+  plan_success = RunPlanner(detected_poses);
 
   return plan_success;
 }
@@ -443,7 +283,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
                             solution_state_ids[solution_state_ids.size() - 2]);
       printf("Goal state ID is %d\n", goal_state_id);
       env_obj_->PrintState(goal_state_id,
-                           env_obj_->GetDebugDir() + string("goal_state.png"));
+                           env_obj_->GetDebugDir() + string("output_depth_image.png"));
       env_obj_->GetGoalPoses(goal_state_id, detected_poses);
 
       cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;
@@ -499,3 +339,4 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   return plan_success;
 }
 }  // namespace
+

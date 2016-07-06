@@ -26,60 +26,6 @@
 using namespace std;
 using namespace sbpl_perception;
 
-namespace {
-// APC config files are slightly different from the PERCH ones, so we will
-// handle them differently.
-const bool kAPC = true;
-
-const string kDebugDir = ros::package::getPath("sbpl_perception") +
-                         "/visualization/";
-
-constexpr double kRGBCameraCX = 945.58752751085558;
-constexpr double kRGBCameraCY = 520.06994012356529;
-constexpr double kRGBCameraFX = 1066.01203606379;
-constexpr double kRGBCameraFY = 1068.87083999116;
-constexpr int kRGBCameraWidth = 1920;
-constexpr int kRGBCameraHeight = 1080;
-
-void WorldPointToRGBCameraPoint(double x, double y, double z, int *u, int *v) {
-  *u = static_cast<int>(kRGBCameraFX * x / z + kRGBCameraCX);
-  *v = static_cast<int>(kRGBCameraFY * y / z + kRGBCameraCY);
-}
-
-// cloud should contain (x,y,z) points in HD RGB-camera's frame.
-void SaveWorldCloudAsHDImage(const PointCloudPtr &cloud, string filename) {
-  // Allocate only once. Static, yuck.
-  // TODO: pass in cv mat by reference.
-  static cv::Mat binary_mat;
-  binary_mat.create(kRGBCameraHeight, kRGBCameraWidth, CV_8UC1);
-  binary_mat.setTo(0);
-
-  for (const auto &point : cloud->points) {
-    int u, v;
-    WorldPointToRGBCameraPoint(point.x, point.y, point.z, &u, &v);
-    int row = v;
-    int col = u;
-
-    if (row < 0 || row >= kRGBCameraHeight || col < 0 || col >= kRGBCameraWidth) {
-      continue;
-    }
-
-    binary_mat.at<uchar>(row, col) = 255;
-  }
-
-  // Some filtering to fill in the holes that arise from transforming from
-  // low-res depth image to high-res rgb image.
-  vector<vector<cv::Point>> contours;
-  vector<cv::Vec4i> hierarchy;
-  cv::blur(binary_mat, binary_mat, cv::Size(5, 5));
-  cv::findContours(binary_mat, contours, hierarchy, CV_RETR_TREE,
-                   CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
-  cv::drawContours(binary_mat, contours, -1, 255, -1);
-
-  cv::imwrite(filename, binary_mat);
-}
-}
-
 int main(int argc, char **argv) {
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
@@ -89,6 +35,8 @@ int main(int argc, char **argv) {
 
   RecognitionInput input;
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
+
+  ObjectRecognizer object_recognizer(world);
 
   if (IsMaster(world)) {
     ros::init(argc, argv, "real_test");
@@ -104,16 +52,9 @@ int main(int argc, char **argv) {
     input.y_max = parser.max_y;
     input.table_height = parser.table_height;
     input.camera_pose = parser.camera_pose;
+    input.model_names = parser.ConvertModelNamesInFileToIDs(
+                         object_recognizer.GetModelBank());
 
-    if (kAPC) {
-      // input.model_names = parser.model_names;
-      input.model_names.clear();
-      input.model_names.push_back(parser.target_object);
-    } else {
-      std::runtime_error("Currently supporting APC only");
-      // input.model_names = parser.ConvertModelNamesInFileToIDs(
-      //                       object_recognizer.GetModelBank());
-    }
 
     boost::filesystem::path config_file_path(config_file);
     input.heuristics_dir = ros::package::getPath("sbpl_perception") +
@@ -145,7 +86,6 @@ int main(int argc, char **argv) {
   world->barrier();
   broadcast(*world, input, kMasterRank);
 
-  ObjectRecognizer object_recognizer(world);
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
   vector<Eigen::Affine3f> object_transforms;
@@ -153,7 +93,6 @@ int main(int argc, char **argv) {
   const bool found_solution = object_recognizer.LocalizeObjects(input,
                                                                 &object_transforms);
   object_point_clouds = object_recognizer.GetObjectPointClouds();
-  int best_variant_idx = object_recognizer.GetBestVariantIndex();
 
 
   if (IsMaster(world)) {
@@ -180,7 +119,7 @@ int main(int argc, char **argv) {
     srand(time(0));
 
     for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
-      string model_name = input.model_names[ii] + std::to_string(best_variant_idx);
+      string model_name = input.model_names[ii];
       std::cout << "Object: " << model_name << std::endl;
       std::cout << object_transforms[ii].matrix() << std::endl << std::endl;
       string model_file = model_bank.at(model_name).file;
@@ -221,32 +160,7 @@ int main(int argc, char **argv) {
         pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, cloud_id);
     }
 
-    // Now save a binary 1920x1080 image containing the points returned by
-    // PERCH.
-    PointCloudPtr target_object_cloud(new PointCloud);
-    target_object_cloud = object_point_clouds[0];
-
-    Eigen::Affine3f transform;
-    transform.matrix() = input.camera_pose.matrix().cast<float>().inverse();
-
-    Eigen::Affine3f rgb_to_depth;
-    rgb_to_depth.matrix() << 0.99959,   0.027958, -0.006196, 0.054,
-                        -0.028042,  0.99951,  -0.013916, 0.005,
-                        0.005804,  0.014084,  0.999884, 0.011,
-                        0, 0, 0, 1;
-    transform = rgb_to_depth.inverse() * transform;
-
-    PointCloudPtr input_cloud_ptr(new PointCloud);
-    *input_cloud_ptr = input.cloud;
-    // Entire scene.
-    transformPointCloud(*input_cloud_ptr, *input_cloud_ptr, transform);
-    SaveWorldCloudAsHDImage(input_cloud_ptr, kDebugDir + "world_cloud_mask.png");
-    // Points in input cloud corresponding to target object.
-    transformPointCloud(*target_object_cloud, *target_object_cloud, transform);
-    SaveWorldCloudAsHDImage(target_object_cloud, kDebugDir + "output_mask.png");
-
     viewer->spin();
   }
-
   return 0;
 }

@@ -1,8 +1,7 @@
-# NOTE: the param "search_resolution_translation" is not used for APC , since we have object-specific parameters
-search_resolution_translation: 0.01 # m 0.04
+search_resolution_translation: 0.04 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
 
-use_full_object_point_cloud: true
+use_full_object_point_cloud: false
 
 perch_params:
   sensor_resolution_radius: 0.003 #m 0.003
@@ -12,6 +11,7 @@ perch_params:
   icp_max_correspondence: 0.05 #m
   use_adaptive_resolution: false
   use_rcnn_heuristic: false
+  use_model_specific_search_resolution: false
 
   ## Visualization and Debugging
   visualize_expanded_states: false

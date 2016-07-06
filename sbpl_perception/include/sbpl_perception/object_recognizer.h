@@ -46,17 +46,13 @@ class ObjectRecognizer {
     return env_obj_;
   }
 
-  int GetBestVariantIndex() {return best_variant_idx_;}
  private:
   std::shared_ptr<EnvObjectRecognition> env_obj_;
   mutable std::unique_ptr<MHAPlanner> planner_;
   mutable std::vector<PlannerStats> last_planning_stats_;
   mutable EnvStats last_env_stats_;
 
-  // For APC.
   mutable std::vector<PointCloudPtr> last_object_point_clouds_;
-  mutable Eigen::Affine3f best_transform_;
-
 
   std::shared_ptr<boost::mpi::communicator> mpi_world_;
 
@@ -65,10 +61,7 @@ class ObjectRecognizer {
   EnvConfig env_config_;
   ModelBank model_bank_;
 
-  bool RunPlanner(std::vector<ContPose> *detected_poses) const;
 
-  // For APC.
-  mutable int best_variant_idx_;
-  bool use_full_object_point_cloud_;
+  bool RunPlanner(std::vector<ContPose> *detected_poses) const;
 };
 }  // namespace

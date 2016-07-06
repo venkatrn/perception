@@ -48,7 +48,7 @@ constexpr bool kUseDepthSensitiveCost = false;
 constexpr double kDepthSensitiveCostMultiplier = 100.0;
 // If true, we will assume that only one object needs to be localized and use a
 // normalized outlier cost function.
-constexpr bool kSingleObjectMode = true;
+constexpr bool kSingleObjectMode = false;
 // When kSingleObjectMode is true, we will treat every pixel that is not within
 // the object volume as an extraneous occluder if its depth is less than
 // depth(rendered pixel) - kOcclusionThreshold.
@@ -115,6 +115,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
     private_nh.param("use_adaptive_resolution",
                      perch_params_.use_adaptive_resolution, false);
     private_nh.param("use_rcnn_heuristic", perch_params_.use_rcnn_heuristic, true);
+    private_nh.param("use_model_specific_search_resolution",
+                     perch_params_.use_model_specific_search_resolution, false);
 
     private_nh.param("visualize_expanded_states",
                      perch_params_.vis_expanded_states, false);
@@ -131,6 +133,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
            perch_params_.min_points_for_constraint_cloud);
     printf("Max ICP Iterations: %d\n", perch_params_.max_icp_iterations);
     printf("ICP Max Correspondence: %f\n", perch_params_.icp_max_correspondence);
+    printf("Use Model-specific Search Resolution: %d\n",
+           static_cast<int>(perch_params_.use_model_specific_search_resolution));
     printf("RCNN Heuristic: %d\n", perch_params_.use_rcnn_heuristic);
     printf("Vis Expansions: %d\n", perch_params_.vis_expanded_states);
     printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
@@ -140,6 +144,9 @@ EnvObjectRecognition::EnvObjectRecognition(const
   mpi_comm_->barrier();
   broadcast(*mpi_comm_, perch_params_, kMasterRank);
   assert(perch_params_.initialized);
+  if (!perch_params_.initialized) {
+    printf("ERROR: PERCH Params not initialized for process %d\n", mpi_comm_->rank());
+  }
 }
 
 EnvObjectRecognition::~EnvObjectRecognition() {
@@ -206,7 +213,13 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   auto it = model_bank_.find(obj_models_[model_id].name());
   assert (it != model_bank_.end());
   const auto &model_meta_data = it->second;
-  const double search_resolution = model_meta_data.search_resolution;
+  double search_resolution = 0;
+
+  if (perch_params_.use_model_specific_search_resolution) {
+    search_resolution = model_meta_data.search_resolution;
+  } else {
+    search_resolution = env_params_.res;
+  }
 
   if (after_refinement) {
     grid_cell_circumscribing_radius = 0.0;
@@ -1262,9 +1275,10 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     last_level_cost = GetLastLevelCost(succ_cloud,
                                        adjusted_child_state->object_states().back(), *child_counted_pixels,
                                        &updated_counted_pixels);
-    // NOTE: we won't include the points that lie outside the union of volumes.
-    // Refer to the header for documentation on child_counted_pixels.
+    // // NOTE: we won't include the points that lie outside the union of volumes.
+    // // Refer to the header for documentation on child_counted_pixels.
     // *child_counted_pixels = updated_counted_pixels;
+    *child_counted_pixels = updated_counted_pixels;
   }
 
   total_cost = source_cost + target_cost + last_level_cost;
@@ -2067,7 +2081,8 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   }
 
   if (mpi_comm_->rank() == kMasterRank) {
-    PrintImage(debug_dir_ + string("input_depth_image.png"), observed_depth_image_);
+    PrintImage(debug_dir_ + string("input_depth_image.png"),
+               observed_depth_image_);
   }
 
   if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
@@ -2365,7 +2380,13 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
       auto model_bank_it = model_bank_.find(obj_models_[model_id].name());
       assert (model_bank_it != model_bank_.end());
       const auto &model_meta_data = model_bank_it->second;
-      const double search_resolution = model_meta_data.search_resolution;
+      double search_resolution = 0;
+
+      if (perch_params_.use_model_specific_search_resolution) {
+        search_resolution = model_meta_data.search_resolution;
+      } else {
+        search_resolution = env_params_.res;
+      }
 
       cout << "Greedy ICP for model: " << model_id << endl;
       #pragma omp parallel for
@@ -2591,7 +2612,13 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     auto model_bank_it = model_bank_.find(obj_models_[ii].name());
     assert (model_bank_it != model_bank_.end());
     const auto &model_meta_data = model_bank_it->second;
-    const double search_resolution = model_meta_data.search_resolution;
+    double search_resolution = 0;
+
+    if (perch_params_.use_model_specific_search_resolution) {
+      search_resolution = model_meta_data.search_resolution;
+    } else {
+      search_resolution = env_params_.res;
+    }
 
     const double res = perch_params_.use_adaptive_resolution ?
                        obj_models_[ii].GetInscribedRadius() : search_resolution;
@@ -2683,6 +2710,7 @@ vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
   return masked_depth_image;
 }
 }  // namespace
+
 
 
 

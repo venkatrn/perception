@@ -71,10 +71,18 @@ struct PERCHParams {
   // Minimum number of points in the constraint cloud that should be enclosed
   // by the object's volume for that pose to be considered as valid.
   int min_points_for_constraint_cloud;
+  // Maximum number of iteration allowed for ICP refinement.
   int max_icp_iterations;
+  // Maximum allowed distance bewteen point correspondences for ICP.
   double icp_max_correspondence;
+  // True if precomputed RCNN heuristics should be used.
   bool use_rcnn_heuristic;
+  // True if search resolution should be automatically determined based on
+  // object dimensions.
   bool use_adaptive_resolution;
+  // True if search resolutions specificed in the object meta data XML should
+  // be used, instead of the fixed EnvParams::res.
+  bool use_model_specific_search_resolution;
 
   bool vis_expanded_states;
   bool print_expanded_states;
@@ -88,8 +96,10 @@ struct PERCHParams {
     ar &min_neighbor_points_for_valid_pose;
     ar &min_points_for_constraint_cloud;
     ar &max_icp_iterations;
+    ar &icp_max_correspondence;
     ar &use_rcnn_heuristic;
     ar &use_adaptive_resolution;
+    ar &use_model_specific_search_resolution;
     ar &vis_expanded_states;
     ar &print_expanded_states;
     ar &debug_verbose;
