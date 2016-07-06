@@ -268,7 +268,6 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       ROS_INFO("Size of solution: %d", static_cast<int>(solution_state_ids.size()));
     } else {
       ROS_INFO("No solution found");
-      return false;
     }
 
     if (plan_success) {
