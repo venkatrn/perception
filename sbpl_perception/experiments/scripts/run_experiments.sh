@@ -30,8 +30,8 @@ sleep 2
 # Load default rosparams and config variables to the parameter server. These can be overwritten
 # later by the experiment-specific options.
 roslaunch "$PERCH_ROOT/config/household_objects.xml"
-rosparam load "$PERCH_ROOT/config/env_config.yaml" perch_experiments
-rosparam load "$PERCH_ROOT/config/planner_config.yaml" perch_experiments
+rosparam load "$PERCH_ROOT/config/experiments_env_config.yaml" perch_experiments
+rosparam load "$PERCH_ROOT/config/experiments_planner_config.yaml" perch_experiments
 
 # If rcnn_heuristic_option is true, then we will run D2P using precomputed RCNN heuristics in the HEURISTICS_FOLDER,
 # otherwise, we will run PERCH without RCNN heuristics.
@@ -40,7 +40,7 @@ use_rcnn_heuristic_options="true"
 
 # Run experiments for different epsilons
 # epsilon_options="5 10"
-epsilon_options="10"
+epsilon_options="5"
 
 # Whether or not to use lazy edge evaluation.
 # use_lazy_options="true false"
