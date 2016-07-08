@@ -36,14 +36,14 @@ int main(int argc, char **argv) {
   RecognitionInput input;
   pcl::PointCloud<PointT>::Ptr cloud_in(new PointCloud);
 
-  ObjectRecognizer object_recognizer(world);
+
+  ConfigParser parser;
 
   if (IsMaster(world)) {
     ros::init(argc, argv, "real_test");
     ros::NodeHandle nh("~");
     nh.param("config_file", config_file, std::string(""));
 
-    ConfigParser parser;
     parser.Parse(config_file);
 
     input.x_min = parser.min_x;
@@ -52,9 +52,6 @@ int main(int argc, char **argv) {
     input.y_max = parser.max_y;
     input.table_height = parser.table_height;
     input.camera_pose = parser.camera_pose;
-    input.model_names = parser.ConvertModelNamesInFileToIDs(
-                         object_recognizer.GetModelBank());
-
 
     boost::filesystem::path config_file_path(config_file);
     input.heuristics_dir = ros::package::getPath("sbpl_perception") +
@@ -71,7 +68,7 @@ int main(int argc, char **argv) {
     input.cloud = *cloud_in;
 
     // Setup constraint cloud (leave empty if no constraints)
-    // constraint_cloud should be unorganized and the points must be in world frame (same 
+    // constraint_cloud should be unorganized and the points must be in world frame (same
     // frame as input.cloud).
     // Example usage for localizing glucose bottle in 1462063749_perch.txt:
     // PointT constraint_point;
@@ -81,6 +78,13 @@ int main(int argc, char **argv) {
     // input.constraint_cloud.points.push_back(constraint_point);
   }
 
+  // ObjectRecognizer can be constructed only after node is initialized.
+  ObjectRecognizer object_recognizer(world);
+
+  if (IsMaster(world)) {
+    input.model_names = parser.ConvertModelNamesInFileToIDs(
+                          object_recognizer.GetModelBank());
+  }
 
   // All processes should wait until master has loaded params.
   world->barrier();
@@ -162,5 +166,7 @@ int main(int argc, char **argv) {
 
     viewer->spin();
   }
+
   return 0;
 }
+
