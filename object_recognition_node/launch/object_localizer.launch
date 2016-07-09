@@ -1,0 +1,19 @@
+<launch>
+  <master auto="start"/>
+  <param name="/use_sim_time" value="false"/>
+
+  <arg name="image_debug" default="false" />
+  <arg name="debug" default="false" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix" value="gdb --ex run --args" />
+
+
+  <include file="$(find sbpl_perception)/config/household_objects.xml"/>
+
+  <!-- <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
+  <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch-prefix="mpirun -n 8" respawn="false">
+      <rosparam command="load" file="$(find sbpl_perception)/config/demo_env_config.yaml" />
+      <rosparam command="load" file="$(find sbpl_perception)/config/demo_planner_config.yaml" />
+      <param name="image_debug" value="$(arg image_debug)"/>
+  </node>
+</launch>

@@ -1,0 +1,43 @@
+# The *organized* point cloud in world frame (we assume world frame is gravity
+# aligned, i.e, negative z-axis is same as gravity direction).
+sensor_msgs/PointCloud2 input_organized_cloud 
+
+# The IDs of the objects present in the scene.
+string[] object_ids
+
+# The camera pose with respect to the world frame. NOTE: we assume that the camera coordinate system follows
+# the typical body-frame convention (x-forward, y-left, z-up), which is
+# *different* from optical-frame conventions (where z is forward). The pose is
+# represented as a 4x4 Isometry matrix.
+std_msgs/Float64MultiArray camera_pose
+
+# Environment bounds. Returned object poses will be within these bounds.
+float64 x_min
+float64 x_max
+float64 y_min
+float64 y_max
+# Z-value of the support surface on which objects are resting. 
+# TODO: This should be replace by z_min and z_max when we add support for 6 DoF pose.
+float64 support_surface_height
+
+# Optional directory containing precomputed heuristics for this input (see
+# sbpl_perception/utils/utils.h for more details). 
+string heuristics_dir
+
+# Optional constraint point cloud (see
+# sbpl_perception/utils/utils.h for more details). 
+sensor_msgs/PointCloud2 constraint_cloud 
+
+---
+
+# An array of 4x4 homogeneous matrix transformations from 3D model to object pose in the
+# scene.
+std_msgs/Float64MultiArray[] object_transforms
+
+# An array of point clouds corresponding to each object (these can be overlaid
+# on the scene for visualization, used by grasping pipelines etc.)
+sensor_msgs/PointCloud2[] object_point_clouds
+
+# Planning Statistics
+string[] stats_field_names
+float64[] stats
