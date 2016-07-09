@@ -65,8 +65,14 @@ To pull changes from all related repositories in one go, run ```wstool update -t
 Running Experiments
 -------------------
 
-To reproduce results from our <a href="http://www.cs.cmu.edu/~venkatrn/papers/rss16.pdf">RSS '16 paper</a>:
+To reproduce results from our <a href="http://www.cs.cmu.edu/~venkatrn/papers/rss16.pdf">RSS '16 paper</a>, first checkout the RSS '16 version of the codebase:
 
+```bash
+git checkout tags/v1.0 
+cd ~/my_workspace
+catkin_make -DCMAKE_BUILD_TYPE=Release
+```
+Then run the experiments script:
 ```bash
 roscd sbpl_perception 
 chmod +x data/scripts/dowload_experiment_data.sh
