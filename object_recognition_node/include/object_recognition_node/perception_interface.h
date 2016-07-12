@@ -9,6 +9,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <object_recognition_node/object_localizer_service.h>
 #include <tf/transform_listener.h>
 
 #include <perception_utils/pcl_typedefs.h>
@@ -29,7 +30,6 @@ class PerceptionInterface
     void CloudCBInternal(const std::string& pcd_file);
     // void DepthImageCB(const sensor_msgs::ImageConstPtr& depth_image);
 
-    void DetectObjects();
 
     // Accessors
     const pcl::visualization::PCLVisualizer* viewer() const {return viewer_;}
@@ -40,6 +40,7 @@ class PerceptionInterface
     
   private:
     ros::NodeHandle nh_;
+    ros::ServiceClient object_localization_client_;
     pcl::visualization::PCLVisualizer* viewer_;
     pcl::visualization::RangeImageVisualizer* range_image_viewer_;
 
@@ -61,7 +62,7 @@ class PerceptionInterface
     // Does all the work
     void CloudCBInternal(const PointCloudPtr& original_cloud);
 
-    bool IsPointInWorkspace(PointT p);
+    void DetectObjects();
 
     // Keyboard callback for variour triggers
     void KeyboardCB(const keyboard::Key &pressed_key);

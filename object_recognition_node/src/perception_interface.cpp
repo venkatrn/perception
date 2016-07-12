@@ -7,6 +7,8 @@
  */
 
 #include <object_recognition_node/perception_interface.h>
+
+#include <eigen_conversions/eigen_msg.h>
 #include <perception_utils/perception_utils.h>
 
 #include <pcl/conversions.h>
@@ -57,6 +59,9 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
 
   recent_cloud_.reset(new PointCloud);
 
+  object_localization_client_ =
+    nh.serviceClient<object_recognition_node::LocalizeObjects>("object_localizer_service");
+
 
   if (pcl_visualization_) {
     viewer_ = new pcl::visualization::PCLVisualizer("Articulation Viewer");
@@ -65,136 +70,6 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
     viewer_->setCameraPosition(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0);
   }
 }
-
-// void PerceptionInterface::DepthImageCB(const sensor_msgs::ImageConstPtr
-//                                         &depth_image) {
-//   printf("Depth CB..\n");
-//
-//   if (recent_cloud_->width != 640 || recent_cloud_->height != 480) {
-//     printf("Haven't received point cloud yet\n");
-//     return;
-//   }
-//
-//   recent_depth_image_ = *depth_image;
-//
-//   if (planning_) {
-//     return;
-//   }
-//
-//
-//   // get camera pose
-//   tf_listener_.waitForTransform(reference_frame_, depth_image->header.frame_id,
-//                                 ros::Time(0), ros::Duration(3.0));
-//   tf::StampedTransform transform;
-//   tf_listener_.lookupTransform(reference_frame_,
-//                                string("/head_mount_kinect_rgb_link"), ros::Time(0), transform);
-//   tf::Vector3 t = transform.getOrigin();
-//   tf::Quaternion q = transform.getRotation();
-//
-//
-//   double roll, pitch, yaw;
-//   transform.getBasis().getEulerYPR(yaw, pitch, roll);
-//   // yaw = yaw - M_PI / 2;
-//   // yaw = M_PI / 2 - yaw;
-//
-//   // transform.getBasis().getRPY(roll,pitch,yaw);
-//   printf("RPY: %f %f %f\n", roll, pitch, yaw);
-//
-//   // Eigen::Vector3d t_out(t.x(),
-//   //                       t.y(),
-//   //                       t.z());
-//   // Eigen::Quaterniond q_out(q.w(),
-//   //                          q.x(),
-//   //                          q.y(),
-//   //                          q.z());
-//   // Eigen::Isometry3d camera_pose = (Eigen::Isometry3d)q_out;
-//   // camera_pose.translation() = t_out;
-//
-//   Eigen::Vector3d focus_center(0.0, 0.0, 0.0);
-//
-//   // double x = t.x()-focus_center.x();
-//   // double y = t.y()-focus_center.y();
-//   // double z = t.z()-focus_center.z();
-//   // double halo_r = sqrt(x*x + y*y);
-//   // pitch = atan2( z, halo_r);
-//   // yaw = atan2(-y, -x);
-//   // roll = 0.0;
-//   // printf("PY Eigen: %f %f\n", pitch, yaw);
-//
-//   double x = t.x();
-//   double y = t.y();
-//   double z = t.z();
-//
-//   Eigen::Isometry3d camera_pose;
-//   camera_pose.setIdentity();
-//   Eigen::Matrix3d m;
-//   m = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ())
-//       * Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY())
-//       * Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitZ());
-//   camera_pose *= m;
-//   Eigen::Vector3d v(x, y, z);
-//   v += focus_center;
-//   camera_pose.translation() = v;
-//
-//   cout << camera_pose.matrix() << endl;
-//
-//   cv_bridge::CvImagePtr cv_ptr;
-//
-//   try {
-//     cv_ptr = cv_bridge::toCvCopy(depth_image,
-//                                  sensor_msgs::image_encodings::TYPE_16UC1);
-//   } catch (cv_bridge::Exception &e) {
-//     ROS_ERROR("cv_bridge exception: %s", e.what());
-//     return;
-//   }
-//
-//   vector<unsigned short> depth_image_vec;
-//   const int height = 480;
-//   const int width = 640;
-//   depth_image_vec.resize(height * width);
-//   cv::Mat img(height, width, CV_16UC1);
-//
-//   int count = 0;
-//
-//   for (int ii = 0; ii < height; ++ii) {
-//     for (int jj = 0; jj < width; ++jj) {
-//       short int val =  cv_ptr->image.at<short int>(cv::Point(ii, jj));
-//       PointT p = recent_cloud_->at(jj, ii);
-//       bool isvalid = IsPointInWorkspace(p);
-//       if (!isvalid) {
-//         count++;
-//       }
-//
-//       if (val == 0 || (!isvalid)) {
-//         depth_image_vec[ii * width + jj] = 20000;
-//       } else {
-//         depth_image_vec[ii * width + jj] = val;
-//       }
-//
-//       if (!isvalid) {
-//         img.at<unsigned short>(ii,jj) = 0;
-//       } else {
-//         // img.at<unsigned short>(ii,jj) = p.z * 1000;
-//         img.at<unsigned short>(ii,jj) = val;
-//       }
-//     }
-//   }
-//
-//   printf("Num points under table: %d", count);
-//
-//   printf("Printing..\n");
-//   cv::imwrite( "/tmp/observation_uint.png", img);
-//   env_obj_->PrintImage(string("/tmp/obs.png"), depth_image_vec);
-//
-//   printf("Setting obs..\n");
-//   env_obj_->SetCameraPose(camera_pose);
-//   env_obj_->SetObservation(3, depth_image_vec, recent_cloud_);
-//   env_obj_->SetTableHeight(table_height_);
-//   //env_obj_->SetBounds(1.0, 1.5, -0.1, 0.5);
-//   env_obj_->SetBounds(-1.0, 0.0, 0.9, 1.31);
-//
-//   DetectObjects();
-// }
 
 void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
                                   &sensor_cloud) {
@@ -355,111 +230,41 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   writer.writeBinary(output_orig_pcd_path.c_str(), *original_cloud);
   image_count++;
 
-}
-/*
-void PerceptionInterface::CloudCBInternal(const PointCloudPtr
-                                          &original_cloud) {
-  if (pcl_visualization_) {
-    viewer_->removeAllPointClouds();
-    viewer_->removeAllShapes();
-  }
 
-  PointCloudPtr cloud(new PointCloud);
-  cloud = original_cloud;
+  // Run object recognition.
+  object_recognition_node::LocalizeObjects srv;
+  auto &req = srv.request;
+  req.x_min = 0.0;
+  req.x_max = 0.75;
+  req.y_min = -0.5;
+  req.y_max = 0.5;
+  req.support_surface_height = table_height_;
+  req.object_ids = vector<string>({"folgers_classic_roast_coffee"});
+  tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
+  pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
-  if (pcl_visualization_ && original_cloud->size() != 0) {
-    if (!viewer_->updatePointCloud(original_cloud, "input_cloud")) {
-      viewer_->addPointCloud(original_cloud, "input_cloud");
+  if (object_localization_client_.call(srv)) {
+    ROS_INFO("Episode Statistics\n");
+
+    for (size_t ii = 0; ii < srv.response.stats_field_names.size(); ++ii) {
+      ROS_INFO("%s: %f", srv.response.stats_field_names[ii].c_str(), srv.response.stats[ii]);
     }
-  }
 
-  PointCloudPtr cloud_new(new PointCloud);
-  pcl::ModelCoefficients::Ptr coeffs(new pcl::ModelCoefficients);
-  cloud_new = RemoveGroundPlane(cloud, coeffs);
-  printf("W: %d, H: %d\n", cloud_new->width, cloud_new->height);
+    ROS_INFO("Model to scene object transforms:");
 
-    // float* depth_image = new float[640*480];
-    //
-    // float min_z = 10000000, max_z = 0;
-    // for (int ii = 0; ii < 480; ++ii) {
-    //   for (int jj = 0; jj < 640; ++jj) {
-    //     //float z = original_cloud->points[ii * 640 + jj].z;
-    //     float z = cloud_new->points[ii * 640 + jj].z;
-    //     if (z < min_z) {min_z = z;}
-    //     if (z > max_z) {max_z = z;}
-    //     depth_image[ii*640+jj] = z;
-    //   }
-    // }
-    //
-    // for (int ii = 0; ii < 480; ++ii) {
-    //   for (int jj = 0; jj < 640; ++jj) {
-    //     float z = original_cloud->points[ii * 640 + jj].z;
-    //     //depth_image_c[jj*640+ii] = (z-min_z)*(255)/(max_z - min_z);
-    //     depth_image_c[ii*640+jj] = (z-min_z)*(255)/(max_z - min_z);
-    //   }
-    // }
-    // pcl::io::saveCharPNGFile ("/tmp/depth_img.png", depth_image_c, 640, 480, 1);
-  pcl::RangeImagePlanar range_image;
-  GetRangeImageFromCloud(cloud_new, *viewer_, &range_image);
-  //range_image.setDepthImage(depth_image, 640, 480,
-  //                          320.0, 240.0, 525.0, 525.0);
-  float *range_vals = range_image.getRangesArray();
-  float min_z, max_z;
-  range_image.getMinMaxRanges(min_z, max_z);
-  int num_vals = sizeof(range_vals) / sizeof(float);
-  float cx = range_image.getCenterX();
-  float cy = range_image.getCenterY();
-  printf("Minz: %f, Maxz: %f\n", min_z, max_z);
-  range_image_viewer_->showRangeImage(range_image, min_z, max_z);
+    for (size_t ii = 0; ii < req.object_ids.size(); ++ii) {
 
-  unsigned char *depth_image_c = new unsigned char[640 * 480];
+      Eigen::Matrix4d pose(srv.response.object_transforms[ii].data.data());
+      Eigen::Affine3d object_transform;
+      // Transpose to convert column-major raw data initialization to row-major.
+      object_transform.matrix() = pose.transpose();
 
-  for (int jj = 0; jj < 640; ++jj) {
-    for (int ii = 0; ii < 480; ++ii) {
-      //pcl::PointWithRange p = range_image.getPoint(jj, ii);
-      //depth_image_c[ii*640+jj] = (p.range-min_z)*255/(max_z-min_z);
-      depth_image_c[ii * 640 + jj] = (range_vals[ii * 640 + jj] - min_z) * 255 /
-                                     (max_z - min_z);
+      ROS_INFO_STREAM("Object: " << req.object_ids[ii] << std::endl << object_transform.matrix() << std::endl << std::endl);
     }
-  }
-
-  //pcl::io::saveCharPNGFile ("/tmp/depth_img.png", depth_image_c, 640, 480, 1);
-
-  //range_image_viewer_->showMonoImage(depth_image_c, 640, 480);
-  // pcl::io::saveRangeImagePlanarFilePNG("/tmp/depth_img.png", range_image);
-
-
-  std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
-  regions;
-  OrganizedSegmentation(cloud, &regions);
-  ROS_INFO("[SBPL Perception]: Found %d planar regions", regions.size());
-
-  if (pcl_visualization_) {
-    DisplayPlanarRegions(*viewer_, regions);
+  } else {
+    ROS_ERROR("Failed to call the object localizer service");
   }
 }
-*/
-
-bool PerceptionInterface::IsPointInWorkspace(PointT p) {
-  // if (p.z != p.z) {
-  //   return false;
-  // }
-  //
-  // const double min_x = -1.00; //-1.75
-  // const double max_x = 2.0;//1.5
-  // const double min_y = -0.5; //-0.5
-  // const double max_y = 1.3; //0.5
-  // const double min_z = table_height_;
-  // const double max_z = table_height_ + 0.2;
-  //
-  // if (p.x < min_x || p.x > max_x ||
-  //     p.y < min_y || p.y > max_y ||
-  //     p.z < min_z || p.z > max_z) {
-  //   return false;
-  // }
-  return true;
-}
-
 
 void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
   std::cout << "Got " << pressed_key.code << endl;
@@ -471,4 +276,3 @@ void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
 
   return;
 }
-
