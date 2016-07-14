@@ -11,7 +11,7 @@ The 'sbpl_perception' package implements the PERCH and D2P algorithms. Internall
 Dependencies
 ------------
 
-- ROS Hydro+
+- ROS Hydro+ (active development only on Indigo)
 - C++11
 - OpenCV 2.x
 - PCL 1.7+
@@ -19,7 +19,7 @@ Dependencies
 Setup
 -----
 
-1. Get ROS Hydro (or Indigo) from http://wiki.ros.org/hydro/Installation/Ubuntu
+1. Get ROS Indigo from http://wiki.ros.org/hydro/Installation/Ubuntu
 2. Set up a catkin workspace ~/my_workspace (http://wiki.ros.org/catkin/Tutorials/create_a_workspace).
 3. Download the <a href="https://raw.githubusercontent.com/venkatrn/perception/master/perch.rosinstall" download="perch.rosinstall">rosinstall file</a> to your workspace.
 
@@ -28,6 +28,7 @@ cd ~/my_workspace
 wstool init src
 wstool merge -t src perch.rosinstall
 wstool update -t src
+rosdep install --from-paths src --ignore-src --rosdistro indigo -y
 catkin_make -DCMAKE_BUILD_TYPE=Release
 ```
 
@@ -37,7 +38,7 @@ First, download the RGB-D dataset and object CAD models (92 MB total):
 
 ```bash
 roscd sbpl_perception 
-chmod +x data/scripts/dowload_demo_models.sh
+chmod +x data/scripts/download_demo_models.sh
 ./data/scripts/download_demo_models.sh
 ```
 
@@ -75,7 +76,7 @@ catkin_make -DCMAKE_BUILD_TYPE=Release
 Then run the experiments script:
 ```bash
 roscd sbpl_perception 
-chmod +x data/scripts/dowload_experiment_data.sh
+chmod +x data/scripts/download_experiment_data.sh
 ./data/scripts/download_experiment_data.sh
 ./experiments/scripts/run_experiments.sh
 ```

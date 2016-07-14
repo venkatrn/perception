@@ -22,6 +22,8 @@
   <build_depend>pcl_ros</build_depend>
   <build_depend>cv_bridge</build_depend>
   <build_depend>libpcl-all-dev</build_depend>
+  <build_depend>libglew-dev</build_depend>
+  <build_depend>glut</build_depend>
 
   <!-- Dependencies needed after this package is compiled. -->
   <!-- <run_depend>geometry_msgs</run_depend> -->
@@ -32,6 +34,8 @@
   <run_depend>cv_bridge</run_depend>
   <run_depend>libpcl-all</run_depend>
   <run_depend>libpcl-all-dev</run_depend>
+  <run_depend>libglew-dev</run_depend>a
+  <run_depend>glut</run_depend>a
 
   <!-- Dependencies needed only for running tests. -->
   <!-- <test_depend>geometry_msgs</test_depend> -->

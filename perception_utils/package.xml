@@ -19,12 +19,14 @@
   <build_depend>pcl_conversions</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>libpcl-all-dev</build_depend>
+  <build_depend>hdf5</build_depend>
 
   <!-- Dependencies needed after this package is compiled. -->
   <run_depend>pcl_ros</run_depend>
   <run_depend>pcl_conversions</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>libpcl-all</run_depend>
+  <run_depend>hdf5</run_depend>
 
   <!-- Dependencies needed only for running tests. -->
   <!-- <test_depend>pcl_ros</test_depend> -->
