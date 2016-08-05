@@ -13,6 +13,9 @@ using std::string;
 using std::cout;
 using std::endl;
 
+
+const string base_dir = ros::package::getPath("sbpl_perception") + "/";
+
 ConfigParser::ConfigParser() : num_models(0), min_x(0), max_x(0),
   min_y(0), max_y(0), table_height(0) {}
 
@@ -31,7 +34,7 @@ void ConfigParser::Parse(const string &config_file) {
   std::getline(fs, line);
 
   // Read input point cloud.
-  pcd_file_path = boost::lexical_cast<string>(line.c_str());
+  pcd_file_path = base_dir + boost::lexical_cast<string>(line.c_str());
 
   cout << "pcd path: " << pcd_file_path << endl;
 
@@ -41,10 +44,16 @@ void ConfigParser::Parse(const string &config_file) {
   num_models = boost::lexical_cast<int>(line.c_str());
   cout << "num models: " << num_models << endl;
 
+  // We assume all pcd files and model files are relative to the
+  // sbpl_perception package root. For example, if the pcd file path is
+  // data/experiment_input/example_pointcloud.pcd, then we assume that
+  // /...../sbpl_perception/data/experiment_input/example_pointcloud.pcd
+  // exists. The same goes for the CAD model paths as well.
+
   // Read the model files.
   for (int ii = 0; ii < num_models; ++ii) {
     std::getline(fs, line);
-    const string model_file = boost::lexical_cast<string>(line.c_str());
+    const string model_file = base_dir + boost::lexical_cast<string>(line.c_str());
     cout << "model file: " << model_file << endl;
     model_files.push_back(model_file);
     boost::filesystem::path p(model_file);
@@ -109,7 +118,7 @@ std::vector<std::string> ConfigParser::ConvertModelNamesInFileToIDs(
     for (const auto &bank_item : bank) {
       const sbpl_perception::ModelMetaData &model = bank_item.second;
 
-      if (model.file.find(name) != std::string::npos) {
+      if (model.file.find("/" + name + ".") != std::string::npos) {
         model_ids.push_back(model.name);
         break;
       }
