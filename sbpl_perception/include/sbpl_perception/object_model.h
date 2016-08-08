@@ -28,22 +28,22 @@ class ObjectModel {
 
   double GetCircumscribedRadius() const;
 
-  pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p, double table_height) const;
+  pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p) const;
 
   pcl::PolygonMeshPtr GetTransformedMesh(const Eigen::Matrix4f &transform) const;
 
   // Returns true if point is within the mesh model, where the model has been
   // transformed by the given pose and height.
-  std::vector<bool> PointsInsideMesh(const std::vector<Eigen::Vector3d> &points, const ContPose &pose, double table_height) const;
+  std::vector<bool> PointsInsideMesh(const std::vector<Eigen::Vector3d> &points, const ContPose &pose) const;
 
   // Returns true if point is within the convex hull of the 2D-projected mesh model, where the model has been
   // transformed by the given pose and height.
-  std::vector<bool> PointsInsideFootprint(const std::vector<Eigen::Vector2d> &points, const ContPose &pose, double table_height) const;
-  std::vector<bool> PointsInsideFootprint(const PointCloudPtr &cloud, const ContPose &pose, double table_height) const;
+  std::vector<bool> PointsInsideFootprint(const std::vector<Eigen::Vector2d> &points, const ContPose &pose) const;
+  std::vector<bool> PointsInsideFootprint(const PointCloudPtr &cloud, const ContPose &pose) const;
 
 
   // Return the convex-hull footprint of the object at the pose of the object. 
-  PointCloudPtr GetFootprint(const ContPose &pose, double table_height, bool use_inflation=false) const;
+  PointCloudPtr GetFootprint(const ContPose &pose, bool use_inflation=false) const;
   
   static void TransformPolyMesh(const pcl::PolygonMesh::Ptr
                        &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform);
@@ -87,9 +87,9 @@ class ObjectModel {
   }
 
   // Return the transform that aligns a raw model (i.e, the one provided to the
-  // constructor) to a continuous pose (x,y,table_height,\theta) in the world
+  // constructor) to a continuous pose (x,y,z,roll,pitch,yaw) in the world
   // frame.
-  Eigen::Affine3f GetRawModelToSceneTransform(const ContPose &p, double table_height) const;
+  Eigen::Affine3f GetRawModelToSceneTransform(const ContPose &p) const;
 
  private:
   pcl::PolygonMesh mesh_;

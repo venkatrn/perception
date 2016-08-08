@@ -210,9 +210,9 @@ vector<unsigned short> DatasetGenerator::GetDepthImage(const
 
   for (size_t ii = 0; ii < models_in_scene.size(); ++ii) {
     ObjectModel object_model = models_in_scene[ii];
-    ContPose p(0, 0, 0);
+    ContPose p(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
-    auto transformed_mesh = object_model.GetTransformedMesh(p, 0.0);
+    auto transformed_mesh = object_model.GetTransformedMesh(p);
     PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
                                                            GL_POLYGON, transformed_mesh));
     scene_->add (model);

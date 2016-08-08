@@ -74,7 +74,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
   argv[0] = const_cast<char *>("0");
   argv[1] = const_cast<char *>("1");
   kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
-  kDepthImageHeight, kDepthImageWidth));
+                                                     kDepthImageHeight, kDepthImageWidth));
   scene_ = kinect_simulator_->scene_;
   observed_cloud_.reset(new PointCloud);
   original_input_cloud_.reset(new PointCloud);
@@ -85,10 +85,10 @@ EnvObjectRecognition::EnvObjectRecognition(const
   downsampled_observed_cloud_.reset(new PointCloud);
 
   gl_inverse_transform_ <<
-  0, 0 , -1 , 0,
-  -1, 0 , 0 , 0,
-  0, 1 , 0 , 0,
-  0, 0 , 0 , 1;
+                        0, 0 , -1 , 0,
+                        -1, 0 , 0 , 0,
+                        0, 1 , 0 , 0,
+                        0, 0 , 0 , 1;
 
   pcl::console::setVerbosityLevel(pcl::console::L_ALWAYS);
 
@@ -144,8 +144,10 @@ EnvObjectRecognition::EnvObjectRecognition(const
   mpi_comm_->barrier();
   broadcast(*mpi_comm_, perch_params_, kMasterRank);
   assert(perch_params_.initialized);
+
   if (!perch_params_.initialized) {
-    printf("ERROR: PERCH Params not initialized for process %d\n", mpi_comm_->rank());
+    printf("ERROR: PERCH Params not initialized for process %d\n",
+           mpi_comm_->rank());
   }
 }
 
@@ -204,7 +206,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
 
   point.x = pose.x();
   point.y = pose.y();
-  point.z = env_params_.table_height;
+  point.z = pose.z();
   // point.z = (obj_models_[model_id].max_z()  - obj_models_[model_id].min_z()) /
   //           2.0 + env_params_.table_height;
 
@@ -262,8 +264,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   }
 
   // Check if the footprint is contained with the support surface bounds.
-  auto footprint = obj_models_[model_id].GetFootprint(pose,
-                                                      env_params_.table_height);
+  auto footprint = obj_models_[model_id].GetFootprint(pose);
 
   for (const auto &point : footprint->points) {
     if (point.x < env_params_.x_min - kFootprintTolerance ||
@@ -279,7 +280,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   // check.
   if (!constraint_cloud_->empty()) {
     vector<bool> points_inside = obj_models_[model_id].PointsInsideFootprint(
-                                   projected_constraint_cloud_, pose, env_params_.table_height);
+                                   projected_constraint_cloud_, pose);
     int num_inside = 0;
 
     for (size_t ii = 0; ii < points_inside.size(); ++ii) {
@@ -988,8 +989,8 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   ContPose child_pose = last_object.cont_pose();
   int last_object_id = last_object.id();
 
-  ContPose pose_in(child_pose.x(), child_pose.y(), child_pose.yaw()),
-           pose_out(child_pose.x(), child_pose.y(), child_pose.yaw());
+  ContPose pose_in(child_pose),
+           pose_out(child_pose);
   PointCloudPtr cloud_in(new PointCloud);
   PointCloudPtr succ_cloud(new PointCloud);
   PointCloudPtr cloud_out(new PointCloud);
@@ -1163,8 +1164,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   vector<unsigned short> depth_image, last_obj_depth_image;
   const float *succ_depth_buffer;
-  ContPose pose_in(child_pose.x(), child_pose.y(), child_pose.yaw()),
-           pose_out(child_pose.x(), child_pose.y(), child_pose.yaw());
+  ContPose pose_in(child_pose),
+           pose_out(child_pose);
   PointCloudPtr cloud_in(new PointCloud);
   PointCloudPtr succ_cloud(new PointCloud);
   PointCloudPtr cloud_out(new PointCloud);
@@ -1468,7 +1469,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     PointT obj_center;
     obj_center.x = last_obj_pose.x();
     obj_center.y = last_obj_pose.y();
-    obj_center.z = env_params_.table_height;
+    obj_center.z = last_obj_pose.z();
 
     vector<float> sqr_dists;
     vector<int> validation_points;
@@ -1513,7 +1514,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
     // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose(), env_params_.table_height);
     vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
-                                   eig2d_points, last_object.cont_pose(), env_params_.table_height);
+                                   eig2d_points, last_object.cont_pose());
 
     indices_to_consider.clear();
 
@@ -1802,7 +1803,7 @@ void EnvObjectRecognition::PrintValidStates() {
           PointT point;
           point.x = p.x();
           point.y = p.y();
-          point.z = env_params_.table_height;
+          point.z = p.z();
           cloud->points.push_back(point);
 
           // If symmetric object, don't iterate over all thetas
@@ -1926,8 +1927,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
     ObjectModel obj_model = obj_models_[object_state.id()];
     ContPose p = object_state.cont_pose();
 
-    auto transformed_mesh = obj_model.GetTransformedMesh(p,
-                                                         env_params_.table_height);
+    auto transformed_mesh = obj_model.GetTransformedMesh(p);
 
     PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
                                                            GL_POLYGON, transformed_mesh));
@@ -2400,7 +2400,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
           #pragma omp parallel for
 
           for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-            ContPose p_in(x, y, theta);
+            ContPose p_in(x, y, env_params_.table_height, 0.0, 0.0, theta);
             ContPose p_out = p_in;
 
             GraphState succ_state;
@@ -2412,8 +2412,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
               continue;
             }
 
-            auto transformed_mesh = obj_models_[model_id].GetTransformedMesh(p_in,
-                                                                             env_params_.table_height);
+            auto transformed_mesh = obj_models_[model_id].GetTransformedMesh(p_in);
             PointCloudPtr cloud_in(new PointCloud);
             PointCloudPtr cloud_aligned(new PointCloud);
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_xyz (new
@@ -2570,8 +2569,7 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(
     assert(object_id >= 0 && object_id < env_params_.num_objects);
 
     const vector<bool> inside_mesh = obj_models_[object_id].PointsInsideMesh(
-                                       eig_points, graph_state.object_states().back().cont_pose(),
-                                       env_params_.table_height);
+                                       eig_points, graph_state.object_states().back().cont_pose());
     vector<int> inside_mesh_indices;
     inside_mesh_indices.reserve(inside_mesh.size());
 
@@ -2628,7 +2626,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
       for (double y = env_params_.y_min; y <= env_params_.y_max;
            y += res) {
         for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-          ContPose p(x, y, theta);
+          ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
 
           if (!IsValidPose(source_state, ii, p)) {
             continue;
@@ -2710,13 +2708,3 @@ vector<unsigned short> EnvObjectRecognition::ApplyOcclusionMask(
   return masked_depth_image;
 }
 }  // namespace
-
-
-
-
-
-
-
-
-
-

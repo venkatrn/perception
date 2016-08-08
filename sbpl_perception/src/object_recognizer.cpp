@@ -161,7 +161,7 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
   for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
     const auto &obj_model = models[ii];
     object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
-                                  detected_poses[ii], input.table_height);
+                                  detected_poses[ii]);
   }
 
   return plan_success;
