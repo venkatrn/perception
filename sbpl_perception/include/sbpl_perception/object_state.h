@@ -15,8 +15,6 @@ class ContPose {
   ContPose() = default;
   ContPose(const ContPose& other) = default;
   ContPose(double x, double y, double z, double roll, double pitch, double yaw);
-  // TODO: deprecate this.
-  ContPose(double x, double y, double yaw) : ContPose(x, y, 0.0, 0.0, 0.0, yaw) {}
   ContPose(const DiscPose &disc_pose);
 
   const double &x() const {
@@ -73,8 +71,6 @@ class DiscPose {
   DiscPose() = default;
   DiscPose(const DiscPose& other) = default;
   DiscPose(int x, int y, int z, int roll, int pitch, int yaw);
-  // TODO: deprecate this.
-  DiscPose(double x, double y, double yaw) : DiscPose(x, y, 0, 0, 0, yaw) {}
   DiscPose(const ContPose &cont_pose);
 
   const int &x() const {

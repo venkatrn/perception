@@ -405,7 +405,7 @@ ContPose RCNNHeuristicFactory::GetPoseFromBBox(const cv::Mat &depth_image,
   }
 
   projected_centroid = projected_centroid / num_points;
-  const ContPose pose(projected_centroid[0], projected_centroid[1], 0);
+  const ContPose pose(projected_centroid[0], projected_centroid[1], projected_centroid[2], 0.0, 0.0, 0.0);
   return pose;
 }
 
@@ -420,7 +420,7 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
        ++model_num) {
 
     GraphState state;
-    ObjectState object_state(model_num, false, ContPose(0, 0, 0));
+    ObjectState object_state(model_num, false, ContPose(0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
     state.AppendObject(object_state);
     const int heuristic_value = heuristic(state);
 
@@ -443,7 +443,7 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
     for (double y = recognition_input_.y_min; y <= recognition_input_.y_max;
          y += kRasterStep) {
       GraphState state;
-      ObjectState object_state(matching_model_num, false, ContPose(x, y, 0));
+      ObjectState object_state(matching_model_num, false, ContPose(x, y, 0.0, 0.0, 0.0, 0.0));
       state.AppendObject(object_state);
       const int heuristic_value = heuristic(state);
       Eigen::Vector3f world_point(x, y, recognition_input_.table_height);

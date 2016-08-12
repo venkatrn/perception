@@ -15,7 +15,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
 set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 
-
 # Load catkin and all dependencies required for this package
 find_package(catkin REQUIRED COMPONENTS 
   cv_bridge 
@@ -30,6 +29,11 @@ find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(MPI REQUIRED)
 find_package(OpenMP)
+find_package(fcl REQUIRED)
+find_package(octomap REQUIRED)
+
+find_package(PkgConfig QUIET)
+pkg_check_modules(FCL REQUIRED fcl)
 
 # TODO: why does the following line cause a nightmare?
 # find_package(PCL REQUIRED)
@@ -40,7 +44,7 @@ CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
 # set(CMAKE_CXX_LINK_FLAGS ${CMAKE_CXX_LINK_FLAGS} ${MPI_LINK_FLAGS})
 
 include_directories(include ${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
+  ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${FCL_INCLUDE_DIRS})
 include_directories(MPI_INCLUDE_PATH)
 
 catkin_package(
@@ -75,10 +79,11 @@ add_library(${PROJECT_NAME}
   src/config_parser.cpp
   src/object_recognizer.cpp
   src/utils/utils.cpp
+  src/utils/object_utils.cpp
   src/utils/dataset_generator.cpp)
 
 target_link_libraries(${PROJECT_NAME} ${MPI_LIBRARIES} ${Boost_LIBRARIES} ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
 
 add_executable(real_test src/experiments/experiments.cpp)

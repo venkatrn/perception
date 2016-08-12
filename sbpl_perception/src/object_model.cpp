@@ -334,11 +334,6 @@ pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const ContPose &p) const {
   pcl::PolygonMeshPtr mesh_in(new pcl::PolygonMesh(mesh_));
   pcl::PolygonMeshPtr transformed_mesh(new pcl::PolygonMesh);
   Eigen::Matrix4f transform;
-  // transform <<
-  //           cos(p.yaw()), -sin(p.yaw()) , 0, p.x(),
-  //               sin(p.yaw()) , cos(p.yaw()) , 0, p.y(),
-  //               0, 0 , 1 , table_height,
-  //               0, 0 , 0 , 1;
   transform = p.GetTransform().matrix().cast<float>();
   TransformPolyMesh(mesh_in, transformed_mesh, transform);
   return transformed_mesh;
@@ -352,13 +347,9 @@ pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const Eigen::Matrix4f
   return transformed_mesh;
 }
 
-Eigen::Affine3f ObjectModel::GetRawModelToSceneTransform(const ContPose &p) const {
+Eigen::Affine3f ObjectModel::GetRawModelToSceneTransform(
+  const ContPose &p) const {
   Eigen::Matrix4f transform;
-  // transform <<
-  //           cos(p.yaw()), -sin(p.yaw()) , 0, p.x(),
-  //               sin(p.yaw()) , cos(p.yaw()) , 0, p.y(),
-  //               0, 0 , 1 , table_height,
-  //               0, 0 , 0 , 1;
   transform = p.GetTransform().matrix().cast<float>();
   Eigen::Affine3f model_to_scene_transform;
   model_to_scene_transform.matrix() = transform.matrix() *
@@ -384,11 +375,6 @@ vector<bool> ObjectModel::PointsInsideMesh(const vector<Eigen::Vector3d>
 
   // Inflate mesh so that we get the points on the boundaries as well.
   Eigen::Matrix4f transform;
-  // transform <<
-  //           cos(pose.yaw()), -sin(pose.yaw()) , 0, pose.x(),
-  //               sin(pose.yaw()) , cos(pose.yaw()) , 0, pose.y(),
-  //               0, 0 , 1 , table_height,
-  //               0, 0 , 0 , 1;
   transform = pose.GetTransform().matrix().cast<float>();
   transform.block<3, 3>(0, 0) = inflation_factor_ * transform.block<3, 3>(0, 0);
   auto transformed_mesh = GetTransformedMesh(transform);
@@ -433,11 +419,6 @@ vector<bool> ObjectModel::PointsInsideMesh(const vector<Eigen::Vector3d>
 vector<bool> ObjectModel::PointsInsideFootprint(const
                                                 std::vector<Eigen::Vector2d> &points, const ContPose &pose) const {
   Eigen::Affine3f transform;
-  // transform.matrix() <<
-  //                    cos(pose.yaw()), -sin(pose.yaw()) , 0, pose.x(),
-  //                        sin(pose.yaw()) , cos(pose.yaw()) , 0, pose.y(),
-  //                        0, 0 , 1 , table_height,
-  //                        0, 0 , 0 , 1;
   transform = pose.GetTransform().matrix().cast<float>();
   transform.matrix().block<3, 3>(0,
                                  0) = inflation_factor_ * transform.matrix().block<3, 3>(0, 0);
@@ -469,7 +450,7 @@ vector<bool> ObjectModel::PointsInsideFootprint(const
     PointT pcl_point;
     pcl_point.x = transformed_points[ii][0];
     pcl_point.y = transformed_points[ii][1];
-    // pcl_point.z = table_height;
+    // pcl_point.z = pose.z();
     pcl_point.z = 0;
 
     // NOTE: for this test, transformed_footprint should be an implicitly
@@ -501,13 +482,9 @@ vector<bool> ObjectModel::PointsInsideFootprint(const PointCloudPtr &cloud,
   return PointsInsideFootprint(eigen_points, pose);
 }
 
-PointCloudPtr ObjectModel::GetFootprint(const ContPose &pose, bool use_inflation/*=false*/) const {
+PointCloudPtr ObjectModel::GetFootprint(const ContPose &pose,
+                                        bool use_inflation/*=false*/) const {
   Eigen::Affine3f transform;
-  // transform.matrix() <<
-  //                    cos(pose.yaw()), -sin(pose.yaw()) , 0, pose.x(),
-  //                        sin(pose.yaw()) , cos(pose.yaw()) , 0, pose.y(),
-  //                        0, 0 , 1 , table_height,
-  //                        0, 0 , 0 , 1;
   transform = pose.GetTransform().matrix().cast<float>();
 
   if (use_inflation) {

@@ -9,6 +9,7 @@
 
 #include <perception_utils/perception_utils.h>
 #include <sbpl_perception/discretization_manager.h>
+#include <sbpl_perception/utils/object_utils.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -262,6 +263,14 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
       return false;
     }
   }
+
+  // Do collision checking.
+  // if (s.NumObjects() > 1) {
+  //   printf("Model ids: %d %d\n", model_id, s.object_states().back().id());
+  //   if (ObjectsCollide(obj_models_[model_id], obj_models_[s.object_states().back().id()], pose, s.object_states().back().cont_pose())) {
+  //     return false;
+  //   }
+  // }
 
   // Check if the footprint is contained with the support surface bounds.
   auto footprint = obj_models_[model_id].GetFootprint(pose);
@@ -1794,7 +1803,7 @@ void EnvObjectRecognition::PrintValidStates() {
       for (double y = env_params_.y_min; y <= env_params_.y_max;
            y += env_params_.res) {
         for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-          ContPose p(x, y, theta);
+          ContPose p(x, y, 0.0, 0.0, 0.0, theta);
 
           if (!IsValidPose(source_state, ii, p)) {
             continue;
@@ -2115,7 +2124,8 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   env_stats_.scenes_rendered = 0;
   env_stats_.scenes_valid = 0;
 
-  const ObjectState special_goal_object_state(-1, false, DiscPose(0, 0, 0));
+  const ObjectState special_goal_object_state(-1, false, DiscPose(0, 0, 0, 0, 0,
+                                                                  0));
   goal_state.mutable_object_states().push_back(
     special_goal_object_state); // This state should never be generated during the search
 
@@ -2309,7 +2319,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     score = icp.getFitnessScore();
     Eigen::Matrix4f transformation = icp.getFinalTransformation();
     Eigen::Vector4f vec_in, vec_out;
-    vec_in << pose_in.x(), pose_in.y(), env_params_.table_height, 1.0;
+    vec_in << pose_in.x(), pose_in.y(), pose_in.z(), 1.0;
     vec_out = transformation * vec_in;
     double yaw = atan2(transformation(1, 0), transformation(0, 0));
 
@@ -2319,7 +2329,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     double sin_term = sin(yaw1 + yaw2);
     double total_yaw = atan2(sin_term, cos_term);
 
-    *pose_out = ContPose(vec_out[0], vec_out[1], total_yaw);
+    *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], 0.0, 0.0, total_yaw);
     // printf("Old yaw: %f, New yaw: %f\n", pose_in.theta, pose_out->theta);
     // printf("Old xy: %f %f, New xy: %f %f\n", pose_in.x, pose_in.y, pose_out->x, pose_out->y);
 
@@ -2625,12 +2635,15 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
          x += res) {
       for (double y = env_params_.y_min; y <= env_params_.y_max;
            y += res) {
+        // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
         for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
+          // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
           ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
 
           if (!IsValidPose(source_state, ii, p)) {
             continue;
           }
+
 
           GraphState s = source_state; // Can only add objects, not remove them
           const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
@@ -2648,6 +2661,8 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               theta > (M_PI + env_params_.theta_res)) {
             break;
           }
+
+          // }
         }
       }
     }

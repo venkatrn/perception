@@ -10,7 +10,7 @@
 
   <include file="$(find sbpl_perception)/config/household_objects.xml"/>
 
-  <!-- <node pkg="sbpl_perception" type="experiments" name="experiments" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
+  <!-- <node pkg="sbpl_perception" type="real_test" name="real_test" output="screen" launch&#45;prefix="$(arg launch_prefix)" respawn="false"> -->
     <node pkg="sbpl_perception" type="real_test" name="real_test" output="screen" launch-prefix="mpirun -n 8" respawn="false">
       <rosparam command="load" file="$(find sbpl_perception)/config/env_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/planner_config.yaml" />
@@ -22,7 +22,7 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T114827.329624.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/>  -->
-      <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115430.348560.txt"/> 
+      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115430.348560.txt"/>  -->
       <!--4 small objects-->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142413.808534.txt"/> -->
 
@@ -46,7 +46,7 @@
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115445.303284.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120142.169847.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120147.910222.txt"/> -->
-      <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120202.414337.txt"/> -->
+      <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T120202.414337.txt"/>
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142149.770360.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111221T142537.928074.txt"/> -->
       <!-- <param name="config_file" value="$(find sbpl_perception)/data/experiment_input/frame_20111220T115232.273903.txt"/> -->

@@ -50,7 +50,7 @@ void GenerateRandomPoses(const RecognitionInput &input,
     double y = y_distribution(generator);
     double theta = theta_distribution(generator);
     ROS_INFO("Object %d: ContPose: %f %f %f", ii, x, y, theta);
-    ContPose p(x, y, theta);
+    ContPose p(x, y, 0.0, 0.0, 0.0, theta);
 
     // Disallow collisions
     bool skip = false;
