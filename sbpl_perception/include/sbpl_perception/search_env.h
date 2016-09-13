@@ -83,6 +83,15 @@ struct PERCHParams {
   // True if search resolutions specificed in the object meta data XML should
   // be used, instead of the fixed EnvParams::res.
   bool use_model_specific_search_resolution;
+  // If true, operates in "under clutter mode", where the algorithm can decide
+  // to treat some input cloud points as occluders.
+  bool use_clutter_mode;
+  // If use_clutter_mode is true, the following is the regularizing multiplier
+  // on the num_occluders cost. When this is a small value, the algorithm will
+  // freely label input points as occluders if they help minimize the objective
+  // function, otherwise, it will carefully balance labeling points as
+  // occluders versus minimizing the objective.
+  double clutter_regularizer;
 
   bool vis_expanded_states;
   bool print_expanded_states;
@@ -103,6 +112,8 @@ struct PERCHParams {
     ar &vis_expanded_states;
     ar &print_expanded_states;
     ar &debug_verbose;
+    ar &use_clutter_mode;
+    ar &clutter_regularizer;
   }
 };
 // BOOST_IS_MPI_DATATYPE(PERCHParams);
@@ -124,6 +135,15 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintState(GraphState s, std::string fname);
   void PrintImage(std::string fname,
                   const std::vector<unsigned short> &depth_image);
+
+  // Return the depth image rendered according to object poses in state s. Will
+  // also return the number of points in the input cloud that occlude any of
+  // the points in the renderered scene.
+  // If kClutterMode is true, then the rendered scene will account for
+  // "occluders" in the input scene, i.e, any point in the input cloud which
+  // occludes a point in the rendered scene.
+  const float *GetDepthImage(GraphState s,
+                             std::vector<unsigned short> *depth_image, int* num_occluders_in_input_cloud);
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image);
 

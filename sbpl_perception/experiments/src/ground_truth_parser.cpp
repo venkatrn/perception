@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
   ros::NodeHandle private_nh("~");
   XmlRpc::XmlRpcValue model_bank_list;
 
-  vector<ModelMetaData> model_bank;
+  vector<ModelMetaData> model_bank_vector;
   std::string param_key;
   if (private_nh.searchParam("model_bank", param_key)) {
     private_nh.getParam(param_key, model_bank_list);
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
 
   ROS_ASSERT(model_bank_list.getType() == XmlRpc::XmlRpcValue::TypeArray);
   printf("Model bank has %d models:\n", model_bank_list.size());
-  model_bank.resize(model_bank_list.size());
+  model_bank_vector.resize(model_bank_list.size());
   for (int ii = 0; ii < model_bank_list.size(); ++ii) {
     auto &object_data = model_bank_list[ii];
     ROS_ASSERT(object_data.getType() == XmlRpc::XmlRpcValue::TypeArray);
@@ -145,12 +145,20 @@ int main(int argc, char **argv) {
     ROS_ASSERT(object_data[1].getType() == XmlRpc::XmlRpcValue::TypeString);
     ROS_ASSERT(object_data[2].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
     ROS_ASSERT(object_data[3].getType() == XmlRpc::XmlRpcValue::TypeBoolean);
+    ROS_ASSERT(object_data[4].getType() == XmlRpc::XmlRpcValue::TypeInt);
+    ROS_ASSERT(object_data[5].getType() == XmlRpc::XmlRpcValue::TypeDouble);
+    ROS_ASSERT(object_data[6].getType() == XmlRpc::XmlRpcValue::TypeInt);
 
     ModelMetaData model_meta_data;
     SetModelMetaData(static_cast<string>(object_data[0]),
-                     static_cast<string>(object_data[1]), static_cast<bool>(object_data[2]),
-                     static_cast<bool>(object_data[3]), &model_meta_data);
-    model_bank[ii] = model_meta_data;
+                     static_cast<string>(object_data[1]),
+                     static_cast<bool>(object_data[2]),
+                     static_cast<bool>(object_data[3]),
+                     static_cast<int>(object_data[4]),
+                     static_cast<double>(object_data[5]),
+                     static_cast<int>(object_data[6]),
+                     &model_meta_data);
+    model_bank_vector[ii] = model_meta_data;
     printf("%s: %s, %d, %d\n", model_meta_data.name.c_str(),
            model_meta_data.file.c_str(), model_meta_data.flipped,
            model_meta_data.symmetric);
@@ -211,6 +219,11 @@ int main(int argc, char **argv) {
 
       Eigen::Affine3f transformed_pose;
       transformed_pose = world_transform * gt_matrices[ii];
+
+      ModelBank model_bank;
+      for (const auto &meta_data : model_bank_vector) {
+        model_bank[meta_data.name] = meta_data;
+      }
 
       ModelMetaData meta_data = sbpl_perception::GetMetaDataFromModelFilename(model_bank, parser.model_files[ii]);
 

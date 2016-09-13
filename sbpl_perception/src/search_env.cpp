@@ -47,10 +47,9 @@ namespace {
 constexpr bool kUseDepthSensitiveCost = false;
 // The multiplier used in the above definition.
 constexpr double kDepthSensitiveCostMultiplier = 100.0;
-// If true, we will assume that only one object needs to be localized and use a
-// normalized outlier cost function.
-constexpr bool kSingleObjectMode = false;
-// When kSingleObjectMode is true, we will treat every pixel that is not within
+// If true, we will use a normalized outlier cost function.
+constexpr bool kNormalizeCost = false;
+// When use_clutter is true, we will treat every pixel that is not within
 // the object volume as an extraneous occluder if its depth is less than
 // depth(rendered pixel) - kOcclusionThreshold.
 constexpr unsigned short kOcclusionThreshold = 20; // mm
@@ -118,6 +117,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
     private_nh.param("use_rcnn_heuristic", perch_params_.use_rcnn_heuristic, true);
     private_nh.param("use_model_specific_search_resolution",
                      perch_params_.use_model_specific_search_resolution, false);
+    private_nh.param("use_clutter_mode", perch_params_.use_clutter_mode, false);
+    private_nh.param("clutter_regularizer", perch_params_.clutter_regularizer, 1.0);
 
     private_nh.param("visualize_expanded_states",
                      perch_params_.vis_expanded_states, false);
@@ -1238,7 +1239,10 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     return -1;
   }
 
-  succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
+  // num_occluders is the number of valid pixels in the input depth image that
+  // occlude the rendered scene corresponding to adjusted_child_state.
+  int num_occluders = 0;
+  succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &num_occluders);
   // All points
   succ_cloud = GetGravityAlignedPointCloud(depth_image);
 
@@ -1292,6 +1296,10 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   }
 
   total_cost = source_cost + target_cost + last_level_cost;
+
+  if (perch_params_.use_clutter_mode) {
+    total_cost += static_cast<int>(perch_params_.clutter_regularizer * num_occluders);
+  }
 
   final_depth_image->clear();
   *final_depth_image = depth_image;
@@ -1417,7 +1425,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
 
   int target_cost = 0;
 
-  if (kSingleObjectMode) {
+  if (kNormalizeCost) {
     // if (partial_rendered_cloud->points.empty()) {
     if (static_cast<int>(partial_rendered_cloud->points.size()) <
         perch_params_.min_neighbor_points_for_valid_pose) {
@@ -1452,7 +1460,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
   // TODO: make principled
   if (full_rendered_cloud->points.empty()) {
-    if (kSingleObjectMode) {
+    if (kNormalizeCost) {
       return 100;
     }
 
@@ -1521,9 +1529,9 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       eig2d_points[ii][1] = point.y;
     }
 
-    // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose(), env_params_.table_height);
-    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
-                                   eig2d_points, last_object.cont_pose());
+    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose());
+    // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
+    //                                eig2d_points, last_object.cont_pose());
 
     indices_to_consider.clear();
 
@@ -1605,7 +1613,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
 
   int source_cost = 0;
 
-  if (kSingleObjectMode) {
+  if (kNormalizeCost) {
     // if (indices_to_consider.empty()) {
     if (static_cast<int>(indices_to_consider.size()) <
         perch_params_.min_neighbor_points_for_valid_pose) {
@@ -1625,7 +1633,8 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
                                            const ObjectState &last_object,
                                            const std::vector<int> &counted_pixels,
                                            std::vector<int> *updated_counted_pixels) {
-  if (kSingleObjectMode) {
+  // There is no residual cost when we operate with the clutter mode.
+  if (perch_params_.use_clutter_mode) {
     return 0;
   }
 
@@ -1923,6 +1932,13 @@ bool EnvObjectRecognition::IsGoalState(GraphState state) {
 
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
                                                  vector<unsigned short> *depth_image) {
+  int num_occluders = 0;
+  return GetDepthImage(s, depth_image, &num_occluders);
+}
+const float *EnvObjectRecognition::GetDepthImage(GraphState s,
+                             std::vector<unsigned short> *depth_image, int* num_occluders_in_input_cloud) {
+
+  *num_occluders_in_input_cloud = 0;
   if (scene_ == NULL) {
     printf("ERROR: Scene is not set\n");
   }
@@ -1957,11 +1973,12 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   // }
 
   // Consider occlusions from non-modeled objects.
-  if (kSingleObjectMode) {
+  if (perch_params_.use_clutter_mode) {
     for (size_t ii = 0; ii < depth_image->size(); ++ii) {
       if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) &&
           depth_image->at(ii) != kKinectMaxDepth) {
         depth_image->at(ii) = kKinectMaxDepth;
+        (*num_occluders_in_input_cloud)++;
       }
     }
   }
