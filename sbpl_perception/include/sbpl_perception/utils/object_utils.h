@@ -2,7 +2,7 @@
 
 #include <sbpl_perception/object_model.h>
 
-#include <fcl/data_types.h>
+#include <fcl/common/types.h>
 #include <fcl/math/triangle.h>
 
 namespace sbpl_perception {

@@ -2,20 +2,23 @@
 
 #include <vector>
 
-#include <fcl/collision.h>
-#include <fcl/BVH/BVH_model.h>
+#include <fcl/narrowphase/collision.h>
+#include <fcl/geometry/bvh//BVH_model.h>
 
 #include <memory>
 
 using namespace fcl;
 using namespace std;
+typedef CollisionObject<double> CollisionObjectT;
+typedef CollisionRequest<double> CollisionRequestT;
+typedef CollisionResult<double> CollisionResultT;
+typedef BVHModel<OBBRSS<double>> Model;
 
 namespace sbpl_perception {
 
 bool ObjectsCollide(const ObjectModel &obj_model1,
                     const ObjectModel &obj_model2, const ContPose &pose1, const ContPose &pose2) {
   // return false;
-  typedef BVHModel<OBBRSS> Model;
 
   const auto &mesh1 = obj_model1.mesh();
   const auto &mesh2 = obj_model2.mesh();
@@ -46,17 +49,17 @@ bool ObjectsCollide(const ObjectModel &obj_model1,
   model2->endModel();
   // model2->computeLocalAABB();
 
-  CollisionObject *obj1 = new CollisionObject(model1, pose1.GetTransform());
-  CollisionObject *obj2 = new CollisionObject(model2, pose2.GetTransform());
+  CollisionObjectT *obj1 = new CollisionObjectT(model1, pose1.GetTransform());
+  CollisionObjectT *obj2 = new CollisionObjectT(model2, pose2.GetTransform());
 
-  CollisionRequest request;
+  CollisionRequestT request;
   // result will be returned via the collision result structure
-  CollisionResult result;
+  CollisionResultT result;
   // perform collision test
   size_t num_contacts = collide(obj1, obj2, request, result);
 
   if (num_contacts > 0) {
-    printf("Num contacts: %d\n", num_contacts);
+    printf("Num contacts: %zu\n", num_contacts);
   }
 
   return (num_contacts > 0);
