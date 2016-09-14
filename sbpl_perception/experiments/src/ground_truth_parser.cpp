@@ -111,8 +111,8 @@ int main(int argc, char **argv) {
   //   "/usr0/home/venkatrn/hydro_workspace/src/perception/sbpl_perception/data/experiment_input/frame_20111221T142303.479339.txt";
 
 
-  if (argc < 4) {
-    cerr << "Usage: ./ground_truth_parser <path_to_ground_truth_dir> <path_to_config_dir> <path_to_output_file>"
+  if (argc < 5) {
+    cerr << "Usage: ./ground_truth_parser <path_to_ground_truth_dir> <path_to_config_dir> <path_to_poses_file> <path_to_symmetries_file>"
          << endl;
     return -1;
 
@@ -122,6 +122,7 @@ int main(int argc, char **argv) {
   boost::filesystem::path gt_dir = argv[1];
   boost::filesystem::path config_dir = argv[2];
   boost::filesystem::path output_file = argv[3];
+  boost::filesystem::path symmetries_file = argv[4];
 
 
   ros::init(argc, argv, "ground_truth_parser");
@@ -181,6 +182,12 @@ int main(int argc, char **argv) {
     return (false);
   }
 
+  ofstream symmetries_fs;
+  symmetries_fs.open (symmetries_file.string().c_str());
+  if (!symmetries_fs.is_open () || symmetries_fs.fail ()) {
+    return (false);
+  }
+
   //loop over all ply files in the data directry and calculate vfh features
   boost::filesystem::directory_iterator dir_itr(gt_dir), dir_end;
 
@@ -215,6 +222,7 @@ int main(int argc, char **argv) {
     PointCloudPtr composed_cloud(new PointCloud);
 
     fs << ground_truth_file << endl;
+    symmetries_fs << ground_truth_file << endl;
     for (size_t ii = 0; ii < gt_matrices.size(); ++ii) {
 
       Eigen::Affine3f transformed_pose;
@@ -265,6 +273,7 @@ int main(int argc, char **argv) {
            std::endl;
 
       fs << x << " " << y << " " << z << " " << yaw << endl;
+      symmetries_fs << std::boolalpha << meta_data.symmetric << endl;
       // fs << roll << " " << pitch << " " << yaw << endl;
 
 
@@ -285,6 +294,7 @@ int main(int argc, char **argv) {
     writer.writeBinary (ss.str()  , *composed_cloud);
   }
   fs.close();
+  symmetries_fs.close();
 
   return 0;
 }

@@ -138,6 +138,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Use Model-specific Search Resolution: %d\n",
            static_cast<int>(perch_params_.use_model_specific_search_resolution));
     printf("RCNN Heuristic: %d\n", perch_params_.use_rcnn_heuristic);
+    printf("Use Clutter: %d\n", perch_params_.use_clutter_mode);
+    printf("Clutter Regularization: %f\n", perch_params_.clutter_regularizer);
     printf("Vis Expansions: %d\n", perch_params_.vis_expanded_states);
     printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
     printf("Debug Verbose: %d\n", perch_params_.debug_verbose);

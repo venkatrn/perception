@@ -11,12 +11,12 @@ kDegree = 0.0174532925;
 
 rot_threshs = 0:kDegree:180*kDegree;
 
-kTransErrorThreshRecognition = 0.2;
+kTransErrorThreshRecognition = 0.05;
 
 method_names = filenames;
 histograms = cell(1, numel(method_names));
 
-kTransErrorThresh = 0.01 ;
+kTransErrorThresh = 0.04 ;
 
 % figure;
 colors = {'r', 'g', 'b', 'y', 'k', 'm'};
@@ -42,7 +42,7 @@ for method_idx = 1:numel(method_names)
 
     for key_cell = common_keys
       key = key_cell{1};
-      if (key == 'y_mass') 
+      if strcmp(key,'y_mass') == 1
         continue;
       end
 
@@ -50,15 +50,24 @@ for method_idx = 1:numel(method_names)
         continue
       end
 
+
       poses = map(key);
       gt_poses = gt_map(key);
       symmetries = symmetries_map(key);
+
+      % if (size(gt_poses,1) ~= size(poses,1))
+      %   continue
+      % end
+      % key
 
       trans = poses(:, 1:2);
       gt_trans = gt_poses(:, 1:2);
 
       num_objects = num_objects + size(gt_poses, 1);
 
+      % trans
+      % gt_trans
+      % symmetries
       trans_delta = trans - gt_trans;
       trans_error = sqrt(sum(trans_delta.^2, 2));
 
