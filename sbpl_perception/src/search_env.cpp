@@ -52,7 +52,7 @@ constexpr bool kNormalizeCost = false;
 // When use_clutter is true, we will treat every pixel that is not within
 // the object volume as an extraneous occluder if its depth is less than
 // depth(rendered pixel) - kOcclusionThreshold.
-constexpr unsigned short kOcclusionThreshold = 20; // mm
+constexpr unsigned short kOcclusionThreshold = 50; // mm
 // Tolerance used when deciding the footprint of the object in a given pose is
 // out of bounds of the supporting place.
 constexpr double kFootprintTolerance = 0.02; // m
