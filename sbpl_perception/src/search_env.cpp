@@ -9,7 +9,7 @@
 
 #include <perception_utils/perception_utils.h>
 #include <sbpl_perception/discretization_manager.h>
-#include <sbpl_perception/utils/object_utils.h>
+// #include <sbpl_perception/utils/object_utils.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>

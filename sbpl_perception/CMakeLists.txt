@@ -29,11 +29,11 @@ find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(MPI REQUIRED)
 find_package(OpenMP)
-find_package(fcl REQUIRED)
+# find_package(fcl REQUIRED)
 find_package(octomap REQUIRED)
 
 find_package(PkgConfig QUIET)
-pkg_check_modules(FCL REQUIRED fcl)
+# pkg_check_modules(FCL REQUIRED fcl)
 
 # TODO: why does the following line cause a nightmare?
 # find_package(PCL REQUIRED)
@@ -79,11 +79,12 @@ add_library(${PROJECT_NAME}
   src/config_parser.cpp
   src/object_recognizer.cpp
   src/utils/utils.cpp
-  src/utils/object_utils.cpp
+  # src/utils/object_utils.cpp
   src/utils/dataset_generator.cpp)
 
 target_link_libraries(${PROJECT_NAME} ${MPI_LIBRARIES} ${Boost_LIBRARIES} ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  # ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
 
 add_executable(real_test src/experiments/experiments.cpp)
