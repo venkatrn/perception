@@ -1531,9 +1531,9 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       eig2d_points[ii][1] = point.y;
     }
 
-    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose());
-    // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
-    //                                eig2d_points, last_object.cont_pose());
+    // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose());
+    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
+                                   eig2d_points, last_object.cont_pose());
 
     indices_to_consider.clear();
 
