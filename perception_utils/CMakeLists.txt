@@ -13,9 +13,10 @@ set(ROS_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS "-std=c++0x")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(catkin REQUIRED COMPONENTS pcl_ros roscpp pcl_conversions)
+find_package(catkin REQUIRED COMPONENTS pcl_ros roscpp pcl_conversions
+  cv_bridge)
 find_package(Boost REQUIRED COMPONENTS filesystem program_options)
-find_package(OpenCV REQUIRED)
+# find_package(OpenCV REQUIRED)
 find_package(HDF5)
 
 include_directories(${PROJECT_SOURCE_DIR}/include ${catkin_INCLUDE_DIRS}
@@ -34,11 +35,12 @@ catkin_package(
     PCL 
     Boost 
     HDF5 
-    OpenCV 
+    # OpenCV 
   CATKIN_DEPENDS 
     pcl_ros 
     roscpp 
     pcl_conversions
+    cv_bridge
   INCLUDE_DIRS 
     include
   LIBRARIES 

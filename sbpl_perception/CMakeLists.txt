@@ -26,7 +26,7 @@ find_package(catkin REQUIRED COMPONENTS
   sbpl 
   sbpl_utils)
 find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
-find_package(OpenCV REQUIRED)
+# find_package(OpenCV REQUIRED)
 find_package(MPI REQUIRED)
 find_package(OpenMP)
 # find_package(fcl REQUIRED)
@@ -58,7 +58,7 @@ catkin_package(
     sbpl 
     sbpl_utils
   DEPENDS 
-    OpenCV 
+    # OpenCV 
     MPI 
     OpenMP 
     PCL 
