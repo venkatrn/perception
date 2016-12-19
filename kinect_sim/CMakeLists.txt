@@ -15,7 +15,7 @@ set(CMAKE_CXX_FLAGS "-std=c++0x")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Boost REQUIRED)
-find_package(OpenCV REQUIRED)
+# find_package(OpenCV REQUIRED)
 find_package(catkin REQUIRED COMPONENTS roscpp roslib pcl_ros cv_bridge)
 
 include_directories(${PROJECT_SOURCE_DIR}/include ${catkin_INCLUDE_DIRS}
