@@ -24,8 +24,8 @@
   <build_depend>sbpl</build_depend>
   <build_depend>sbpl_utils</build_depend>
   <build_depend>libpcl-all-dev</build_depend>
-  <build_depend>libfcl-dev</build_depend>
-  <build_depend>libccd-dev</build_depend>
+  <!-- <build_depend>libfcl&#45;dev</build_depend> -->
+  <!-- <build_depend>libccd&#45;dev</build_depend> -->
 
   <!-- Dependencies needed after this package is compiled. -->
   <run_depend>cv_bridge</run_depend>
@@ -38,8 +38,8 @@
   <run_depend>sbpl_utils</run_depend>
   <run_depend>libpcl-all</run_depend>
   <run_depend>libpcl-all-dev</run_depend>
-  <run_depend>libfcl-dev</run_depend>
-  <run_depend>libccd-dev</run_depend>
+  <!-- <run_depend>libfcl&#45;dev</run_depend> -->
+  <!-- <run_depend>libccd&#45;dev</run_depend> -->
 
   <!-- Dependencies needed only for running tests. -->
   <!-- <test_depend>cv_bridge</test_depend> -->

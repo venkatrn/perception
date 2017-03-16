@@ -10,7 +10,7 @@ project(perception_utils)
 #set(ROS_BUILD_TYPE RelWithDebInfo)
 # set(ROS_BUILD_TYPE Debug)
 set(ROS_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS "-std=c++0x")
+set(CMAKE_CXX_FLAGS "-std=c++11")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS pcl_ros roscpp pcl_conversions
