@@ -254,7 +254,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.y_min = ymin_;
   req.y_max = ymax_;
   req.support_surface_height = table_height_;
-  req.object_ids = vector<string>({"pitcher_base"});
+  req.object_ids = vector<string>({"019_pitcher_base"});
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 

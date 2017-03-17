@@ -31,6 +31,8 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/contrib/contrib.hpp>
 
+#include <util/dart_io.h>
+
 #include <boost/lexical_cast.hpp>
 #include <omp.h>
 #include <algorithm>
@@ -91,6 +93,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
                         0, 0 , 0 , 1;
 
   pcl::console::setVerbosityLevel(pcl::console::L_ALWAYS);
+
+  dart::Model::initializeRenderer(new dart::AssimpMeshReader());
 
   // Load algorithm parameters.
   // NOTE: Do not change these default parameters. Configure these in the
@@ -179,15 +183,26 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     }
 
     const ModelMetaData &model_meta_data = model_bank_it->second;
+    const string& model_file = model_meta_data.file;
 
     pcl::PolygonMesh mesh;
-    pcl::io::loadPolygonFile (model_meta_data.file.c_str(), mesh);
+    pcl::io::loadPolygonFile (model_file, mesh);
 
     ObjectModel obj_model(mesh, model_meta_data.name,
                           model_meta_data.symmetric,
                           model_meta_data.flipped);
     obj_models_.push_back(obj_model);
 
+    // Initialize DART model
+    // auto &dart_model = dart_models_[ii];
+    // cout << "dart reading\n";
+    // string xml_file = model_file;
+    // xml_file.replace(xml_file.size() - 3, xml_file.size(),"xml");
+    // dart::readModelXML(xml_file.c_str(), dart_model);
+    // dart_model.computeStructure();
+    // const float kSDFResolution = 0.0005;
+    // dart_model.voxelize(kSDFResolution, 0.05,"/tmp/" + model_name);
+    //
     if (IsMaster(mpi_comm_)) {
       printf("Read %s with %d polygons and %d triangles\n", model_name.c_str(),
              static_cast<int>(mesh.polygons.size()),
@@ -197,6 +212,10 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
              obj_model.max_x(), obj_model.min_y(), obj_model.max_y(), obj_model.min_z(),
              obj_model.max_z(), obj_model.GetCircumscribedRadius(),
              obj_model.GetInscribedRadius());
+
+      // std::cout << "SDF Specs:\n";
+      // std::cout << dart_model.getNumSdfs() << std::endl;
+      // std::cout << dart_model.getSdf(0).dim.x << " x " << dart_model.getSdf(0).dim.y << " x " << dart_model.getSdf(0).dim.z << std::endl;
       printf("\n");
     }
   }
@@ -1279,12 +1298,12 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
 
-  // source_cost = GetSourceCost(succ_cloud,
-  //                             adjusted_child_state->object_states().back(),
-  //                             last_level, parent_counted_pixels, child_counted_pixels);
   source_cost = GetSourceCost(succ_cloud,
                               adjusted_child_state->object_states().back(),
                               false, parent_counted_pixels, child_counted_pixels);
+  // source_cost = GetSourceCostSDF(succ_cloud,
+  //                             adjusted_child_state->object_states().back(),
+  //                             last_level, parent_counted_pixels, child_counted_pixels);
 
   if (last_level) {
     vector<int> updated_counted_pixels;
@@ -1442,6 +1461,153 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   }
 
   return target_cost;
+}
+
+int EnvObjectRecognition::GetSourceCostSDF(const PointCloudPtr
+                                        full_rendered_cloud, const ObjectState &last_object, const bool last_level,
+                                        const std::vector<int> &parent_counted_pixels,
+                                        std::vector<int> *child_counted_pixels) {
+
+  //TODO: TESTING
+  assert(!last_level);
+
+  child_counted_pixels->clear();
+  *child_counted_pixels = parent_counted_pixels;
+
+  // TODO: make principled
+  if (full_rendered_cloud->points.empty()) {
+    if (kNormalizeCost) {
+      return 100;
+    }
+
+    return 100000;
+  }
+
+  std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
+
+  vector<int> indices_to_consider;
+  // Indices of points within the circumscribed cylinder, but outside the
+  // inscribed cylinder.
+  vector<int> indices_circumscribed;
+
+  if (last_level) {
+    indices_to_consider.resize(valid_indices_.size());
+    auto it = std::set_difference(valid_indices_.begin(), valid_indices_.end(),
+                                  child_counted_pixels->begin(), child_counted_pixels->end(),
+                                  indices_to_consider.begin());
+    indices_to_consider.resize(it - indices_to_consider.begin());
+  } else {
+    ContPose last_obj_pose = last_object.cont_pose();
+    int last_obj_id = last_object.id();
+    PointT obj_center;
+    obj_center.x = last_obj_pose.x();
+    obj_center.y = last_obj_pose.y();
+    obj_center.z = last_obj_pose.z();
+
+    vector<float> sqr_dists;
+    vector<int> validation_points;
+
+    // Check that this object state is valid, i.e, it has at least
+    // perch_params_.min_neighbor_points_for_valid_pose within the circumscribed cylinder.
+    // This should be true if we correctly validate successors.
+    const double validation_search_rad =
+      obj_models_[last_obj_id].GetInflationFactor() *
+      obj_models_[last_obj_id].GetCircumscribedRadius();
+    int num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
+                                                                validation_search_rad,
+                                                                validation_points,
+                                                                sqr_dists, kNumPixels);
+    assert(num_validation_neighbors >=
+           perch_params_.min_neighbor_points_for_valid_pose);
+
+    // Remove the points already counted.
+    vector<int> filtered_validation_points;
+    filtered_validation_points.resize(validation_points.size());
+    std::sort(validation_points.begin(), validation_points.end());
+    auto filter_it = std::set_difference(validation_points.begin(),
+                                         validation_points.end(),
+                                         child_counted_pixels->begin(), child_counted_pixels->end(),
+                                         filtered_validation_points.begin());
+    filtered_validation_points.resize(filter_it -
+                                      filtered_validation_points.begin());
+    validation_points = filtered_validation_points;
+
+    vector<Eigen::Vector3d> eig_points(validation_points.size());
+    vector<Eigen::Vector2d> eig2d_points(validation_points.size());
+
+    for (size_t ii = 0; ii < validation_points.size(); ++ii) {
+      PointT point = observed_cloud_->points[validation_points[ii]];
+      eig_points[ii][0] = point.x;
+      eig_points[ii][1] = point.y;
+      eig_points[ii][2] = point.z;
+
+      eig2d_points[ii][0] = point.x;
+      eig2d_points[ii][1] = point.y;
+    }
+
+    // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose());
+    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
+                                   eig2d_points, last_object.cont_pose());
+
+    indices_to_consider.clear();
+
+    for (size_t ii = 0; ii < inside_points.size(); ++ii) {
+      if (inside_points[ii]) {
+        indices_to_consider.push_back(validation_points[ii]);
+      }
+    }
+  }
+
+  double nn_score = 0.0;
+
+  // Transform observed cloud to sdf coordinates.
+  PointCloud transformed_cloud;
+  Eigen::Isometry3d transform = last_object.cont_pose().GetTransform();
+  Eigen::Matrix4f T_obs_to_ren = transform.inverse().matrix().cast<float>();
+  pcl::transformPointCloud(*observed_cloud_, transformed_cloud, T_obs_to_ren);
+  const dart::Grid3D<float> & sdf = dart_models_[last_object.id()].getSdf(0);
+
+  for (const int ii : indices_to_consider) {
+    child_counted_pixels->push_back(ii);
+
+    PointT point = transformed_cloud.points[ii];
+
+    float3 p = make_float3(point.x, point.y, point.z);
+    float3 grid_p = sdf.getGridCoords(p);
+    float df_val = 0.0;
+    float max_val = 0.01;
+
+    if (!sdf.isInBoundsInterp(grid_p)) {
+      // TODO: make principled
+      df_val = max_val;
+    } else {
+      df_val = sdf.resolution * fabs(sdf.getValueInterpolated(grid_p));
+    }
+    if (df_val > max_val) {
+      df_val = max_val;
+    }
+
+    nn_score += (100 * df_val);
+  }
+
+  // Counted pixels always need to be sorted.
+  std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
+
+  int source_cost = 0;
+
+  if (kNormalizeCost) {
+    // if (indices_to_consider.empty()) {
+    if (static_cast<int>(indices_to_consider.size()) <
+        perch_params_.min_neighbor_points_for_valid_pose) {
+      return 100;
+    }
+
+    source_cost = static_cast<int>(nn_score * 100 / indices_to_consider.size());
+  } else {
+    source_cost = static_cast<int>(nn_score);
+  }
+
+  return source_cost;
 }
 
 int EnvObjectRecognition::GetSourceCost(const PointCloudPtr

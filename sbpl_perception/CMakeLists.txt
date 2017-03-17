@@ -25,8 +25,9 @@ find_package(catkin REQUIRED COMPONENTS
   roslib 
   sbpl 
   sbpl_utils)
+
 find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
-# find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED)
 find_package(MPI REQUIRED)
 find_package(OpenMP)
 # find_package(fcl REQUIRED)
@@ -38,13 +39,28 @@ find_package(PkgConfig QUIET)
 # TODO: why does the following line cause a nightmare?
 # find_package(PCL REQUIRED)
 
+find_path(dart_ROOT NAMES lib/libdart.so src/tracker.h HINTS
+  /home/venkatrn/research/dart)
+set(dart_INCLUDE_DIRS ${dart_ROOT}/src)
+set(dart_LIBRARY_DIRS ${dart_ROOT}/lib)
+set(dart_LIBRARIES dart)
+include_directories(${dart_ROOT}/src)
+link_directories(${dart_ROOT}/lib)
+
+find_package(Pangolin REQUIRED)
+include_directories(${Pangolin_INCLUDE_DIR} ${Pangolin_CONFIG_INCLUDE_DIR})
+
+find_package(CUDA)
+include_directories(${CUDA_INCLUDE_DIRS} ${CUDA_TOOLKIT_ROOT_DIR}/samples/common/inc)
+
 include(CMakeForceCompiler)
 CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
 # set(CMAKE_CXX_COMPILE_FLAGS ${CMAKE_CXX_COMPILE_FLAGS} ${MPI_COMPILE_FLAGS} ${OpenMP_CXX_FLAGS})
 # set(CMAKE_CXX_LINK_FLAGS ${CMAKE_CXX_LINK_FLAGS} ${MPI_LINK_FLAGS})
 
 include_directories(include ${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${FCL_INCLUDE_DIRS})
+  ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${FCL_INCLUDE_DIRS}
+  ${dart_ROOT}/src )
 include_directories(MPI_INCLUDE_PATH)
 
 catkin_package(
@@ -63,19 +79,24 @@ catkin_package(
     OpenMP 
     PCL 
     Boost
+    CUDA
   INCLUDE_DIRS 
     include
+    ${dart_ROOT}/src
+    ${CUDA_TOOLKIT_ROOT_DIR}/samples/common/inc
   LIBRARIES 
     ${PROJECT_NAME}
+    ${dart_ROOT}/lib/libdart.so
+    # dart
   )
 
 add_library(${PROJECT_NAME}
+  src/search_env.cpp
   src/rcnn_heuristic_factory.cpp
   src/discretization_manager.cpp
   src/graph_state.cpp
   src/object_state.cpp
   src/object_model.cpp
-  src/search_env.cpp
   src/config_parser.cpp
   src/object_recognizer.cpp
   src/utils/utils.cpp
@@ -83,7 +104,9 @@ add_library(${PROJECT_NAME}
   src/utils/dataset_generator.cpp)
 
 target_link_libraries(${PROJECT_NAME} ${MPI_LIBRARIES} ${Boost_LIBRARIES} ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${CUDA_LIBRARIES} ${Pangolin_LIBRARIES}
+  ${dart_ROOT}/lib/libdart.so
+ libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   # ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   libvtkGraphics.so)
 

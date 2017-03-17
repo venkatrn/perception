@@ -10,8 +10,8 @@
       symmetric (rotationally symmetric about Z-axis)]  
       -->
     [
-    banana,
-    $(find sbpl_perception)/data/ycb_models/banana.ply,
+    011_banana,
+    $(find sbpl_perception)/data/ycb_models/011_banana.ply,
     false,
     false,
     1,
@@ -19,8 +19,8 @@
     1
     ],
     [
-    bowl,
-    $(find sbpl_perception)/data/ycb_models/bowl.ply,
+    024_bowl,
+    $(find sbpl_perception)/data/ycb_models/024_bowl.ply,
     false,
     false,
     1,
@@ -28,8 +28,8 @@
     1
     ],
     [
-    pitcher_base,
-    $(find sbpl_perception)/data/ycb_models/pitcher_base.ply,
+    019_pitcher_base,
+    $(find sbpl_perception)/data/ycb_models/019_pitcher_base.ply,
     false,
     false,
     0,

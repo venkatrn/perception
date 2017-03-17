@@ -38,6 +38,9 @@
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
 
+#include <mesh/assimp_mesh_reader.h>
+#include <model/host_only_model.h>
+
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -319,6 +322,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // This is an unorganized point cloud.
   PointCloudPtr constraint_cloud_, projected_constraint_cloud_;
 
+  // DART models
+  std::map<int, dart::HostOnlyModel> dart_models_;
+
   bool image_debug_;
   // Print outputs/debug info to this directory. Assumes that directory exists.
   std::string debug_dir_;
@@ -357,6 +363,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     partial_rendered_cloud);
   // Cost for points in observed cloud that can be computed based on the rendered cloud.
   int GetSourceCost(const PointCloudPtr full_rendered_cloud,
+                    const ObjectState &last_object, const bool last_level,
+                    const std::vector<int> &parent_counted_pixels,
+                    std::vector<int> *child_counted_pixels);
+  int GetSourceCostSDF(const PointCloudPtr full_rendered_cloud,
                     const ObjectState &last_object, const bool last_level,
                     const std::vector<int> &parent_counted_pixels,
                     std::vector<int> *child_counted_pixels);
