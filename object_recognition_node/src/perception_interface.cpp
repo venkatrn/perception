@@ -20,6 +20,8 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/filters/passthrough.h>
 
+#include <ros/package.h>
+
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/imgproc/imgproc.hpp>     //make sure to include the relevant headerfiles
 #include <opencv2/highgui/highgui.hpp>
@@ -36,6 +38,7 @@
 
 using namespace std;
 using namespace perception_utils;
+using namespace sbpl_perception;
 
 
 PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
@@ -44,8 +47,19 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   ros::NodeHandle private_nh("~");
   private_nh.param("pcl_visualization", pcl_visualization_, false);
   private_nh.param("table_height", table_height_, 0.0);
+  private_nh.param("xmin", xmin_, 0.0);
+  private_nh.param("ymin", ymin_, 0.0);
+  private_nh.param("xmax", xmax_, 0.0);
+  private_nh.param("ymax", ymax_, 0.0);
   private_nh.param("reference_frame", reference_frame_,
-                   std::string("/base_link"));
+                   std::string("/base_footprint"));
+
+  std::string param_key;
+   XmlRpc::XmlRpcValue model_bank_list;
+  if (private_nh.searchParam("model_bank", param_key)) {
+    private_nh.getParam(param_key, model_bank_list);
+  }
+  model_bank_ = ModelBankFromList(model_bank_list);
 
   //rectangle_pub_ = nh.advertise<ltm_msgs::PolygonArrayStamped>("rectangles", 1);
   cloud_sub_ = nh.subscribe("input_cloud", 1, &PerceptionInterface::CloudCB,
@@ -170,19 +184,20 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setInputCloud(original_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("x");
-  pt_filter.setFilterLimits(0.0, 0.75);
+  // pt_filter.setFilterLimits(0.0, 0.75);
+  pt_filter.setFilterLimits(xmin_, xmax_);
   pt_filter.filter(*table_removed_cloud);
 
   pt_filter.setInputCloud(table_removed_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("y");
-  pt_filter.setFilterLimits(-0.5, 0.5);
+  pt_filter.setFilterLimits(ymin_, ymax_);
   pt_filter.filter(*table_removed_cloud);
 
   pt_filter.setInputCloud(table_removed_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
-  pt_filter.setFilterLimits(table_height_, table_height_ + 0.2);
+  pt_filter.setFilterLimits(table_height_, table_height_ + 0.5);
   pt_filter.filter(*table_removed_cloud);
 
   if (pcl_visualization_ && table_removed_cloud->size() != 0) {
@@ -201,13 +216,13 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   }
 
   tf::StampedTransform transform;
-  tf_listener_.lookupTransform("/base_link", "/head_mount_kinect_rgb_link", ros::Time(0.0), transform);
+  tf_listener_.lookupTransform("/base_footprint", "/head_mount_kinect_rgb_link", ros::Time(0.0), transform);
+  // tf_listener_.lookupTransform("/head_mount_kinect_rgb_link", "/base_footprint", ros::Time(0.0), transform);
   Eigen::Affine3d camera_pose;
   tf::transformTFToEigen(transform, camera_pose);
   std::cout << camera_pose.matrix() << endl;
 
-  string output_dir =
-    "/usr0/home/venkatrn/hydro_workspace/src/perception/object_recognition_node";
+  string output_dir = ros::package::getPath("object_recognition_node");
   static int image_count = 0;
   string output_image_name = string("frame_") + std::to_string(image_count);
   auto output_image_path = boost::filesystem::path(output_dir + '/' +
@@ -234,12 +249,12 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   // Run object recognition.
   object_recognition_node::LocalizeObjects srv;
   auto &req = srv.request;
-  req.x_min = 0.0;
-  req.x_max = 0.75;
-  req.y_min = -0.5;
-  req.y_max = 0.5;
+  req.x_min = xmin_;
+  req.x_max = xmax_;
+  req.y_min = ymin_;
+  req.y_max = ymax_;
   req.support_surface_height = table_height_;
-  req.object_ids = vector<string>({"folgers_classic_roast_coffee"});
+  req.object_ids = vector<string>({"pitcher_base"});
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
@@ -260,6 +275,24 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       object_transform.matrix() = pose.transpose();
 
       ROS_INFO_STREAM("Object: " << req.object_ids[ii] << std::endl << object_transform.matrix() << std::endl << std::endl);
+
+      const string& model_name = req.object_ids[ii];
+      const string& model_file = model_bank_[model_name].file;
+      cout << model_file << endl;
+      pcl::PolygonMesh mesh;
+      pcl::io::loadPolygonFile(model_file, mesh);
+      pcl::PolygonMesh::Ptr mesh_ptr(new pcl::PolygonMesh(mesh));
+      ObjectModel::TransformPolyMesh(mesh_ptr, mesh_ptr,
+                                     object_transform.matrix().cast<float>());
+      viewer_->addPolygonMesh(*mesh_ptr, model_name);
+      viewer_->setPointCloudRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, model_name);
+      double red = 0;
+      double green = 0;
+      double blue = 0;;
+      pcl::visualization::getRandomColors(red, green, blue);
+      viewer_->setPointCloudRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
     }
   } else {
     ROS_ERROR("Failed to call the object localizer service");
@@ -267,12 +300,10 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 }
 
 void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
-  std::cout << "Got " << pressed_key.code << endl;
-
+  // std::cout << "Got " << pressed_key.code << endl;
   if (static_cast<char>(pressed_key.code) == 'c') {
     cout << "Its a c!" << endl;
     capture_kinect_ = true;
   }
-
   return;
 }

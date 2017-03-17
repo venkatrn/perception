@@ -9,6 +9,7 @@
 #include <sbpl_perception/object_state.h>
 
 #include <boost/mpi.hpp>
+#include <XmlRpcValue.h>
 
 #include <functional>
 #include <string>
@@ -96,9 +97,14 @@ typedef std::vector<Heuristic> Heuristics;
 typedef std::unordered_map<std::string, ModelMetaData> ModelBank;
 
 void SetModelMetaData(const std::string &name, const std::string &file,
-                      bool flipped, bool symmetric, int symmetry_mode, double search_resolution, int num_variants, ModelMetaData *model_meta_data);
+                      bool flipped, bool symmetric, int symmetry_mode, double search_resolution,
+                      int num_variants, ModelMetaData *model_meta_data);
 
-ModelMetaData GetMetaDataFromModelFilename(const ModelBank& model_bank, std::string &model_file);
+ModelMetaData GetMetaDataFromModelFilename(const ModelBank &model_bank,
+                                           std::string &model_file);
+
+std::vector<ModelMetaData> ModelBankVectorFromList(XmlRpc::XmlRpcValue model_bank_list);
+ModelBank ModelBankFromList(XmlRpc::XmlRpcValue model_bank_list);
 
 // Colorize depth image, given the max and min depths. Type is assumed to be
 // unsigned short (CV_16UC1) as typical of a kinect sensor.
@@ -107,24 +113,26 @@ void ColorizeDepthImage(const cv::Mat &depth_image,
                         unsigned short min_depth,
                         unsigned short max_depth);
 
-// Encode the depth image by min-max normalization and applying jet colormap. 
+// Encode the depth image by min-max normalization and applying jet colormap.
 // No-returns are set to cv::Scalar(0,0,0)
 // Input type is assumed to be unsigned short (CV_16UC1) as typical of a kinect sensor.
 void EncodeDepthImage(const cv::Mat &depth_image,
                       cv::Mat &rescaled_depth_image);
 void RescaleDepthImage(const cv::Mat &depth_image,
-                      cv::Mat &rescaled_depth_image,
-                      unsigned short min_depth, unsigned short max_depth);
+                       cv::Mat &rescaled_depth_image,
+                       unsigned short min_depth, unsigned short max_depth);
 
 // Return the number of valid (i.e, not a no-return) points within the bounding
 // box.
-std::vector<cv::Point> GetValidPointsInBoundingBox(const cv::Mat &depth_image, const cv::Rect &bbox); 
+std::vector<cv::Point> GetValidPointsInBoundingBox(const cv::Mat &depth_image,
+                                                   const cv::Rect &bbox);
 
 int GetNumValidPixels(const std::vector<unsigned short> &depth_image);
 
 // Converts an organized point cloud (assumed to be in meters) to a kinect depth image in the UINT16
 // format (millimeters), using the special value of kKinectMaxDepth for no-returns.
-std::vector<unsigned short> OrganizedPointCloudToKinectDepthImage(const PointCloudPtr depth_img_cloud);
+std::vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
+  const PointCloudPtr depth_img_cloud);
 
 // Various index conversions.
 // Vectorized depth image and PCL organized cloud share the same index.
@@ -153,16 +161,16 @@ namespace serialization {
 template<class Archive>
 void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
                const unsigned int version) {
-    ar &input.cloud;
-    ar &input.model_names;
-    ar &input.camera_pose;
-    ar &input.x_min;
-    ar &input.x_max;
-    ar &input.y_min;
-    ar &input.y_max;
-    ar &input.table_height;
-    ar &input.heuristics_dir;
-    ar &input.constraint_cloud;
+  ar &input.cloud;
+  ar &input.model_names;
+  ar &input.camera_pose;
+  ar &input.x_min;
+  ar &input.x_max;
+  ar &input.y_min;
+  ar &input.y_max;
+  ar &input.table_height;
+  ar &input.heuristics_dir;
+  ar &input.constraint_cloud;
 }
 
 template<class Archive>

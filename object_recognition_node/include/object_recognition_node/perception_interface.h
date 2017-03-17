@@ -9,6 +9,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sbpl_perception/utils/utils.h>
 #include <object_recognition_node/object_localizer_service.h>
 #include <tf/transform_listener.h>
 
@@ -45,8 +46,11 @@ class PerceptionInterface
     pcl::visualization::RangeImageVisualizer* range_image_viewer_;
 
     //pcl::visualization::PCLVisualizer viewer_;
+    sbpl_perception::ModelBank model_bank_;
     bool pcl_visualization_;
     double table_height_;
+    double xmin_, xmax_;
+    double ymin_, ymax_;
     ros::Publisher rectangle_pub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;

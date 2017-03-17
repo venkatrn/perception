@@ -1,0 +1,41 @@
+<launch>
+  <rosparam param="model_bank" subst_value="True">
+
+    [
+    <!--Format-->
+    <!--
+      [name,
+      file_descriptor,
+      flipped (up-side down in the images wrt to the model),
+      symmetric (rotationally symmetric about Z-axis)]  
+      -->
+    [
+    banana,
+    $(find sbpl_perception)/data/ycb_models/banana.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
+    [
+    bowl,
+    $(find sbpl_perception)/data/ycb_models/bowl.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
+    [
+    pitcher_base,
+    $(find sbpl_perception)/data/ycb_models/pitcher_base.ply,
+    false,
+    false,
+    0,
+    0.1,
+    1
+    ]
+    ]
+  </rosparam>
+</launch>
