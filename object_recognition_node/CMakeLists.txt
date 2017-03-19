@@ -10,7 +10,7 @@ project(object_recognition_node)
 #set(ROS_BUILD_TYPE RelWithDebInfo)
 set(ROS_BUILD_TYPE Release)
 # set(ROS_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS "-std=c++0x")
+set(CMAKE_CXX_FLAGS "-std=c++11")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs perception_utils

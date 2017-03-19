@@ -197,8 +197,11 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setInputCloud(table_removed_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
-  pt_filter.setFilterLimits(table_height_, table_height_ + 0.5);
+  pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
   pt_filter.filter(*table_removed_cloud);
+
+  pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+  table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud, coefficients, 0.01, 1000, true);
 
   if (pcl_visualization_ && table_removed_cloud->size() != 0) {
     if (!viewer_->updatePointCloud(table_removed_cloud, "table_removed_cloud")) {
@@ -216,7 +219,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   }
 
   tf::StampedTransform transform;
-  tf_listener_.lookupTransform("/base_footprint", "/head_mount_kinect_rgb_link", ros::Time(0.0), transform);
+  tf_listener_.lookupTransform(reference_frame_.c_str(), "/head_mount_kinect_rgb_link", ros::Time(0.0), transform);
   // tf_listener_.lookupTransform("/head_mount_kinect_rgb_link", "/base_footprint", ros::Time(0.0), transform);
   Eigen::Affine3d camera_pose;
   tf::transformTFToEigen(transform, camera_pose);
@@ -254,7 +257,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.y_min = ymin_;
   req.y_max = ymax_;
   req.support_surface_height = table_height_;
-  req.object_ids = vector<string>({"pitcher_base"});
+  req.object_ids = vector<string>({"019_pitcher_base"});
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 

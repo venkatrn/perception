@@ -176,19 +176,20 @@ pcl::simulation::SimExample::write_depth_image(const float *depth_buffer,
   int npixels = rl_->getWidth() * rl_->getHeight();
   uint8_t *depth_img = new uint8_t[npixels * 3];
 
-  float min_depth = depth_buffer[0];
-  float max_depth = depth_buffer[0];
+  // float min_depth = depth_buffer[0];
+  // float max_depth = depth_buffer[0];
+  //
+  // for (int i = 1; i < npixels; i++) {
+  //   if (depth_buffer[i] < min_depth) {
+  //     min_depth = depth_buffer[i];
+  //   }
+  //
+  //   if (depth_buffer[i] > max_depth) {
+  //     max_depth = depth_buffer[i];
+  //   }
+  // }
 
-  for (int i = 1; i < npixels; i++) {
-    if (depth_buffer[i] < min_depth) {
-      min_depth = depth_buffer[i];
-    }
-
-    if (depth_buffer[i] > max_depth) {
-      max_depth = depth_buffer[i];
-    }
-  }
-
+  #pragma omp parallel for
   for (int y = 0; y <  height_; ++y) {
     for (int x = 0; x < width_; ++x) {
       int i = y * width_ + x ;
@@ -271,19 +272,20 @@ pcl::simulation::SimExample::write_depth_image_uint(const float *depth_buffer,
   int npixels = rl_->getWidth() * rl_->getHeight();
   unsigned short *depth_img = new unsigned short[npixels ];
 
-  float min_depth = depth_buffer[0];
-  float max_depth = depth_buffer[0];
+  // float min_depth = depth_buffer[0];
+  // float max_depth = depth_buffer[0];
+  //
+  // for (int i = 1; i < npixels; i++) {
+  //   if (depth_buffer[i] < min_depth) {
+  //     min_depth = depth_buffer[i];
+  //   }
+  //
+  //   if (depth_buffer[i] > max_depth) {
+  //     max_depth = depth_buffer[i];
+  //   }
+  // }
 
-  for (int i = 1; i < npixels; i++) {
-    if (depth_buffer[i] < min_depth) {
-      min_depth = depth_buffer[i];
-    }
-
-    if (depth_buffer[i] > max_depth) {
-      max_depth = depth_buffer[i];
-    }
-  }
-
+  #pragma omp parallel for
   for (int y = 0; y <  height_; ++y) {
     for (int x = 0; x < width_; ++x) {
       int i = y * width_ + x ;
@@ -336,19 +338,20 @@ pcl::simulation::SimExample::get_depth_image_uint(const float *depth_buffer,
   depth_img->clear();
   depth_img->resize(npixels);
 
-  float min_depth = depth_buffer[0];
-  float max_depth = depth_buffer[0];
+  // float min_depth = depth_buffer[0];
+  // float max_depth = depth_buffer[0];
+  //
+  // for (int i = 1; i < npixels; i++) {
+  //   if (depth_buffer[i] < min_depth) {
+  //     min_depth = depth_buffer[i];
+  //   }
+  //
+  //   if (depth_buffer[i] > max_depth) {
+  //     max_depth = depth_buffer[i];
+  //   }
+  // }
 
-  for (int i = 1; i < npixels; i++) {
-    if (depth_buffer[i] < min_depth) {
-      min_depth = depth_buffer[i];
-    }
-
-    if (depth_buffer[i] > max_depth) {
-      max_depth = depth_buffer[i];
-    }
-  }
-
+  #pragma omp parallel for
   for (int y = 0; y <  height_; ++y) {
     for (int x = 0; x < width_; ++x) {
       int i = y * width_ + x ;
@@ -394,19 +397,20 @@ void pcl::simulation::SimExample::get_depth_image_cv(const float *depth_buffer,
   int npixels = rl_->getWidth() * rl_->getHeight();
   depth_image.create(height_, width_, CV_16UC1);
 
-  float min_depth = depth_buffer[0];
-  float max_depth = depth_buffer[0];
+  // float min_depth = depth_buffer[0];
+  // float max_depth = depth_buffer[0];
+  //
+  // for (int i = 1; i < npixels; i++) {
+  //   if (depth_buffer[i] < min_depth) {
+  //     min_depth = depth_buffer[i];
+  //   }
+  //
+  //   if (depth_buffer[i] > max_depth) {
+  //     max_depth = depth_buffer[i];
+  //   }
+  // }
 
-  for (int i = 1; i < npixels; i++) {
-    if (depth_buffer[i] < min_depth) {
-      min_depth = depth_buffer[i];
-    }
-
-    if (depth_buffer[i] > max_depth) {
-      max_depth = depth_buffer[i];
-    }
-  }
-
+  #pragma omp parallel for
   for (int y = 0; y <  height_; ++y) {
     for (int x = 0; x < width_; ++x) {
       int i = y * width_ + x ;

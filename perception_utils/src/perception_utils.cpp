@@ -333,22 +333,25 @@ void GetEdges(PointCloudPtr cloud)
 */
 
 PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
-                                                  pcl::ModelCoefficients::Ptr coefficients) {
+                                                  pcl::ModelCoefficients::Ptr coefficients,
+                                                  double inlier_threshold,
+                                                  double max_iterations,
+                                                  bool refine_coefficients) {
   PointCloudPtr ground_removed_pcd (new PointCloud);
 
   pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
   // Create the segmentation object
   pcl::SACSegmentation<PointT> seg;
   // Optional
-  seg.setOptimizeCoefficients (false);
+  seg.setOptimizeCoefficients (refine_coefficients);
   // Mandatory
   seg.setModelType (pcl::SACMODEL_PLANE);
-  seg.setMaxIterations (500);
+  seg.setMaxIterations (max_iterations);
   // seg.setModelType (pcl::SACMODEL_PARALLEL_PLANE);
   //seg.setAxis (Eigen::Vector3f (0.0, 0.0, 1.0));
   //seg.setEpsAngle (15*3.14/180);
   seg.setMethodType (pcl::SAC_RANSAC);
-  seg.setDistanceThreshold (0.01); //0.02
+  seg.setDistanceThreshold (inlier_threshold); //0.02
   seg.setInputCloud (cloud->makeShared ());
   seg.segment (*inliers, *coefficients);
   // std::cerr << "Model coefficients: " << coefficients->values[0] << " "

@@ -64,7 +64,10 @@ pcl::ModelCoefficients::Ptr GetLineCoefficients(PointCloudPtr cloud,
 //void GetEdges(PointCloudPtr cloud);
 /**@brief Segment out the ground plane**/
 PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
-                                pcl::ModelCoefficients::Ptr coefficients);
+                                pcl::ModelCoefficients::Ptr coefficients,
+                                double inlier_threshold = 0.01,
+                                double max_iterations = 500,
+                                bool refine_coefficients = true);
 
 /**@brief Get clusters from the point cloud**/
 void DoEuclideanClustering(PointCloudPtr cloud,

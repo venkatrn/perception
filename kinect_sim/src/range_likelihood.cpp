@@ -1243,33 +1243,33 @@ RangeLikelihood::computeLikelihoods (float *reference,
     computeScoresShader (reference);
 
     // Aggregate results (we do not use GPU to sum cpu scores)
-    if (aggregate_on_cpu_) {
-      const float *score_buffer = getScoreBuffer();
-
-      for (int n = 0, row = 0; row < height_; ++row) {
-        for (int col = 0; col < width_; ++col, ++n) {
-          scores[row / row_height_ * cols_ + col / col_width_] += score_buffer[n];
-        }
-      }
-    } else {
-      int levels = max_level (row_height_, col_width_);
-      int reduced_width = width_ >> levels;
-      int reduced_height = height_ >> levels;
-      int reduced_col_width = col_width_ >> levels;
-      int reduced_row_height = row_height_ >> levels;
-
-      float *score_sum = new float[reduced_width * reduced_height];
-      sum_reduce_.sum (score_texture_, score_sum);
-
-      for (int n = 0, row = 0; row < reduced_height; ++row) {
-        for (int col = 0; col < reduced_width; ++col, ++n) {
-          scores[row / reduced_row_height * cols_ + col / reduced_col_width] +=
-            score_sum[n];
-        }
-      }
-
-      delete [] score_sum;
-    }
+    // if (aggregate_on_cpu_) {
+    //   const float *score_buffer = getScoreBuffer();
+    //
+    //   for (int n = 0, row = 0; row < height_; ++row) {
+    //     for (int col = 0; col < width_; ++col, ++n) {
+    //       scores[row / row_height_ * cols_ + col / col_width_] += score_buffer[n];
+    //     }
+    //   }
+    // } else {
+    //   int levels = max_level (row_height_, col_width_);
+    //   int reduced_width = width_ >> levels;
+    //   int reduced_height = height_ >> levels;
+    //   int reduced_col_width = col_width_ >> levels;
+    //   int reduced_row_height = row_height_ >> levels;
+    //
+    //   float *score_sum = new float[reduced_width * reduced_height];
+    //   sum_reduce_.sum (score_texture_, score_sum);
+    //
+    //   for (int n = 0, row = 0; row < reduced_height; ++row) {
+    //     for (int col = 0; col < reduced_width; ++col, ++n) {
+    //       scores[row / reduced_row_height * cols_ + col / reduced_col_width] +=
+    //         score_sum[n];
+    //     }
+    //   }
+    //
+    //   delete [] score_sum;
+    // }
   }
 
 #if DO_TIMING_PROFILE
