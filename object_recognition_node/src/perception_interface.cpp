@@ -55,10 +55,12 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
                    std::string("/base_footprint"));
 
   std::string param_key;
-   XmlRpc::XmlRpcValue model_bank_list;
+  XmlRpc::XmlRpcValue model_bank_list;
+
   if (private_nh.searchParam("model_bank", param_key)) {
     private_nh.getParam(param_key, model_bank_list);
   }
+
   model_bank_ = ModelBankFromList(model_bank_list);
 
   //rectangle_pub_ = nh.advertise<ltm_msgs::PolygonArrayStamped>("rectangles", 1);
@@ -67,6 +69,11 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   keyboard_sub_ = nh.subscribe("/keypress_topic", 1,
                                &PerceptionInterface::KeyboardCB,
                                this);
+  requested_objects_sub_ = nh.subscribe("/requested_object", 1,
+                                        &PerceptionInterface::RequestedObjectsCB,
+                                        this);
+
+
   // depth_image_sub_ = nh.subscribe("input_depth_image", 1,
   //                                 &PerceptionInterface::DepthImageCB,
   //                                 this);
@@ -201,7 +208,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.filter(*table_removed_cloud);
 
   pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-  table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud, coefficients, 0.01, 1000, true);
+  table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
+                                                            coefficients, 0.01, 1000, true);
 
   if (pcl_visualization_ && table_removed_cloud->size() != 0) {
     if (!viewer_->updatePointCloud(table_removed_cloud, "table_removed_cloud")) {
@@ -219,7 +227,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   }
 
   tf::StampedTransform transform;
-  tf_listener_.lookupTransform(reference_frame_.c_str(), "/head_mount_kinect_rgb_link", ros::Time(0.0), transform);
+  tf_listener_.lookupTransform(reference_frame_.c_str(),
+                               "/head_mount_kinect_rgb_link", ros::Time(0.0), transform);
   // tf_listener_.lookupTransform("/head_mount_kinect_rgb_link", "/base_footprint", ros::Time(0.0), transform);
   Eigen::Affine3d camera_pose;
   tf::transformTFToEigen(transform, camera_pose);
@@ -235,7 +244,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   auto output_pcd_path = boost::filesystem::path(output_dir + '/' +
                                                  output_image_name);
   auto output_orig_pcd_path = boost::filesystem::path(output_dir + "/orig_" +
-                                                 output_image_name);
+                                                      output_image_name);
   output_pcd_path.replace_extension(".pcd");
   output_orig_pcd_path.replace_extension(".pcd");
 
@@ -257,7 +266,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.y_min = ymin_;
   req.y_max = ymax_;
   req.support_surface_height = table_height_;
-  req.object_ids = vector<string>({"019_pitcher_base"});
+  req.object_ids = latest_requested_objects_;
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
@@ -265,7 +274,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
     ROS_INFO("Episode Statistics\n");
 
     for (size_t ii = 0; ii < srv.response.stats_field_names.size(); ++ii) {
-      ROS_INFO("%s: %f", srv.response.stats_field_names[ii].c_str(), srv.response.stats[ii]);
+      ROS_INFO("%s: %f", srv.response.stats_field_names[ii].c_str(),
+               srv.response.stats[ii]);
     }
 
     ROS_INFO("Model to scene object transforms:");
@@ -277,10 +287,11 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       // Transpose to convert column-major raw data initialization to row-major.
       object_transform.matrix() = pose.transpose();
 
-      ROS_INFO_STREAM("Object: " << req.object_ids[ii] << std::endl << object_transform.matrix() << std::endl << std::endl);
+      ROS_INFO_STREAM("Object: " << req.object_ids[ii] << std::endl <<
+                      object_transform.matrix() << std::endl << std::endl);
 
-      const string& model_name = req.object_ids[ii];
-      const string& model_file = model_bank_[model_name].file;
+      const string &model_name = req.object_ids[ii];
+      const string &model_file = model_bank_[model_name].file;
       cout << model_file << endl;
       pcl::PolygonMesh mesh;
       pcl::io::loadPolygonFile(model_file, mesh);
@@ -303,10 +314,17 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 }
 
 void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
-  // std::cout << "Got " << pressed_key.code << endl;
   if (static_cast<char>(pressed_key.code) == 'c') {
     cout << "Its a c!" << endl;
     capture_kinect_ = true;
   }
+  return;
+}
+
+void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
+                                             &object_name) {
+  cout << "[PerceptionInterface]: Got request to identify " << object_name.data << endl;
+  latest_requested_objects_ = vector<string>({object_name.data});
+  capture_kinect_ = true;
   return;
 }

@@ -9,6 +9,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <std_msgs/String.h>
 #include <sbpl_perception/utils/utils.h>
 #include <object_recognition_node/object_localizer_service.h>
 #include <tf/transform_listener.h>
@@ -55,10 +56,12 @@ class PerceptionInterface
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;
     ros::Subscriber keyboard_sub_;
+    ros::Subscriber requested_objects_sub_;
     std::string reference_frame_;
     tf::TransformListener tf_listener_;
 
     bool capture_kinect_;
+    std::vector<std::string> latest_requested_objects_;
 
     sensor_msgs::Image recent_depth_image_;
     PointCloudPtr recent_cloud_; 
@@ -70,4 +73,7 @@ class PerceptionInterface
 
     // Keyboard callback for variour triggers
     void KeyboardCB(const keyboard::Key &pressed_key);
+
+    // Callback from requested object name. TODO: support multiple objects.
+    void RequestedObjectsCB(const std_msgs::String &object_name);
 };
