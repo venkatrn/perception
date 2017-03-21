@@ -10,6 +10,7 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <std_msgs/String.h>
+#include <geometry_msgs/Pose.h>
 #include <sbpl_perception/utils/utils.h>
 #include <object_recognition_node/object_localizer_service.h>
 #include <tf/transform_listener.h>
@@ -52,16 +53,20 @@ class PerceptionInterface
     double table_height_;
     double xmin_, xmax_;
     double ymin_, ymax_;
-    ros::Publisher rectangle_pub_;
+    ros::Publisher pose_pub_;
+    ros::Publisher mesh_marker_pub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;
     ros::Subscriber keyboard_sub_;
     ros::Subscriber requested_objects_sub_;
     std::string reference_frame_;
+    std::string camera_frame_;
     tf::TransformListener tf_listener_;
 
     bool capture_kinect_;
     std::vector<std::string> latest_requested_objects_;
+    int num_observations_to_integrate_;
+    std::vector<PointCloud> recent_observations_;
 
     sensor_msgs::Image recent_depth_image_;
     PointCloudPtr recent_cloud_; 
@@ -76,4 +81,7 @@ class PerceptionInterface
 
     // Callback from requested object name. TODO: support multiple objects.
     void RequestedObjectsCB(const std_msgs::String &object_name);
+
+    // Combine multiple organized point clouds into 1 by median filtering.
+    PointCloudPtr IntegrateOrganizedClouds(const std::vector<PointCloud>& point_clouds) const;
 };

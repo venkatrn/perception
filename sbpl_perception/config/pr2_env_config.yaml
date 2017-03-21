@@ -9,6 +9,8 @@ perch_params:
   use_adaptive_resolution: false
   use_rcnn_heuristic: false
   use_model_specific_search_resolution: false
+  use_clutter_mode: true
+  clutter_regularizer: 0.0
 
   ## Visualization and Debugging
   visualize_expanded_states: true

@@ -20,12 +20,13 @@
     <remap from="input_cloud" to="/kinect_head/depth_registered/points"/>
     <param name="pcl_visualization" value="true"/>
     <!-- <param name="table_height" value="1.127"/> <!&#45;&#45;1.13&#45;&#45;> -->
-    <param name="table_height" value="0.73"/> <!--1.13-->
+    <param name="table_height" value="0.735"/> <!--1.13-->
     <param name="xmin" value="0.0"/> <!--1.13-->
-    <param name="xmax" value="1.5"/> <!--1.13-->
-    <param name="ymin" value="-0.5"/> <!--1.13-->
-    <param name="ymax" value="0.5"/> <!--1.13-->
+    <param name="xmax" value="1.2"/> <!--1.13-->
+    <param name="ymin" value="-0.4"/> <!--1.13-->
+    <param name="ymax" value="0.4"/> <!--1.13-->
     <param name="reference_frame" value="/base_footprint"/>
+    <param name="camera_frame" value="/head_mount_kinect_rgb_link"/>
   </node>
   <node pkg="keyboard" type="keyboard" name="obj_recognition_keyboard_listener" output="screen">
   <!-- <node pkg="keyboard" type="keyboard" name="obj_recognition_keyboard_listener" output="screen" launch&#45;prefix="xterm &#45;e"> -->

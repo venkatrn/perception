@@ -14,7 +14,7 @@ set(CMAKE_CXX_FLAGS "-std=c++11")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs perception_utils
-  keyboard tf tf_conversions sbpl_perception)
+  keyboard tf tf_conversions eigen_conversions sbpl_perception)
 find_package(Boost COMPONENTS mpi REQUIRED)
 find_package(MPI REQUIRED)
 

@@ -29,6 +29,7 @@
 #include <opencv/highgui.h>
 
 #include <sensor_msgs/image_encodings.h>
+#include <visualization_msgs/Marker.h>
 
 #include <boost/lexical_cast.hpp>
 #include <boost/filesystem.hpp>
@@ -40,10 +41,16 @@ using namespace std;
 using namespace perception_utils;
 using namespace sbpl_perception;
 
+namespace {
+std::vector<std::vector<int>> kColorPalette = {
+  {240, 163, 255}, {0, 117, 220}, {153, 63, 0}, {76, 0, 92}, {25, 25, 25}, {0, 92, 49}, {43, 206, 72}, {255, 204, 153}, {128, 128, 128}, {148, 255, 181}, {143, 124, 0}, {157, 204, 0}, {194, 0, 136}, {0, 51, 128}, {255, 164, 5}, {255, 168, 187}, {66, 102, 0}, {255, 0, 16}, {94, 241, 242}, {0, 153, 143}, {224, 255, 102}, {116, 10, 255}, {153, 0, 0}, {255, 255, 128}, {255, 255, 0}, {255, 80, 5}
+};
+} // namespace
 
 PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   capture_kinect_(false),
-  table_height_(0.0) {
+  table_height_(0.0),
+  num_observations_to_integrate_(2) {
   ros::NodeHandle private_nh("~");
   private_nh.param("pcl_visualization", pcl_visualization_, false);
   private_nh.param("table_height", table_height_, 0.0);
@@ -53,6 +60,8 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   private_nh.param("ymax", ymax_, 0.0);
   private_nh.param("reference_frame", reference_frame_,
                    std::string("/base_footprint"));
+  private_nh.param("camera_frame", camera_frame_,
+                   std::string("/head_mount_kinect_rgb_link"));
 
   std::string param_key;
   XmlRpc::XmlRpcValue model_bank_list;
@@ -63,7 +72,8 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
 
   model_bank_ = ModelBankFromList(model_bank_list);
 
-  //rectangle_pub_ = nh.advertise<ltm_msgs::PolygonArrayStamped>("rectangles", 1);
+  pose_pub_ = nh.advertise<geometry_msgs::Pose>("perch_pose", 1);
+  mesh_marker_pub_ = nh.advertise<visualization_msgs::Marker>("perch_marker", 1);
   cloud_sub_ = nh.subscribe("input_cloud", 1, &PerceptionInterface::CloudCB,
                             this);
   keyboard_sub_ = nh.subscribe("/keypress_topic", 1,
@@ -85,7 +95,7 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
 
 
   if (pcl_visualization_) {
-    viewer_ = new pcl::visualization::PCLVisualizer("Articulation Viewer");
+    viewer_ = new pcl::visualization::PCLVisualizer("PERCH Viewer");
     // range_image_viewer_ = new
     // pcl::visualization::RangeImageVisualizer("Planar Range Image");
     viewer_->setCameraPosition(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0);
@@ -135,12 +145,22 @@ void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
     return;
   }
 
-  printf("Sensor position: %f %f %f\n", pcl_cloud->sensor_origin_[0],
-         pcl_cloud->sensor_origin_[1], pcl_cloud->sensor_origin_[2]);
+  // printf("Sensor position: %f %f %f\n", pcl_cloud->sensor_origin_[0],
+  //        pcl_cloud->sensor_origin_[1], pcl_cloud->sensor_origin_[2]);
 
+  recent_observations_.push_back(*pcl_cloud);
+  cout << "Collected point cloud " << recent_observations_.size() << endl;
+
+  if (static_cast<int>(recent_observations_.size()) <
+      num_observations_to_integrate_) {
+    return;
+  }
+
+  PointCloudPtr integrated_cloud = IntegrateOrganizedClouds(
+                                     recent_observations_);
 
   ROS_DEBUG("[SBPL Perception]: Converted sensor cloud to pcl cloud");
-  CloudCBInternal(pcl_cloud);
+  CloudCBInternal(integrated_cloud);
 
   capture_kinect_ = false;
   return;
@@ -204,12 +224,13 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setInputCloud(table_removed_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
-  pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
+  // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
+  pt_filter.setFilterLimits(table_height_, table_height_ + 0.5);
   pt_filter.filter(*table_removed_cloud);
 
-  pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-  table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
-                                                            coefficients, 0.01, 1000, true);
+  // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+  // table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
+  //                                                           coefficients, 0.012, 1000, true);
 
   if (pcl_visualization_ && table_removed_cloud->size() != 0) {
     if (!viewer_->updatePointCloud(table_removed_cloud, "table_removed_cloud")) {
@@ -228,8 +249,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 
   tf::StampedTransform transform;
   tf_listener_.lookupTransform(reference_frame_.c_str(),
-                               "/head_mount_kinect_rgb_link", ros::Time(0.0), transform);
-  // tf_listener_.lookupTransform("/head_mount_kinect_rgb_link", "/base_footprint", ros::Time(0.0), transform);
+                               camera_frame_.c_str(), ros::Time(0.0), transform);
+  // tf_listener_.lookupTransform(camera_frame_.c_str(), reference_frame_.c_str(), ros::Time(0.0), transform);
   Eigen::Affine3d camera_pose;
   tf::transformTFToEigen(transform, camera_pose);
   std::cout << camera_pose.matrix() << endl;
@@ -304,9 +325,43 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       double red = 0;
       double green = 0;
       double blue = 0;;
-      pcl::visualization::getRandomColors(red, green, blue);
+      // pcl::visualization::getRandomColors(red, green, blue);
+
+      int rand_idx = rand() %  kColorPalette.size();
+      red = kColorPalette[rand_idx][0] / 255.0;
+      green = kColorPalette[rand_idx][1] / 255.0;
+      blue = kColorPalette[rand_idx][2] / 255.0;
+
       viewer_->setPointCloudRenderingProperties(
         pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
+
+      // TODO: generalize to mutliple objects
+      if (ii == 0) {
+        geometry_msgs::Pose pose;
+        tf::poseEigenToMsg(object_transform, pose);
+        pose_pub_.publish(pose);
+
+        // Publish the mesh marker
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = reference_frame_;
+        marker.header.stamp = ros::Time();
+        marker.ns = "perch";
+        marker.id = 0;
+        marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.position = pose.position;
+        marker.pose.orientation = pose.orientation;
+        marker.scale.x = 1.0;
+        marker.scale.y = 1.0;
+        marker.scale.z = 1.0;
+        marker.color.a = 0.6; // Don't forget to set the alpha!
+        marker.color.r = red;
+        marker.color.g = green;
+        marker.color.b = blue;
+        //only if using a MESH_RESOURCE marker type:
+        marker.mesh_resource = std::string("file://") + model_file;
+        mesh_marker_pub_.publish(marker);
+      }
     }
   } else {
     ROS_ERROR("Failed to call the object localizer service");
@@ -318,13 +373,75 @@ void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
     cout << "Its a c!" << endl;
     capture_kinect_ = true;
   }
+
   return;
 }
 
 void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
                                              &object_name) {
-  cout << "[PerceptionInterface]: Got request to identify " << object_name.data << endl;
+  cout << "[PerceptionInterface]: Got request to identify " << object_name.data
+       << endl;
   latest_requested_objects_ = vector<string>({object_name.data});
   capture_kinect_ = true;
+  recent_observations_.clear();
   return;
+}
+
+PointCloudPtr PerceptionInterface::IntegrateOrganizedClouds(
+  const std::vector<PointCloud> &point_clouds) const {
+  PointCloudPtr integrated_cloud(new PointCloud);
+
+  if (point_clouds.empty()) {
+    ROS_INFO("Warning: no point clouds to integrate");
+    return integrated_cloud;
+  }
+
+  const int num_clouds = static_cast<int>(point_clouds.size());
+  const int num_points = static_cast<int>(point_clouds[0].points.size());
+  cout << num_points << endl;
+  cout << num_clouds << endl;
+  integrated_cloud->points.resize(num_points);
+
+  for (int ii = 0; ii < num_points; ++ii) {
+    vector<float> range_vals;
+    range_vals.reserve(num_clouds);
+    // cout << "reserved range vals\n";
+
+    for (int jj = 0; jj < num_clouds; ++jj) {
+      const auto &point = point_clouds[jj].points[ii];
+      // cout << point.x << " " << point.y << " " << point.z << endl;
+
+      // Ignore no-returns for median computation.
+      if (std::isnan(point.z) || !std::isfinite(point.z)) {
+        continue;
+      }
+
+      // cout << point.z << endl;
+      range_vals.push_back(point.z);
+    }
+
+    // If this is a no-return in all the clouds, then proceed no further.
+    if (range_vals.empty()) {
+      integrated_cloud->points[ii] = point_clouds[0].points[ii];
+      continue;
+    }
+
+    const int middle = static_cast<int>(static_cast<double>(range_vals.size()) /
+                                        2.0 + 0.5);
+    // cout << middle << endl;
+    std::nth_element(range_vals.begin(), range_vals.begin() + middle,
+                     range_vals.end());
+
+    // TODO: not handling the even number of elements case.
+    float median = *(range_vals.begin() + middle);
+    // cout << median << endl;
+    integrated_cloud->points[ii] = point_clouds[0].points[ii];
+    integrated_cloud->points[ii].z = median;
+
+  }
+
+  integrated_cloud->width = point_clouds[0].width;
+  integrated_cloud->height = point_clouds[0].height;
+  integrated_cloud->is_dense = point_clouds[0].is_dense;
+  return integrated_cloud;
 }

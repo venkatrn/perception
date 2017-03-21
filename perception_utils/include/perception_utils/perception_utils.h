@@ -66,7 +66,7 @@ pcl::ModelCoefficients::Ptr GetLineCoefficients(PointCloudPtr cloud,
 PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
                                 pcl::ModelCoefficients::Ptr coefficients,
                                 double inlier_threshold = 0.01,
-                                double max_iterations = 500,
+                                int max_iterations = 500,
                                 bool refine_coefficients = true);
 
 /**@brief Get clusters from the point cloud**/

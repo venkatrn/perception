@@ -175,7 +175,7 @@ pcl::ModelCoefficients::Ptr GetPlaneCoefficients(
   // Mandatory
   seg.setModelType (pcl::SACMODEL_NORMAL_PLANE);
   seg.setNormalDistanceWeight (0.0);
-  seg.setMethodType (pcl::SAC_LMEDS);
+  seg.setMethodType (pcl::SAC_RANSAC);
   seg.setDistanceThreshold (kPlaneInlierThreshold); //0.01
   seg.setMaxIterations (1000);
   seg.setInputNormals (cloud_normals);
@@ -335,7 +335,7 @@ void GetEdges(PointCloudPtr cloud)
 PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
                                                   pcl::ModelCoefficients::Ptr coefficients,
                                                   double inlier_threshold,
-                                                  double max_iterations,
+                                                  int max_iterations,
                                                   bool refine_coefficients) {
   PointCloudPtr ground_removed_pcd (new PointCloud);
 

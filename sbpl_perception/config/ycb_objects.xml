@@ -9,6 +9,41 @@
       flipped (up-side down in the images wrt to the model),
       symmetric (rotationally symmetric about Z-axis)]  
       -->
+    [003_cracker_box,
+    $(find sbpl_perception)/data/ycb_models/003_cracker_box.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
+    [
+    005_tomato_soup_can,
+    $(find sbpl_perception)/data/ycb_models/005_tomato_soup_can.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
+    [
+    006_mustard_bottle,
+    $(find sbpl_perception)/data/ycb_models/006_mustard_bottle.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
+    [
+    010_potted_meat_can,
+    $(find sbpl_perception)/data/ycb_models/010_potted_meat_can.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
     [
     011_banana,
     $(find sbpl_perception)/data/ycb_models/011_banana.ply,
@@ -30,6 +65,33 @@
     [
     024_bowl,
     $(find sbpl_perception)/data/ycb_models/024_bowl.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
+    [
+    025_mug,
+    $(find sbpl_perception)/data/ycb_models/025_mug.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
+    [
+    035_power_drill,
+    $(find sbpl_perception)/data/ycb_models/035_power_drill.ply,
+    false,
+    false,
+    1,
+    0.06,
+    1
+    ],
+    [
+    052_extra_large_clamp,
+    $(find sbpl_perception)/data/ycb_models/052_extra_large_clamp.ply,
     false,
     false,
     1,
