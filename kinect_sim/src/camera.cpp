@@ -5,6 +5,28 @@
 using namespace Eigen;
 using namespace pcl::simulation;
 
+// Initialize to some default values, but allow users to change elsewhere.
+// Parameters for MS Kinect V1.0
+int kCameraWidth = 640;
+int kCameraHeight = 480;
+float kCameraFX = 576.09757860f;
+float kCameraFY = 576.09757860f;
+float kCameraCX = 321.06398107f;
+float kCameraCY = 242.97676897f;
+float kZNear = 0.1f;
+float kZFar = 20.0f;
+
+// Parameters for MS Kinect V2.0
+// APC: these values are from calib_ir.yaml
+// int kCameraWidth = 512;
+// int kCameraHeight = 424;
+// float kCameraFX = 354.76029132272464f;
+// float kCameraFY = 354.49153515383603f;
+// float kCameraCX = 253.06754087288363f;
+// float kCameraCY = 205.37746288838397f;
+// float kZNear = 0.1f;
+// float kZFar = 20.0f;
+
 void
 pcl::simulation::Camera::move (double vx, double vy, double vz)
 {

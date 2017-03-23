@@ -9,6 +9,7 @@
 
 #include <perception_utils/perception_utils.h>
 #include <sbpl_perception/discretization_manager.h>
+#include <kinect_sim/camera_constants.h>
 // #include <sbpl_perception/utils/object_utils.h>
 
 #include <ros/ros.h>
@@ -143,6 +144,15 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Vis Expansions: %d\n", perch_params_.vis_expanded_states);
     printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
     printf("Debug Verbose: %d\n", perch_params_.debug_verbose);
+
+    printf("\n");
+    printf("----------Camera Config-------------\n");
+    printf("Camera Width: %d\n", kCameraWidth);
+    printf("Camera Height: %d\n", kCameraHeight);
+    printf("Camera FX: %f\n", kCameraFX);
+    printf("Camera FY: %f\n", kCameraFY);
+    printf("Camera CX: %f\n", kCameraCX);
+    printf("Camera CY: %f\n", kCameraCY);
   }
 
   mpi_comm_->barrier();
@@ -2275,6 +2285,13 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
   SetWorldResolutionParams(env_params_.res, env_params_.res,
                            env_params_.theta_res, 0.0, 0.0, world_resolution_params);
   DiscretizationManager::Initialize(world_resolution_params);
+
+  if (IsMaster(mpi_comm_)) {
+    printf("----------Env Config-------------\n");
+    printf("Translation resolution: %f\n", env_params_.res);
+    printf("Rotation resolution: %f\n", env_params_.theta_res);
+    printf("Mesh in millimeters: %d\n", kMeshInMillimeters);
+  }
 }
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,

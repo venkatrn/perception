@@ -19,6 +19,10 @@
 
 #include <pcl/PolygonMesh.h>
 
+// TODO: use config manager.
+// If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
+extern bool kMeshInMillimeters;
+
 class ObjectModel {
  public:
   ObjectModel(const pcl::PolygonMesh &mesh, const std::string name, const bool symmetric, const bool flipped);

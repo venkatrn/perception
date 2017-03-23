@@ -1,4 +1,5 @@
 <launch>
+  <param name="mesh_in_mm" value="true"/>
   <rosparam param="model_bank" subst_value="True">
 
     [
