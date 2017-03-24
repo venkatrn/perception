@@ -23,7 +23,7 @@
 #include <ros/package.h>
 
 #include <cv_bridge/cv_bridge.h>
-#include <opencv2/imgproc/imgproc.hpp>     //make sure to include the relevant headerfiles
+#include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
@@ -43,8 +43,10 @@ using namespace sbpl_perception;
 
 namespace {
 std::vector<std::vector<int>> kColorPalette = {
-  {240, 163, 255}, {0, 117, 220}, {153, 63, 0}, {76, 0, 92}, {25, 25, 25}, {0, 92, 49}, {43, 206, 72}, {255, 204, 153}, {128, 128, 128}, {148, 255, 181}, {143, 124, 0}, {157, 204, 0}, {194, 0, 136}, {0, 51, 128}, {255, 164, 5}, {255, 168, 187}, {66, 102, 0}, {255, 0, 16}, {94, 241, 242}, {0, 153, 143}, {224, 255, 102}, {116, 10, 255}, {153, 0, 0}, {255, 255, 128}, {255, 255, 0}, {255, 80, 5}
-};
+  {240, 163, 255}, {0, 117, 220}, {153, 63, 0}, {76, 0, 92}, {25, 25, 25}, {0, 92, 49}, {43, 206, 72}, 
+  {255, 204, 153}, {128, 128, 128}, {148, 255, 181}, {143, 124, 0}, {157, 204, 0}, {194, 0, 136}, 
+  {0, 51, 128}, {255, 164, 5}, {255, 168, 187}, {66, 102, 0}, {255, 0, 16}, {94, 241, 242}, {0, 153, 143},
+  {224, 255, 102}, {116, 10, 255}, {153, 0, 0}, {255, 255, 128}, {255, 255, 0}, {255, 80, 5}};
 } // namespace
 
 PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
@@ -82,11 +84,10 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   requested_objects_sub_ = nh.subscribe("/requested_object", 1,
                                         &PerceptionInterface::RequestedObjectsCB,
                                         this);
-
-
-  // depth_image_sub_ = nh.subscribe("input_depth_image", 1,
-  //                                 &PerceptionInterface::DepthImageCB,
-  //                                 this);
+  perch_server_.reset(new PerchServer(nh_, "perch_server", false));
+  perch_server_->registerGoalCallback(boost::bind(&PerceptionInterface::PERCHGoalCB, this));
+  // perch_server_->registerPreemptCallback(boost::bing(&PerceptionInterface::PreemptCB, this));
+  perch_server_->start();
 
   recent_cloud_.reset(new PointCloud);
 
@@ -161,6 +162,7 @@ void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
 
   ROS_DEBUG("[SBPL Perception]: Converted sensor cloud to pcl cloud");
   CloudCBInternal(integrated_cloud);
+  // CloudCBInternal(pcl_cloud);
 
   capture_kinect_ = false;
   return;
@@ -211,7 +213,6 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setInputCloud(original_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("x");
-  // pt_filter.setFilterLimits(0.0, 0.75);
   pt_filter.setFilterLimits(xmin_, xmax_);
   pt_filter.filter(*table_removed_cloud);
 
@@ -224,13 +225,25 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setInputCloud(table_removed_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
-  // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  pt_filter.setFilterLimits(table_height_, table_height_ + 0.5);
+  pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
+  // pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.5);
   pt_filter.filter(*table_removed_cloud);
 
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
   // table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
   //                                                           coefficients, 0.012, 1000, true);
+
+  std::vector<pcl::ModelCoefficients> model_coefficients;
+  std::vector<pcl::PointIndices> model_inliers;                         
+  std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>> regions;
+  perception_utils::OrganizedSegmentation(table_removed_cloud, model_coefficients, model_inliers, &regions);
+  cout << "MPS found " << model_inliers.size() << " planes\n";
+  if (!model_inliers.empty()) {
+    cout << model_coefficients[0] << endl;
+    table_removed_cloud = perception_utils::IndexFilter(table_removed_cloud, model_inliers[0].indices, true);
+  } else {
+    printf("[Perception Interface]: No planes found to segment\n");
+  }
 
   if (pcl_visualization_ && table_removed_cloud->size() != 0) {
     if (!viewer_->updatePointCloud(table_removed_cloud, "table_removed_cloud")) {
@@ -250,34 +263,32 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   tf::StampedTransform transform;
   tf_listener_.lookupTransform(reference_frame_.c_str(),
                                camera_frame_.c_str(), ros::Time(0.0), transform);
-  // tf_listener_.lookupTransform(camera_frame_.c_str(), reference_frame_.c_str(), ros::Time(0.0), transform);
   Eigen::Affine3d camera_pose;
   tf::transformTFToEigen(transform, camera_pose);
   std::cout << camera_pose.matrix() << endl;
 
-  string output_dir = ros::package::getPath("object_recognition_node");
-  static int image_count = 0;
-  string output_image_name = string("frame_") + std::to_string(image_count);
-  auto output_image_path = boost::filesystem::path(output_dir + '/' +
-                                                   output_image_name);
-  output_image_path.replace_extension(".png");
-
-  auto output_pcd_path = boost::filesystem::path(output_dir + '/' +
-                                                 output_image_name);
-  auto output_orig_pcd_path = boost::filesystem::path(output_dir + "/orig_" +
-                                                      output_image_name);
-  output_pcd_path.replace_extension(".pcd");
-  output_orig_pcd_path.replace_extension(".pcd");
-
-  cout << output_image_path.c_str() << endl;
-  cout << output_pcd_path.c_str() << endl;
-
-  pcl::io::savePNGFile(output_image_path.c_str(), *table_removed_cloud);
-  pcl::PCDWriter writer;
-  writer.writeBinary(output_pcd_path.c_str(), *table_removed_cloud);
-  writer.writeBinary(output_orig_pcd_path.c_str(), *original_cloud);
-  image_count++;
-
+  // string output_dir = ros::package::getPath("object_recognition_node");
+  // static int image_count = 0;
+  // string output_image_name = string("frame_") + std::to_string(image_count);
+  // auto output_image_path = boost::filesystem::path(output_dir + '/' +
+  //                                                  output_image_name);
+  // output_image_path.replace_extension(".png");
+  //
+  // auto output_pcd_path = boost::filesystem::path(output_dir + '/' +
+  //                                                output_image_name);
+  // auto output_orig_pcd_path = boost::filesystem::path(output_dir + "/orig_" +
+  //                                                     output_image_name);
+  // output_pcd_path.replace_extension(".pcd");
+  // output_orig_pcd_path.replace_extension(".pcd");
+  //
+  // cout << output_image_path.c_str() << endl;
+  // cout << output_pcd_path.c_str() << endl;
+  //
+  // pcl::io::savePNGFile(output_image_path.c_str(), *table_removed_cloud);
+  // pcl::PCDWriter writer;
+  // writer.writeBinary(output_pcd_path.c_str(), *table_removed_cloud);
+  // writer.writeBinary(output_orig_pcd_path.c_str(), *original_cloud);
+  // image_count++;
 
   // Run object recognition.
   object_recognition_node::LocalizeObjects srv;
@@ -291,7 +302,11 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
-  if (object_localization_client_.call(srv)) {
+  latest_object_poses_.clear();
+  bool service_call_success = object_localization_client_.call(srv);
+  latest_call_success_ = service_call_success;
+
+  if (service_call_success) {
     ROS_INFO("Episode Statistics\n");
 
     for (size_t ii = 0; ii < srv.response.stats_field_names.size(); ++ii) {
@@ -301,12 +316,13 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 
     ROS_INFO("Model to scene object transforms:");
 
+    latest_object_poses_.resize(req.object_ids.size());
     for (size_t ii = 0; ii < req.object_ids.size(); ++ii) {
 
-      Eigen::Matrix4d pose(srv.response.object_transforms[ii].data.data());
+      Eigen::Matrix4d eigen_pose(srv.response.object_transforms[ii].data.data());
       Eigen::Affine3d object_transform;
       // Transpose to convert column-major raw data initialization to row-major.
-      object_transform.matrix() = pose.transpose();
+      object_transform.matrix() = eigen_pose.transpose();
 
       ROS_INFO_STREAM("Object: " << req.object_ids[ii] << std::endl <<
                       object_transform.matrix() << std::endl << std::endl);
@@ -335,36 +351,49 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       viewer_->setPointCloudRenderingProperties(
         pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
 
+      geometry_msgs::Pose pose;
+      tf::poseEigenToMsg(object_transform, pose);
+      latest_object_poses_[ii] = pose;
+
+      // Publish the mesh marker
+      visualization_msgs::Marker marker;
+      marker.header.frame_id = reference_frame_;
+      marker.header.stamp = ros::Time();
+      marker.ns = "perch";
+      marker.id = ii;
+      marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+      marker.action = visualization_msgs::Marker::ADD;
+      marker.pose.position = pose.position;
+      marker.pose.orientation = pose.orientation;
+      marker.scale.x = 1.0;
+      marker.scale.y = 1.0;
+      marker.scale.z = 1.0;
+      marker.color.a = 0.8; // Don't forget to set the alpha!
+      marker.color.r = red;
+      marker.color.g = green;
+      marker.color.b = blue;
+      //only if using a MESH_RESOURCE marker type:
+      marker.mesh_resource = std::string("file://") + model_file;
+      mesh_marker_pub_.publish(marker);
+
       // TODO: generalize to mutliple objects
       if (ii == 0) {
-        geometry_msgs::Pose pose;
-        tf::poseEigenToMsg(object_transform, pose);
         pose_pub_.publish(pose);
-
-        // Publish the mesh marker
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = reference_frame_;
-        marker.header.stamp = ros::Time();
-        marker.ns = "perch";
-        marker.id = 0;
-        marker.type = visualization_msgs::Marker::MESH_RESOURCE;
-        marker.action = visualization_msgs::Marker::ADD;
-        marker.pose.position = pose.position;
-        marker.pose.orientation = pose.orientation;
-        marker.scale.x = 1.0;
-        marker.scale.y = 1.0;
-        marker.scale.z = 1.0;
-        marker.color.a = 0.6; // Don't forget to set the alpha!
-        marker.color.r = red;
-        marker.color.g = green;
-        marker.color.b = blue;
-        //only if using a MESH_RESOURCE marker type:
-        marker.mesh_resource = std::string("file://") + model_file;
-        mesh_marker_pub_.publish(marker);
       }
     }
+
+    // Set action client result if still active.
+    if (perch_server_->isActive()) {
+      perch_result_.object_poses = latest_object_poses_;
+      perch_server_->setSucceeded(perch_result_);
+    }
   } else {
-    ROS_ERROR("Failed to call the object localizer service");
+    ROS_ERROR("Object localizer service failed.");
+    // Set action client result if still active.
+    if (perch_server_->isActive()) {
+      perch_result_.object_poses.clear();
+      perch_server_->setAborted(perch_result_);
+    }
   }
 }
 
@@ -373,18 +402,36 @@ void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
     cout << "Its a c!" << endl;
     capture_kinect_ = true;
   }
-
   return;
 }
 
 void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
                                              &object_name) {
-  cout << "[PerceptionInterface]: Got request to identify " << object_name.data
+  cout << "[Perception Interface]: Got request to identify " << object_name.data
        << endl;
   latest_requested_objects_ = vector<string>({object_name.data});
   capture_kinect_ = true;
   recent_observations_.clear();
   return;
+}
+
+bool PerceptionInterface::PERCHGoalCB() {
+  latest_requested_objects_ = perch_server_->acceptNewGoal()->object_ids;
+  if (latest_requested_objects_.empty()) {
+    perch_result_.object_poses.clear();
+    ROS_INFO("[Perception Interface]: No objects to be localized. Goal aborted.");
+    perch_server_->setAborted(perch_result_);
+    return false;
+  }
+
+  ROS_INFO("[Perception Interface]: Got request to identify %zu object(s):",
+           latest_requested_objects_.size());
+  for (const string &object : latest_requested_objects_) {
+    ROS_INFO("%s", object.c_str());
+  }
+
+  capture_kinect_ = true;
+  return true;
 }
 
 PointCloudPtr PerceptionInterface::IntegrateOrganizedClouds(

@@ -47,6 +47,11 @@ const double kOutlierStdDevMul = 1.0;
 void OrganizedSegmentation(PointCloudPtr cloud,
                            std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
                            *regions);
+void OrganizedSegmentation(PointCloudPtr cloud,
+                           std::vector<pcl::ModelCoefficients> &model_coefficients,
+                           std::vector<pcl::PointIndices>& model_inliers,
+                           std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
+                           *regions);
 
 /**@brief Check if the cluster satisifies simple checks to be considered as an articulated object**/
 bool EvaluateCluster(PointCloudPtr cloud_cluster);

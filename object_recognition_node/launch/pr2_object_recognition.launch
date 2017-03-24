@@ -29,8 +29,8 @@
     <param name="reference_frame" value="/base_footprint"/>
     <param name="camera_frame" value="/head_mount_kinect_rgb_link"/>
   </node>
-  <node pkg="keyboard" type="keyboard" name="obj_recognition_keyboard_listener" output="screen">
-  <!-- <node pkg="keyboard" type="keyboard" name="obj_recognition_keyboard_listener" output="screen" launch&#45;prefix="xterm &#45;e"> -->
-  </node>
+
+  <!-- <node pkg="keyboard" type="keyboard" name="obj_recognition_keyboard_listener" output="screen"> -->
+  <!-- </node> -->
 
 </launch>

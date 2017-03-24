@@ -13,14 +13,17 @@ set(ROS_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS "-std=c++11")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs perception_utils
+include(CMakeForceCompiler)
+CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
+
+find_package(catkin REQUIRED genmsg actionlib_msgs actionlib 
+  COMPONENTS roscpp sensor_msgs perception_utils
   keyboard tf tf_conversions eigen_conversions sbpl_perception)
 find_package(Boost COMPONENTS mpi REQUIRED)
 find_package(MPI REQUIRED)
 
-include(CMakeForceCompiler)
-CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
-
+# find_package(catkin REQUIRED genmsg actionlib_msgs actionlib)
+add_action_files(DIRECTORY action FILES DoPerch.action)
 add_service_files(FILES LocalizeObjects.srv)
 
 include_directories(${PROJECT_SOURCE_DIR}/include ${catkin_INCLUDE_DIRS}
@@ -29,6 +32,7 @@ include_directories(MPI_INCLUDE_PATH)
 
 generate_messages(
   DEPENDENCIES
+  actionlib_msgs
   std_msgs
   geometry_msgs
   sensor_msgs
@@ -36,16 +40,21 @@ generate_messages(
   )
 
 catkin_package(
-    CATKIN_DEPENDS roscpp sensor_msgs perception_utils keyboard tf tf_conversions
-    DEPENDS MPI Boost
-    INCLUDE_DIRS include
-    LIBRARIES ${PROJECT_NAME}
-)
+  CATKIN_DEPENDS roscpp sensor_msgs perception_utils keyboard tf tf_conversions
+  sbpl_perception
+  DEPENDS MPI Boost
+  INCLUDE_DIRS include
+  LIBRARIES ${PROJECT_NAME}
+  )
 
 add_library(${PROJECT_NAME}
   src/perception_interface.cpp)
 target_link_libraries(${PROJECT_NAME} ${MPI_LIBRARIES} ${catkin_LIBRARIES} ${PCL_LIBRARIES}
   ${Boost_LIBRARIES})
+
+install(PROGRAMS
+  scripts/pr2_perch_client.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 # Ugh, change package name so we can use object_recognition_node as target
 # name.
