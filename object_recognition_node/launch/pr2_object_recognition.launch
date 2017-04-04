@@ -17,7 +17,7 @@
   </node>
 
   <node pkg="object_recognition_node" type="obj_rec_node" name="object_recognition_node" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false">
-    <remap from="/keypress_topic" to="/obj_recognition_keyboard_listener/keydown"/>
+    <!-- <remap from="/keypress_topic" to="/obj_recognition_keyboard_listener/keydown"/> -->
     <remap from="input_cloud" to="/kinect_head/depth_registered/points"/>
     <param name="pcl_visualization" value="true"/>
     <!-- <param name="table_height" value="1.127"/> <!&#45;&#45;1.13&#45;&#45;> -->
