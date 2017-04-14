@@ -1,0 +1,54 @@
+<!DOCTYPE HTML> 
+<html lang="en-US"> 
+<head> 
+<link rel="stylesheet" href="style.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">   
+<title>Object Request Interface</title>
+
+<!-- Enable media queries for old IE -->
+<!--[if lt IE 9]>
+     <script src="http://css3-mediaqueries-js.googlecode.com/svn/trunk/css3-mediaqueries.js"></script>
+  <![endif]-->
+
+<script type="text/javascript" src="./include/eventemitter2.min.js" defer="true"></script>
+<script type="text/javascript" src="./include/roslibjs/build/roslib.min.js" defer="true"></script>
+
+<script type="text/javascript" src="perch_interface.js" defer="true"></script>
+
+</head> 
+<body class="no-touch"> 
+<h1 align="center">Object Request Interface</h1>
+
+<div class="wrap" id="wrap_id" >
+
+  <!-- Define all of the tiles: -->
+  <!-- <div class="box"> -->
+  <!--   <div class="boxInner"> -->
+  <!--     <img src="images/019_pitcher_base.png" id="019_pitcher_base"/> -->
+  <!--     <div class="titleBox">Pitcher</div> -->
+  <!--   </div> -->
+  <!-- </div> -->
+
+</div>
+<!-- /#wrap -->
+
+<script type="text/javascript" src="http://code.jquery.com/jquery-1.8.3.js"></script>
+<script type="text/javascript">
+$(function(){
+    // See if this is a touch device
+    if ('ontouchstart' in window)
+    {
+    // Set the correct body class
+    $('body').removeClass('no-touch').addClass('touch');
+
+    // Add the touch toggle to show text
+    $('div.boxInner img').click(function(){
+      $(this).closest('.boxInner').toggleClass('touchFocus');
+      });
+    }
+    });
+</script>
+
+</body> 
+</html>

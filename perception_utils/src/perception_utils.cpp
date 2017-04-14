@@ -90,10 +90,18 @@ void DisplayPlanarRegions (
   }
 }
 
-
 void OrganizedSegmentation(PointCloudPtr cloud,
-                                             std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
-                                             *regions) {
+                           std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
+                            *regions) {
+  std::vector<pcl::ModelCoefficients> model_coefficients;
+  std::vector<pcl::PointIndices> model_inliers;
+  OrganizedSegmentation(cloud, model_coefficients, model_inliers, regions);
+}
+
+
+void OrganizedSegmentation(PointCloudPtr cloud, std::vector<pcl::ModelCoefficients>& model_coefficients, std::vector<pcl::PointIndices>& inlier_indices, 
+                           std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
+                            *regions) {
   PointCloudPtr cloud_temp (new PointCloud);
   cloud_temp = cloud;
 
@@ -103,7 +111,6 @@ void OrganizedSegmentation(PointCloudPtr cloud,
   pcl::IntegralImageNormalEstimation<PointT, pcl::Normal> ne;
   ne.setInputCloud (cloud_temp);
   ne.compute (*cloud_normals);
-
 
   pcl::EuclideanPlaneCoefficientComparator<PointT, pcl::Normal>::Ptr
   euclidean_comparator;
@@ -119,8 +126,6 @@ void OrganizedSegmentation(PointCloudPtr cloud,
   mps.setProjectPoints(true);
 
   double mps_start = pcl::getTime ();
-  std::vector<pcl::ModelCoefficients> model_coefficients;
-  std::vector<pcl::PointIndices> inlier_indices;
   pcl::PointCloud<pcl::Label>::Ptr labels (new pcl::PointCloud<pcl::Label>);
   std::vector<pcl::PointIndices> label_indices;
   std::vector<pcl::PointIndices> boundary_indices;
@@ -175,7 +180,7 @@ pcl::ModelCoefficients::Ptr GetPlaneCoefficients(
   // Mandatory
   seg.setModelType (pcl::SACMODEL_NORMAL_PLANE);
   seg.setNormalDistanceWeight (0.0);
-  seg.setMethodType (pcl::SAC_LMEDS);
+  seg.setMethodType (pcl::SAC_RANSAC);
   seg.setDistanceThreshold (kPlaneInlierThreshold); //0.01
   seg.setMaxIterations (1000);
   seg.setInputNormals (cloud_normals);
@@ -333,22 +338,25 @@ void GetEdges(PointCloudPtr cloud)
 */
 
 PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
-                                                  pcl::ModelCoefficients::Ptr coefficients) {
+                                                  pcl::ModelCoefficients::Ptr coefficients,
+                                                  double inlier_threshold,
+                                                  int max_iterations,
+                                                  bool refine_coefficients) {
   PointCloudPtr ground_removed_pcd (new PointCloud);
 
   pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
   // Create the segmentation object
   pcl::SACSegmentation<PointT> seg;
   // Optional
-  seg.setOptimizeCoefficients (false);
+  seg.setOptimizeCoefficients (refine_coefficients);
   // Mandatory
   seg.setModelType (pcl::SACMODEL_PLANE);
-  seg.setMaxIterations (500);
+  seg.setMaxIterations (max_iterations);
   // seg.setModelType (pcl::SACMODEL_PARALLEL_PLANE);
-  //seg.setAxis (Eigen::Vector3f (0.0, 0.0, 1.0));
-  //seg.setEpsAngle (15*3.14/180);
+  // seg.setAxis (Eigen::Vector3f (0.0, 0.0, 1.0));
+  // seg.setEpsAngle (15*3.14/180);
   seg.setMethodType (pcl::SAC_RANSAC);
-  seg.setDistanceThreshold (0.01); //0.02
+  seg.setDistanceThreshold (inlier_threshold); //0.02
   seg.setInputCloud (cloud->makeShared ());
   seg.segment (*inliers, *coefficients);
   // std::cerr << "Model coefficients: " << coefficients->values[0] << " "
@@ -497,7 +505,7 @@ void DoEuclideanClusteringOrganized(PointCloudPtr cloud,
     }
   }
 
-  printf ("Got %d euclidean clusters!\n", cluster_clouds->size());
+  printf ("Got %zu euclidean clusters!\n", cluster_clouds->size());
 }
 
 
@@ -535,7 +543,7 @@ void GetPolygonVertices(PointCloudPtr cloud,
 
   poly_vertices->clear();
   assert(polygons.size() > 0);
-  printf("Poylgon size: %d\n", polygons[0].vertices.size());
+  printf("Poylgon size: %zu\n", polygons[0].vertices.size());
 
   // Assume there is just one polygon, and that its a rectangle
   for (int ii = 0; ii < polygons[0].vertices.size(); ++ii) {

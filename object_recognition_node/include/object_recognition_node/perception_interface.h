@@ -6,22 +6,26 @@
  * Carnegie Mellon University, 2014
  */
 
-#include <ros/ros.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <sbpl_perception/utils/utils.h>
+#include <actionlib/server/simple_action_server.h>
+#include <geometry_msgs/Pose.h>
+#include <keyboard/Key.h>
 #include <object_recognition_node/object_localizer_service.h>
-#include <tf/transform_listener.h>
-
+#include <object_recognition_node/DoPerchAction.h>
 #include <perception_utils/pcl_typedefs.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
-
-#include <keyboard/Key.h>
+#include <ros/ros.h>
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <sbpl_perception/utils/utils.h>
+#include <std_msgs/String.h>
+#include <tf/transform_listener.h>
 
 #include <memory>
+
+typedef actionlib::SimpleActionServer<object_recognition_node::DoPerchAction> PerchServer;
 
 class PerceptionInterface
 {
@@ -29,8 +33,6 @@ class PerceptionInterface
     PerceptionInterface(ros::NodeHandle nh);
     void CloudCB(const sensor_msgs::PointCloud2ConstPtr& sensor_cloud);
     void CloudCBInternal(const std::string& pcd_file);
-    // void DepthImageCB(const sensor_msgs::ImageConstPtr& depth_image);
-
 
     // Accessors
     const pcl::visualization::PCLVisualizer* viewer() const {return viewer_;}
@@ -51,14 +53,25 @@ class PerceptionInterface
     double table_height_;
     double xmin_, xmax_;
     double ymin_, ymax_;
-    ros::Publisher rectangle_pub_;
+    ros::Publisher pose_pub_;
+    ros::Publisher mesh_marker_pub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;
     ros::Subscriber keyboard_sub_;
+    ros::Subscriber requested_objects_sub_;
     std::string reference_frame_;
+    std::string camera_frame_;
     tf::TransformListener tf_listener_;
 
     bool capture_kinect_;
+
+    // Cache results of the latest call to ObjectLocalizerService.
+    std::vector<std::string> latest_requested_objects_;
+    std::vector<geometry_msgs::Pose> latest_object_poses_;
+    bool latest_call_success_;
+
+    int num_observations_to_integrate_;
+    std::vector<PointCloud> recent_observations_;
 
     sensor_msgs::Image recent_depth_image_;
     PointCloudPtr recent_cloud_; 
@@ -70,4 +83,17 @@ class PerceptionInterface
 
     // Keyboard callback for variour triggers
     void KeyboardCB(const keyboard::Key &pressed_key);
+
+    // Callback from requested object name. TODO: support multiple objects.
+    void RequestedObjectsCB(const std_msgs::String &object_name);
+
+    // Combine multiple organized point clouds into 1 by median filtering.
+    PointCloudPtr IntegrateOrganizedClouds(const std::vector<PointCloud>& point_clouds) const;
+
+    // TODO: Offer a ROS action lib service as well, in addition to having a simple
+    // RequestedObjectCB based interface.
+    std::unique_ptr<PerchServer> perch_server_;
+    bool PERCHGoalCB();
+    object_recognition_node::DoPerchResult perch_result_;
+    object_recognition_node::DoPerchFeedback perch_feedback_;
 };

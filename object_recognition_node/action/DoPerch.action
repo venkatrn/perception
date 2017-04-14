@@ -1,0 +1,16 @@
+# Define goal.
+
+# The IDs of the objects present in the scene.
+string[] object_ids
+
+---
+# Define result.
+
+# An array of 4x4 homogeneous matrix transformations from 3D model to object pose in the
+# scene.
+geometry_msgs/Pose[] object_poses
+
+---
+# Define feedback.
+
+# No feedback.

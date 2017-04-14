@@ -1,4 +1,6 @@
 #include <sbpl_perception/object_recognizer.h>
+#include <sbpl_perception/object_model.h>
+#include <kinect_sim/camera_constants.h>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -26,7 +28,16 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   vector<ModelMetaData> model_bank_vector;
   double search_resolution_translation = 0.0;
   double search_resolution_yaw = 0.0;
-  bool image_debug;
+  int camera_width = 0;
+  int camera_height = 0;
+  float camera_fx = 0.0;
+  float camera_fy = 0.0;
+  float camera_cx = 0.0;
+  float camera_cy = 0.0;
+  float camera_znear = 0.0;
+  float camera_zfar = 0.0;
+  bool mesh_in_mm = false;
+  bool image_debug = false;
 
   if (IsMaster(mpi_world_)) {
     ///////////////////////////////////////////////////////////////////////
@@ -49,9 +60,30 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
     private_nh.param("search_resolution_yaw", search_resolution_yaw,
                      0.3926991);
 
+    private_nh.param("camera_width", camera_width,
+                     640);
+    private_nh.param("camera_height", camera_height,
+                     480);
+    private_nh.param("camera_fx", camera_fx,
+                     576.09757860f);
+    private_nh.param("camera_fy", camera_fy,
+                     576.09757860f);
+    private_nh.param("camera_cx", camera_cx,
+                     321.06398107f);
+    private_nh.param("camera_cy", camera_cy,
+                     242.97676897f);
+    private_nh.param("camera_znear", camera_znear,
+                     0.1f);
+    private_nh.param("camera_zfar", camera_zfar,
+                     20.0f);
+
     XmlRpc::XmlRpcValue model_bank_list;
 
     std::string param_key;
+
+    if (private_nh.searchParam("mesh_in_mm", param_key)) {
+      private_nh.getParam(param_key, mesh_in_mm);
+    }
 
     if (private_nh.searchParam("model_bank", param_key)) {
       private_nh.getParam(param_key, model_bank_list);
@@ -123,6 +155,26 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   broadcast(*mpi_world_, image_debug, kMasterRank);
   broadcast(*mpi_world_, search_resolution_translation, kMasterRank);
   broadcast(*mpi_world_, search_resolution_yaw, kMasterRank);
+  broadcast(*mpi_world_, mesh_in_mm, kMasterRank);
+  broadcast(*mpi_world_, camera_width, kMasterRank);
+  broadcast(*mpi_world_, camera_height, kMasterRank);
+  broadcast(*mpi_world_, camera_fx, kMasterRank);
+  broadcast(*mpi_world_, camera_fy, kMasterRank);
+  broadcast(*mpi_world_, camera_cx, kMasterRank);
+  broadcast(*mpi_world_, camera_cy, kMasterRank);
+  broadcast(*mpi_world_, camera_znear, kMasterRank);
+  broadcast(*mpi_world_, camera_zfar, kMasterRank);
+
+  // TODO: use config manager.
+  kMeshInMillimeters = mesh_in_mm;
+  kCameraWidth = camera_width;
+  kCameraHeight = camera_height;
+  kCameraFX = camera_fx;
+  kCameraFY = camera_fy;
+  kCameraCX = camera_cx;
+  kCameraCY = camera_cy;
+  kZNear = camera_znear;
+  kZFar = camera_zfar;
 
   env_config_.res = search_resolution_translation;
   env_config_.theta_res = search_resolution_yaw;

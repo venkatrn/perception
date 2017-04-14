@@ -47,6 +47,11 @@ const double kOutlierStdDevMul = 1.0;
 void OrganizedSegmentation(PointCloudPtr cloud,
                            std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
                            *regions);
+void OrganizedSegmentation(PointCloudPtr cloud,
+                           std::vector<pcl::ModelCoefficients> &model_coefficients,
+                           std::vector<pcl::PointIndices>& model_inliers,
+                           std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
+                           *regions);
 
 /**@brief Check if the cluster satisifies simple checks to be considered as an articulated object**/
 bool EvaluateCluster(PointCloudPtr cloud_cluster);
@@ -64,7 +69,10 @@ pcl::ModelCoefficients::Ptr GetLineCoefficients(PointCloudPtr cloud,
 //void GetEdges(PointCloudPtr cloud);
 /**@brief Segment out the ground plane**/
 PointCloudPtr RemoveGroundPlane(PointCloudPtr cloud,
-                                pcl::ModelCoefficients::Ptr coefficients);
+                                pcl::ModelCoefficients::Ptr coefficients,
+                                double inlier_threshold = 0.01,
+                                int max_iterations = 500,
+                                bool refine_coefficients = true);
 
 /**@brief Get clusters from the point cloud**/
 void DoEuclideanClustering(PointCloudPtr cloud,

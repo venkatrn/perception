@@ -14,3 +14,8 @@ perch_params:
   visualize_expanded_states: true
   print_expanded_states: true
   debug_verbose: false # unused
+
+  ## Clutter mode
+  use_clutter_mode: false
+  # Should be in [0,1], unused if use_clutter_mode is false
+  clutter_regularizer: 1

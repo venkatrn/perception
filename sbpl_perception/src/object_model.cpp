@@ -31,10 +31,10 @@
 
 using namespace std;
 
+// TODO: use config manager.
+bool kMeshInMillimeters = false;
+
 namespace {
-// If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
-// constexpr bool kMeshInMillimeters = true; // true for PERCH experiments
-constexpr bool kMeshInMillimeters = false; // true for PERCH experiments
 // Inflate inscribed (and circumscribed) radius of mesh by the following
 // additive amount, when checking whether points lie within the convex
 // footprint or if they are within the volume of the mesh model.

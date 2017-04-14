@@ -14,6 +14,7 @@
     <node pkg="sbpl_perception" type="real_test" name="real_test" output="screen" launch-prefix="mpirun -n 8" respawn="false">
       <rosparam command="load" file="$(find sbpl_perception)/config/env_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/planner_config.yaml" />
+      <rosparam command="load" file="$(find sbpl_perception)/config/camera_config.yaml" />
       <param name="image_debug" value="$(arg image_debug)"/>
 
       <!-- 4 glasses-->
