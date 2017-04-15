@@ -225,25 +225,25 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setInputCloud(table_removed_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
-  pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  // pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.5);
+  // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
+  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.5);
   pt_filter.filter(*table_removed_cloud);
 
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
   // table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
   //                                                           coefficients, 0.012, 1000, true);
 
-  std::vector<pcl::ModelCoefficients> model_coefficients;
-  std::vector<pcl::PointIndices> model_inliers;                         
-  std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>> regions;
-  perception_utils::OrganizedSegmentation(table_removed_cloud, model_coefficients, model_inliers, &regions);
-  cout << "MPS found " << model_inliers.size() << " planes\n";
-  if (!model_inliers.empty()) {
-    cout << model_coefficients[0] << endl;
-    table_removed_cloud = perception_utils::IndexFilter(table_removed_cloud, model_inliers[0].indices, true);
-  } else {
-    printf("[Perception Interface]: No planes found to segment\n");
-  }
+  // std::vector<pcl::ModelCoefficients> model_coefficients;
+  // std::vector<pcl::PointIndices> model_inliers;                         
+  // std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>> regions;
+  // perception_utils::OrganizedSegmentation(table_removed_cloud, model_coefficients, model_inliers, &regions);
+  // cout << "MPS found " << model_inliers.size() << " planes\n";
+  // if (!model_inliers.empty()) {
+  //   cout << model_coefficients[0] << endl;
+  //   table_removed_cloud = perception_utils::IndexFilter(table_removed_cloud, model_inliers[0].indices, true);
+  // } else {
+  //   printf("[Perception Interface]: No planes found to segment\n");
+  // }
 
   if (pcl_visualization_ && table_removed_cloud->size() != 0) {
     if (!viewer_->updatePointCloud(table_removed_cloud, "table_removed_cloud")) {
