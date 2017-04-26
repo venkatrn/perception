@@ -1,0 +1,29 @@
+# Kinect V1.0
+#camera_width: 640
+#camera_height: 480
+#camera_fx: 576.09757860
+#camera_fy: 576.09757860
+#camera_cx: 321.06398107
+#camera_cy: 242.97676897 
+#camera_znear: 0.1
+#camera_zfar: 20.0
+
+# ASUS Xtion
+camera_width: 640
+camera_height: 480
+camera_fx: 574.8859643503413
+camera_fy: 573.0964762770437
+camera_cx: 319.217523786758
+camera_cy: 242.3030820452889
+camera_znear: 0.01
+camera_zfar: 20.0
+
+# Kinect V2.0
+# camera_width: 512
+# camera_height: 424
+# camera_fx: 354.76029132272464
+# camera_fy: 354.49153515383603
+# camera_cx: 253.06754087288363
+# camera_cy: 205.37746288838397
+# camera_znear: 0.1
+# camera_zfar: 20.0
