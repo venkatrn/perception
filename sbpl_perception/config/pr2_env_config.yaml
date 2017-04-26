@@ -1,4 +1,4 @@
-search_resolution_translation: 0.1 # m 0.04
+search_resolution_translation: 0.08 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
 
 use_full_object_point_cloud: false
@@ -7,7 +7,7 @@ perch_params:
   sensor_resolution_radius: 0.01 #m
   min_neighbor_points_for_valid_pose: 500 #50
   min_points_for_constraint_cloud: 50
-  max_icp_iterations: 10
+  max_icp_iterations: 15
   icp_max_correspondence: 0.05 #m #0.075
   use_adaptive_resolution: false
   use_rcnn_heuristic: false

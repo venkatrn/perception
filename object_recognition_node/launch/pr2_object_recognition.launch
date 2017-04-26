@@ -9,7 +9,7 @@
 
   <include file="$(find sbpl_perception)/config/ycb_objects.xml"/>
 
-  <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch-prefix="mpirun -n 16" respawn="false">
+  <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch-prefix="mpirun -n 16 --mca mpi_yield_when_idle 1" respawn="false">
       <rosparam command="load" file="$(find sbpl_perception)/config/pr2_env_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/pr2_planner_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/camera_config.yaml" />
