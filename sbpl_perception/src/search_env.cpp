@@ -204,14 +204,15 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     obj_models_.push_back(obj_model);
 
     // Initialize DART model
-    // auto &dart_model = dart_models_[ii];
-    // cout << "dart reading\n";
-    // string xml_file = model_file;
-    // xml_file.replace(xml_file.size() - 3, xml_file.size(),"xml");
-    // dart::readModelXML(xml_file.c_str(), dart_model);
-    // dart_model.computeStructure();
+    auto &dart_model = dart_models_[ii];
+    cout << "dart reading\n";
+    string xml_file = model_file;
+    xml_file.replace(xml_file.size() - 3, xml_file.size(),"xml");
+    dart::readModelXML(xml_file.c_str(), dart_model);
+    dart_model.computeStructure();
     // const float kSDFResolution = 0.0005;
-    // dart_model.voxelize(kSDFResolution, 0.05,"/tmp/" + model_name);
+    const float kSDFResolution = 0.5;
+    dart_model.voxelize(kSDFResolution, kSDFResolution*2.0,"/tmp/" + model_name);
     //
     if (IsMaster(mpi_comm_)) {
       printf("Read %s with %d polygons and %d triangles\n", model_name.c_str(),
@@ -223,9 +224,9 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
              obj_model.max_z(), obj_model.GetCircumscribedRadius(),
              obj_model.GetInscribedRadius());
 
-      // std::cout << "SDF Specs:\n";
-      // std::cout << dart_model.getNumSdfs() << std::endl;
-      // std::cout << dart_model.getSdf(0).dim.x << " x " << dart_model.getSdf(0).dim.y << " x " << dart_model.getSdf(0).dim.z << std::endl;
+      std::cout << "SDF Specs:\n";
+      std::cout << dart_model.getNumSdfs() << std::endl;
+      std::cout << dart_model.getSdf(0).dim.x << " x " << dart_model.getSdf(0).dim.y << " x " << dart_model.getSdf(0).dim.z << std::endl;
       printf("\n");
     }
   }
@@ -1308,12 +1309,12 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
 
-  source_cost = GetSourceCost(succ_cloud,
+  // source_cost = GetSourceCost(succ_cloud,
+  //                             adjusted_child_state->object_states().back(),
+  //                             false, parent_counted_pixels, child_counted_pixels);
+  source_cost = GetSourceCostSDF(
                               adjusted_child_state->object_states().back(),
                               false, parent_counted_pixels, child_counted_pixels);
-  // source_cost = GetSourceCostSDF(succ_cloud,
-  //                             adjusted_child_state->object_states().back(),
-  //                             last_level, parent_counted_pixels, child_counted_pixels);
 
   if (last_level) {
     vector<int> updated_counted_pixels;
@@ -1326,7 +1327,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     *child_counted_pixels = updated_counted_pixels;
   }
 
-  total_cost = source_cost + target_cost + last_level_cost;
+  // total_cost = source_cost + target_cost + last_level_cost;
+  // total_cost = source_cost;
+  total_cost = source_cost + target_cost;
 
   if (perch_params_.use_clutter_mode) {
     total_cost += static_cast<int>(perch_params_.clutter_regularizer * num_occluders);
@@ -1473,8 +1476,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   return target_cost;
 }
 
-int EnvObjectRecognition::GetSourceCostSDF(const PointCloudPtr
-                                        full_rendered_cloud, const ObjectState &last_object, const bool last_level,
+int EnvObjectRecognition::GetSourceCostSDF(const ObjectState &last_object, const bool last_level,
                                         const std::vector<int> &parent_counted_pixels,
                                         std::vector<int> *child_counted_pixels) {
 
@@ -1485,13 +1487,13 @@ int EnvObjectRecognition::GetSourceCostSDF(const PointCloudPtr
   *child_counted_pixels = parent_counted_pixels;
 
   // TODO: make principled
-  if (full_rendered_cloud->points.empty()) {
-    if (kNormalizeCost) {
-      return 100;
-    }
-
-    return 100000;
-  }
+  // if (full_rendered_cloud->points.empty()) {
+  //   if (kNormalizeCost) {
+  //     return 100;
+  //   }
+  //
+  //   return 100000;
+  // }
 
   std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
 
@@ -1573,8 +1575,12 @@ int EnvObjectRecognition::GetSourceCostSDF(const PointCloudPtr
   // Transform observed cloud to sdf coordinates.
   PointCloud transformed_cloud;
   Eigen::Isometry3d transform = last_object.cont_pose().GetTransform();
+  int last_obj_id = last_object.id();
+  Eigen::Affine3f pre_transform = obj_models_[last_obj_id].preprocessing_transform();
   Eigen::Matrix4f T_obs_to_ren = transform.inverse().matrix().cast<float>();
-  pcl::transformPointCloud(*observed_cloud_, transformed_cloud, T_obs_to_ren);
+  Eigen::Matrix4f T_inv_pre_transform = pre_transform.inverse().matrix().cast<float>();
+  Eigen::Matrix4f T_obs_to_sdf = T_inv_pre_transform * T_obs_to_ren;
+  pcl::transformPointCloud(*observed_cloud_, transformed_cloud, T_obs_to_sdf);
   const dart::Grid3D<float> & sdf = dart_models_[last_object.id()].getSdf(0);
 
   for (const int ii : indices_to_consider) {
@@ -1585,19 +1591,22 @@ int EnvObjectRecognition::GetSourceCostSDF(const PointCloudPtr
     float3 p = make_float3(point.x, point.y, point.z);
     float3 grid_p = sdf.getGridCoords(p);
     float df_val = 0.0;
-    float max_val = 0.01;
 
+    int outlier = 0;
     if (!sdf.isInBoundsInterp(grid_p)) {
       // TODO: make principled
-      df_val = max_val;
+      df_val = perch_params_.sensor_resolution;
     } else {
-      df_val = sdf.resolution * fabs(sdf.getValueInterpolated(grid_p));
+      df_val = sdf.resolution * fabs(sdf.getValueInterpolated(grid_p)) / 1000.0;
     }
-    if (df_val > max_val) {
-      df_val = max_val;
+    if (df_val > perch_params_.sensor_resolution) {
+      outlier = 1;
+    } else {
+      outlier = 0;
     }
 
-    nn_score += (100 * df_val);
+    // nn_score += (100 * df_val);
+    nn_score += outlier ;
   }
 
   // Counted pixels always need to be sorted.

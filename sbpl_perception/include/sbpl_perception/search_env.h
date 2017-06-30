@@ -366,8 +366,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     const ObjectState &last_object, const bool last_level,
                     const std::vector<int> &parent_counted_pixels,
                     std::vector<int> *child_counted_pixels);
-  int GetSourceCostSDF(const PointCloudPtr full_rendered_cloud,
-                    const ObjectState &last_object, const bool last_level,
+  int GetSourceCostSDF(const ObjectState &last_object, const bool last_level,
                     const std::vector<int> &parent_counted_pixels,
                     std::vector<int> *child_counted_pixels);
   // NOTE: updated_counted_pixels should always be equal to the number of
