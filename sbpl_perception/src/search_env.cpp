@@ -33,10 +33,14 @@
 #include <opencv2/contrib/contrib.hpp>
 
 #include <util/dart_io.h>
+#include <util/string_format.h>
+#include <geometry/distance_transforms.h>
 
 #include <boost/lexical_cast.hpp>
 #include <omp.h>
 #include <algorithm>
+
+#define CUDA_BUILD 1
 
 using namespace std;
 using namespace perception_utils;
@@ -1307,7 +1311,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
                           env_params_.num_objects;
   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
-  target_cost = GetTargetCost(cloud_out);
+  // target_cost = GetTargetCost(cloud_out);
+  target_cost = GetTargetCostSDF(cloud_out);
 
   // source_cost = GetSourceCost(succ_cloud,
   //                             adjusted_child_state->object_states().back(),
@@ -1328,7 +1333,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   }
 
   // total_cost = source_cost + target_cost + last_level_cost;
-  // total_cost = source_cost;
+  total_cost = source_cost;
   total_cost = source_cost + target_cost;
 
   if (perch_params_.use_clutter_mode) {
@@ -1417,6 +1422,82 @@ bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
   }
 
   return is_occluded;
+}
+
+int EnvObjectRecognition::GetTargetCostSDF(const PointCloudPtr
+                                        partial_rendered_cloud) {
+
+  // Nearest-neighbor cost
+  double nn_score = 0;
+
+  for (size_t ii = 0; ii < partial_rendered_cloud->points.size(); ++ii) {
+    PointT point = partial_rendered_cloud->points[ii];
+
+    // vector<int> indices;
+    // vector<float> sqr_dists;
+    // int num_neighbors_found = knn->radiusSearch(point,
+    //                                             perch_params_.sensor_resolution,
+    //                                             indices,
+    //                                             sqr_dists, 1);
+    // const bool point_unexplained = num_neighbors_found == 0;
+
+    float3 p = make_float3(point.x, point.y, point.z);
+    float3 grid_p = scene_df_->getGridCoords(p);
+    float df_val = 0.0;
+
+    bool point_unexplained = false;
+    if (!scene_df_->isInBoundsInterp(grid_p)) {
+      // TODO: make principled
+      df_val = perch_params_.sensor_resolution + 1.0;
+    } else {
+      df_val = scene_df_->resolution * fabs(scene_df_->getValueInterpolated(grid_p));
+      // printf("df val: %f\n", df_val);
+    }
+    if (df_val > perch_params_.sensor_resolution) {
+      point_unexplained = true;
+    } else {
+      point_unexplained = false;
+    }
+
+    double cost = 0;
+
+    if (point_unexplained) {
+      if (kUseDepthSensitiveCost) {
+        auto camera_origin = env_params_.camera_pose.translation();
+        PointT camera_origin_point;
+        camera_origin_point.x = camera_origin[0];
+        camera_origin_point.y = camera_origin[1];
+        camera_origin_point.z = camera_origin[2];
+        double range = pcl::euclideanDistance(camera_origin_point, point);
+        cost = kDepthSensitiveCostMultiplier * range;
+      } else {
+        cost = 1.0;
+      }
+    } else {
+      // cost += sqr_dists[0];
+      cost = 0.0;
+    }
+
+    nn_score += cost;
+  }
+
+  int target_cost = 0;
+
+  if (kNormalizeCost) {
+    // if (partial_rendered_cloud->points.empty()) {
+    if (static_cast<int>(partial_rendered_cloud->points.size()) <
+        perch_params_.min_neighbor_points_for_valid_pose) {
+      return 100;
+    }
+
+    target_cost = static_cast<int>(nn_score * 100 /
+                                   partial_rendered_cloud->points.size());
+  } else {
+    target_cost = static_cast<int>(nn_score);
+
+  }
+
+  return target_cost;
 }
 
 int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
@@ -2271,6 +2352,72 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   projected_knn_.reset(new pcl::search::KdTree<PointT>(true));
   projected_knn_->setInputCloud(projected_cloud_);
+
+  // Create DART model for observed scene and compute distance field.
+  const float sdf_res = perch_params_.sensor_resolution / 2.0;
+  const float sdf_padding = 0.01; // pad grid with 1 cm
+  PointT min_pt, max_pt;
+  pcl::getMinMax3D(*observed_cloud_, min_pt, max_pt);
+  const int dim_x = (max_pt.x - min_pt.x) / sdf_res + sdf_padding;
+  const int dim_y = (max_pt.y - min_pt.y) / sdf_res + sdf_padding;
+  const int dim_z = (max_pt.z - min_pt.z) / sdf_res + sdf_padding;
+  uint3 dim = make_uint3(dim_x, dim_y, dim_z);
+  float3 offset = make_float3(min_pt.x, min_pt.y, min_pt.z);
+  int num_voxels = dim.x * dim.y * dim.z;
+  scene_df_.reset(new dart::Grid3D<float>(dim, offset, sdf_res));
+
+  printf("Min Point: %f %f %f\n", min_pt.x, min_pt.y, min_pt.z);
+  printf("Scene DF Size: %d %d %d\n", dim.x, dim.y, dim.z);
+
+  printf("Total points: %d\n", valid_indices_.size());
+
+  for (int z=0; z<dim.z; z++)
+    for (int y=0; y<dim.y; y++)
+        for (int x=0; x<dim.x; x++)
+            scene_df_->data[x + y*dim.x + z*dim.x*dim.y] = 1e20;
+
+  int count = 0;
+  for (int ii = 0; ii < static_cast<int>(valid_indices_.size()); ++ii) {
+    const auto& point = observed_cloud_->points[valid_indices_[ii]];
+    float3 p = make_float3(point.x, point.y, point.z);
+    float3 grid_p = scene_df_->getGridCoords(p);
+
+    if (!scene_df_->isInBoundsInterp(grid_p)) {
+      continue;
+    } else {
+      uint3 coords = make_uint3(int(grid_p.x - 0.5), int(grid_p.y - 0.5), int(grid_p.z - 0.5));
+      int idx = coords.x + dim_x * (coords.y + dim_y * coords.z);
+      scene_df_->data[idx] = 0.0;
+      count++;
+    }
+  }
+  printf("Points added: %d\n", count);
+
+  printf("Computing scene SDF\n");
+
+#if CUDA_BUILD
+  float * sdf_in; cudaMalloc(&sdf_in,num_voxels*sizeof(float));
+  float * sdf_out; cudaMalloc(&sdf_out,num_voxels*sizeof(float));
+  cudaMemcpy(sdf_in, scene_df_->data, num_voxels*sizeof(float), cudaMemcpyHostToDevice);
+#else
+  float* sdf_in = scene_df_->data;
+  float *sdf_out = new float[num_voxels];
+#endif // CUDA_BUILD
+
+  dart::distanceTransform3D<float, true>(sdf_in, sdf_out, dim.x, dim.y, dim.z);
+
+#if CUDA_BUILD
+  cudaMemcpy(scene_df_->data,sdf_out,num_voxels*sizeof(float),cudaMemcpyDeviceToHost);
+  cudaFree(sdf_in);
+  cudaFree(sdf_out);
+#else
+   memcpy(scene_df_->data, sdf_out, num_voxels * sizeof(float));
+#endif // CUDA_BUILD
+
+  printf("Computed scene SDF\n");
+
+
+  mpi_comm_->barrier();
 
   min_observed_depth_ = kKinectMaxDepth;
   max_observed_depth_ = 0;

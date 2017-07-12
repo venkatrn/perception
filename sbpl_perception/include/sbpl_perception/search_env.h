@@ -324,6 +324,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // DART models
   std::map<int, dart::HostOnlyModel> dart_models_;
+  std::unique_ptr<dart::Grid3D<float>> scene_df_;
 
   bool image_debug_;
   // Print outputs/debug info to this directory. Assumes that directory exists.
@@ -360,6 +361,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr
+                    partial_rendered_cloud);
+  int GetTargetCostSDF(const PointCloudPtr
                     partial_rendered_cloud);
   // Cost for points in observed cloud that can be computed based on the rendered cloud.
   int GetSourceCost(const PointCloudPtr full_rendered_cloud,
