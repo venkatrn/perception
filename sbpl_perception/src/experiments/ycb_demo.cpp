@@ -10,6 +10,7 @@
 #include <ros/ros.h>
 #include <sbpl_perception/object_recognizer.h>
 #include <sbpl_perception/utils/utils.h>
+#include <deep_rgbd_utils/helpers.h>
 
 #include <pcl/io/pcd_io.h>
 
@@ -19,6 +20,37 @@
 using std::vector;
 using std::string;
 using namespace sbpl_perception;
+
+PointCloudPtr DepthImageToOrganizedCloud(const cv::Mat& depth_image_mm, const cv::Mat& rgb_image) {
+  PointCloudPtr cloud(new PointCloud);
+  cloud->width = depth_image_mm.cols;
+  cloud->height = depth_image_mm.rows;
+  cloud->points.resize(depth_image_mm.cols * depth_image_mm.rows);
+  cloud->is_dense = false;
+
+  for (int row = 0; row < depth_image_mm.rows; ++row) {
+    for (int col = 0; col < depth_image_mm.cols; ++col) {
+      int idx = OpenCVIndexToPCLIndex(col, row);
+      auto &point = cloud->points[idx];
+      unsigned short val = depth_image_mm.at<unsigned short>(row, col);
+      cv::Vec3b color = rgb_image.at<cv::Vec3b>(row, col);
+      if (val == 0 || val > 1500) {
+        point.x = NAN;
+        point.y = NAN;
+        point.z = NAN;
+        continue;
+      }
+      pcl::PointXYZ point_xyz = dru::CamToWorld(col, row, static_cast<float>(val) / 1000.0);
+      point.x = point_xyz.x;
+      point.y = point_xyz.y;
+      point.z = point_xyz.z;
+      point.r = color[2];
+      point.g = color[1];
+      point.b = color[0];
+    }
+  }
+  return cloud;
+}
 
 int main(int argc, char **argv) {
   boost::mpi::environment env(argc, argv);
@@ -30,16 +62,6 @@ int main(int argc, char **argv) {
 
   // The camera pose and preprocessed point cloud, both in world frame.
   Eigen::Isometry3d camera_pose, cam_to_body;
-  // camera_pose.matrix() <<
-  //                      1, 0, 0, 0.9997563,
-  //                      0, 1, 0, 0.02131301,
-  //                      0, 0, 1, -0.005761033,
-  //                      0, 0, 0, 1;
-//   camera_pose.matrix() << 
-//   0.9997563, 0.02131301, -0.005761033, 0.02627148,
-//  -0.02132165, 0.9997716, -0.001442874, -0.0001685539, 
-//   0.005728965, 0.001565357, 0.9999824, 0.0002760285,
-//   0, 0, 0, 1;  
   cam_to_body.matrix() <<
                        0, 0, 1, 0,
                        -1, 0, 0, 0,
@@ -49,6 +71,7 @@ int main(int argc, char **argv) {
 
   RecognitionInput input;
   // Set the bounds for the the search space (in world frame).
+  // These do not matter for 6-dof search.
   input.x_min = -1000.0;
   input.x_max = 1000.0;
   input.y_min = -1000.0;
@@ -62,6 +85,11 @@ int main(int argc, char **argv) {
   // input.model_names = vector<string>({"019_pitcher_base"});
   input.rgb_file = "/home/venkatrn/indigo_workspace/src/perch/sbpl_perception/demo/9.png";
   input.depth_file = "/home/venkatrn/indigo_workspace/src/perch/sbpl_perception/demo/9_depth.png";
+
+  cv::Mat depth_img, rgb_img;
+  depth_img = cv::imread(input.depth_file,  CV_LOAD_IMAGE_ANYCOLOR | CV_LOAD_IMAGE_ANYDEPTH);
+  rgb_img = cv::imread(input.rgb_file);
+  PointCloudPtr cloud_in = DepthImageToOrganizedCloud(depth_img, rgb_img);
 
   vector<Eigen::Affine3f> object_transforms;
   vector<PointCloudPtr> object_point_clouds;
@@ -92,11 +120,11 @@ int main(int argc, char **argv) {
     viewer->removeAllPointClouds();
     viewer->removeAllShapes();
 
-    // if (!viewer->updatePointCloud(cloud_in, "input_cloud")) {
-    //   viewer->addPointCloud(cloud_in, "input_cloud");
-    //   viewer->setPointCloudRenderingProperties(
-    //     pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "input_cloud");
-    // }
+    if (!viewer->updatePointCloud(cloud_in, "input_cloud")) {
+      viewer->addPointCloud(cloud_in, "input_cloud");
+      viewer->setPointCloudRenderingProperties(
+        pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "input_cloud");
+    }
 
     std::cout << "Output transforms:\n";
 
@@ -117,7 +145,7 @@ int main(int argc, char **argv) {
                                      object_transforms[ii].matrix());
       viewer->addPolygonMesh(*mesh_ptr, model_name);
       viewer->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, model_name);
+        pcl::visualization::PCL_VISUALIZER_OPACITY, 0.4, model_name);
       double red = 0;
       double green = 0;
       double blue = 0;;
@@ -125,25 +153,12 @@ int main(int argc, char **argv) {
       viewer->setPointCloudRenderingProperties(
         pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
 
-      const double kTableThickness = 0.02;
-      viewer->addCube(input.x_min, input.x_max, input.y_min, input.y_max,
-                      input.table_height - kTableThickness, input.table_height, 1.0, 0.0, 0.0,
-                      "support_surface");
-      viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY,
-                                          0.2, "support_surface");
-      viewer->setShapeRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
-        pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME,
-        "support_surface");
-      // viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_SHADING,
-      //                                     pcl::visualization::PCL_VISUALIZER_SHADING_GOURAUD, "support_surface");
-
-      string cloud_id = model_name + string("cloud");
-      viewer->addPointCloud(object_point_clouds[ii], cloud_id);
-      viewer->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, cloud_id);
-      viewer->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, cloud_id);
+      // string cloud_id = model_name + string("cloud");
+      // viewer->addPointCloud(object_point_clouds[ii], cloud_id);
+      // viewer->setPointCloudRenderingProperties(
+      //   pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, cloud_id);
+      // viewer->setPointCloudRenderingProperties(
+      //   pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, cloud_id);
     }
 
     viewer->spin();

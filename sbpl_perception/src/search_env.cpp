@@ -105,7 +105,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
   dart::Model::initializeRenderer(new dart::AssimpMeshReader());
 
   if (IsMaster(mpi_comm_)) {
-    pose_estimator_.reset(new dru::PoseEstimator);
+    pose_estimator_.reset(new dru::PoseEstimator(false));
     pose_estimator_->UseDepth(true);
   }
 
@@ -2722,7 +2722,6 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     cout << dir << endl;
 
     if (IsMaster(mpi_comm_)) {
-      pose_estimator_->ReadModels(input.model_names);
       pose_estimator_->SetImageNum(image_num);
       pose_estimator_->SetVerbose(dir);
     }
