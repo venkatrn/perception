@@ -63,6 +63,9 @@ constexpr unsigned short kOcclusionThreshold = 50; // mm
 // Tolerance used when deciding the footprint of the object in a given pose is
 // out of bounds of the supporting place.
 constexpr double kFootprintTolerance = 0.02; // m
+// Should we use SDF for computing costs, instead of nearest neighbor lookups.
+bool kUseObjectSDF = false;
+bool kUseSceneSDF = true;
 }  // namespace
 
 namespace sbpl_perception {
@@ -100,6 +103,11 @@ EnvObjectRecognition::EnvObjectRecognition(const
   pcl::console::setVerbosityLevel(pcl::console::L_ALWAYS);
 
   dart::Model::initializeRenderer(new dart::AssimpMeshReader());
+
+  if (IsMaster(mpi_comm_)) {
+    pose_estimator_.reset(new dru::PoseEstimator);
+    pose_estimator_->UseDepth(true);
+  }
 
   // Load algorithm parameters.
   // NOTE: Do not change these default parameters. Configure these in the
@@ -208,36 +216,43 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     obj_models_.push_back(obj_model);
 
     // Initialize DART model
-    auto &dart_model = dart_models_[ii];
-    cout << "dart reading\n";
-    string xml_file = model_file;
-    xml_file.replace(xml_file.size() - 3, xml_file.size(),"xml");
-    dart::readModelXML(xml_file.c_str(), dart_model);
-    dart_model.computeStructure();
-    // const float kSDFResolution = 0.0005;
-    const float kSDFResolution = 0.5;
-    dart_model.voxelize(kSDFResolution, kSDFResolution*2.0,"/tmp/" + model_name);
-    //
-    if (IsMaster(mpi_comm_)) {
-      printf("Read %s with %d polygons and %d triangles\n", model_name.c_str(),
-             static_cast<int>(mesh.polygons.size()),
-             static_cast<int>(mesh.cloud.data.size()));
-      printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f,   %f\n",
-             obj_model.min_x(),
-             obj_model.max_x(), obj_model.min_y(), obj_model.max_y(), obj_model.min_z(),
-             obj_model.max_z(), obj_model.GetCircumscribedRadius(),
-             obj_model.GetInscribedRadius());
+    if (kUseObjectSDF) {
+      auto &dart_model = dart_models_[ii];
+      cout << "dart reading\n";
+      string xml_file = model_file;
+      xml_file.replace(xml_file.size() - 3, xml_file.size(),"xml");
+      dart::readModelXML(xml_file.c_str(), dart_model);
+      dart_model.computeStructure();
+      // const float kSDFResolution = 0.0005;
+      const float kSDFResolution = 0.5;
+      dart_model.voxelize(kSDFResolution, kSDFResolution*2.0,"/tmp/" + model_name);
+      //
+      if (IsMaster(mpi_comm_)) {
+        printf("Read %s with %d polygons and %d triangles\n", model_name.c_str(),
+               static_cast<int>(mesh.polygons.size()),
+               static_cast<int>(mesh.cloud.data.size()));
+        printf("Object dimensions: X: %f %f, Y: %f %f, Z: %f %f, Rad: %f,   %f\n",
+               obj_model.min_x(),
+               obj_model.max_x(), obj_model.min_y(), obj_model.max_y(), obj_model.min_z(),
+               obj_model.max_z(), obj_model.GetCircumscribedRadius(),
+               obj_model.GetInscribedRadius());
 
-      std::cout << "SDF Specs:\n";
-      std::cout << dart_model.getNumSdfs() << std::endl;
-      std::cout << dart_model.getSdf(0).dim.x << " x " << dart_model.getSdf(0).dim.y << " x " << dart_model.getSdf(0).dim.z << std::endl;
-      printf("\n");
+        std::cout << "SDF Specs:\n";
+        std::cout << dart_model.getNumSdfs() << std::endl;
+        std::cout << dart_model.getSdf(0).dim.x << " x " << dart_model.getSdf(0).dim.y << " x " << dart_model.getSdf(0).dim.z << std::endl;
+        printf("\n");
+      }
     }
   }
 }
 
 bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                        ContPose pose, bool after_refinement = false) const {
+
+  if (six_dof_) {
+    return true;
+  }
+
   vector<int> indices;
   vector<float> sqr_dists;
   PointT point;
@@ -437,7 +452,11 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   vector<int> candidate_succ_ids, candidate_costs;
   vector<GraphState> candidate_succs;
 
-  GenerateSuccessorStates(source_state, &candidate_succs);
+  if (six_dof_) {
+    GenerateSixDOFSuccessorStates(source_state, &candidate_succs);
+  } else {
+    GenerateSuccessorStates(source_state, &candidate_succs);
+  }
 
   env_stats_.scenes_rendered += static_cast<int>(candidate_succs.size());
 
@@ -1226,12 +1245,12 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   GetComposedDepthImage(source_depth_image, last_obj_depth_image,
                         unadjusted_depth_image);
 
-  unsigned short succ_min_depth_unused, succ_max_depth_unused;
+  unsigned short succ_min_depth, succ_max_depth;
   vector<int> new_pixel_indices;
 
   if (IsOccluded(source_depth_image, *unadjusted_depth_image, &new_pixel_indices,
-                 &succ_min_depth_unused,
-                 &succ_max_depth_unused)) {
+                 &succ_min_depth,
+                 &succ_max_depth)) {
     // final_depth_image->clear();
     // *final_depth_image = *unadjusted_depth_image;
     return -1;
@@ -1248,58 +1267,6 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
       unadjusted_depth_image->at(new_pixel_indices[ii]);
   }
 
-  // Create point cloud (cloud_in) corresponding to new pixels.
-  cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image);
-
-  // Align with ICP
-  // Only non-occluded points
-
-  GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out,
-                     parent_counted_pixels);
-  // icp_cost = static_cast<int>(kICPCostMultiplier * icp_fitness_score);
-  int last_idx = child_state.NumObjects() - 1;
-
-  // TODO: verify
-  const ObjectState modified_last_object(last_object.id(),
-                                         last_object.symmetric(), pose_out);
-  adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
-  // End ICP Adjustment
-
-  // Check again after icp
-  if (!IsValidPose(source_state, last_object_id,
-                   adjusted_child_state->object_states().back().cont_pose(), true)) {
-    // printf(" state %d is invalid\n ", child_id);
-    // succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
-    // final_depth_image->clear();
-    // *final_depth_image = depth_image;
-    return -1;
-  }
-
-  // num_occluders is the number of valid pixels in the input depth image that
-  // occlude the rendered scene corresponding to adjusted_child_state.
-  int num_occluders = 0;
-  succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &num_occluders);
-  // All points
-  succ_cloud = GetGravityAlignedPointCloud(depth_image);
-
-  unsigned short succ_min_depth, succ_max_depth;
-  new_pixel_indices.clear();
-  new_obj_depth_image.clear();
-  new_obj_depth_image.resize(kNumPixels, kKinectMaxDepth);
-
-  if (IsOccluded(source_depth_image, depth_image, &new_pixel_indices,
-                 &succ_min_depth,
-                 &succ_max_depth)) {
-    // final_depth_image->clear();
-    // *final_depth_image = depth_image;
-    return -1;
-  }
-
-  for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
-    new_obj_depth_image[new_pixel_indices[ii]] =
-      depth_image[new_pixel_indices[ii]];
-  }
-
   // Create point cloud (cloud_out) corresponding to new pixels.
   cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
 
@@ -1311,17 +1278,38 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
                           env_params_.num_objects;
   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
-  // target_cost = GetTargetCost(cloud_out);
-  target_cost = GetTargetCostSDF(cloud_out);
+  
+  if (kUseSceneSDF) {
+    target_cost = GetTargetCostSDF(cloud_out);
+  } else {
+    target_cost = GetTargetCost(cloud_out);
+  }
 
-  // source_cost = GetSourceCost(succ_cloud,
-  //                             adjusted_child_state->object_states().back(),
-  //                             false, parent_counted_pixels, child_counted_pixels);
-  source_cost = GetSourceCostSDF(
-                              adjusted_child_state->object_states().back(),
-                              false, parent_counted_pixels, child_counted_pixels);
+  // if (kUseObjectSDF) {
+  //   source_cost = GetSourceCostSDF(
+  //                               adjusted_child_state->object_states().back(),
+  //                               false, parent_counted_pixels, child_counted_pixels);
+  // } else {
+  //
+  //   source_cost = GetSourceCost(succ_cloud,
+  //                               adjusted_child_state->object_states().back(),
+  //                               false, parent_counted_pixels, child_counted_pixels);
+  // }
 
-  if (last_level) {
+
+  // if (image_debug_ && mpi_comm_->rank() == kMasterRank) {
+  //   std::chrono::time_point<std::chrono::system_clock> start;
+  //   start = std::chrono::system_clock::now();
+  //   std::time_t ttp = std::chrono::system_clock::to_time_t(start);
+  //   std::stringstream ss1, ss2, ss3;
+  //   ss2.precision(20);
+  //
+  //   ss2 << debug_dir_ + "cloud_" << std::ctime(&ttp) << ".pcd";
+  //   pcl::PCDWriter writer;
+  //   writer.writeBinary (ss2.str()  , *cloud_out);
+  // }
+
+  if (last_level && false) {
     vector<int> updated_counted_pixels;
     last_level_cost = GetLastLevelCost(succ_cloud,
                                        adjusted_child_state->object_states().back(), *child_counted_pixels,
@@ -1333,41 +1321,201 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   }
 
   // total_cost = source_cost + target_cost + last_level_cost;
-  total_cost = source_cost;
-  total_cost = source_cost + target_cost;
+  total_cost = target_cost;
+  // total_cost = source_cost + target_cost;
 
   if (perch_params_.use_clutter_mode) {
+    int num_occluders = 0;
     total_cost += static_cast<int>(perch_params_.clutter_regularizer * num_occluders);
   }
 
   final_depth_image->clear();
-  *final_depth_image = depth_image;
+  *final_depth_image = *unadjusted_depth_image;
 
   child_properties->target_cost = target_cost;
   child_properties->source_cost = source_cost;
   child_properties->last_level_cost = last_level_cost;
-
-  // std::stringstream cloud_ss;
-  // cloud_ss.precision(20);
-  // cloud_ss << debug_dir_ + "cloud_" << rand() << ".pcd";
-  // pcl::PCDWriter writer;
-  // writer.writeBinary (cloud_ss.str()  , *succ_cloud);
-
-  // if (image_debug_) {
-  //   std::stringstream ss1, ss2, ss3;
-  //   ss1.precision(20);
-  //   ss2.precision(20);
-  //   ss1 << debug_dir_ + "cloud_" << child_id << ".pcd";
-  //   ss2 << debug_dir_ + "cloud_aligned_" << child_id << ".pcd";
-  //   ss3 << debug_dir_ + "cloud_succ_" << child_id << ".pcd";
-  //   pcl::PCDWriter writer;
-  //   writer.writeBinary (ss1.str()  , *cloud_in);
-  //   writer.writeBinary (ss2.str()  , *cloud_out);
-  //   writer.writeBinary (ss3.str()  , *succ_cloud);
-  // }
-
   return total_cost;
 }
+
+// int EnvObjectRecognition::GetCost(const GraphState &source_state,
+//                                   const GraphState &child_state,
+//                                   const vector<unsigned short> &source_depth_image,
+//                                   const vector<int> &parent_counted_pixels, vector<int> *child_counted_pixels,
+//                                   GraphState *adjusted_child_state, GraphStateProperties *child_properties,
+//                                   vector<unsigned short> *final_depth_image,
+//                                   vector<unsigned short> *unadjusted_depth_image) {
+//
+//   assert(child_state.NumObjects() > 0);
+//
+//   *adjusted_child_state = child_state;
+//   child_properties->last_max_depth = kKinectMaxDepth;
+//   child_properties->last_min_depth = 0;
+//
+//   const auto &last_object = child_state.object_states().back();
+//   ContPose child_pose = last_object.cont_pose();
+//   int last_object_id = last_object.id();
+//
+//   vector<unsigned short> depth_image, last_obj_depth_image;
+//   const float *succ_depth_buffer;
+//   ContPose pose_in(child_pose),
+//            pose_out(child_pose);
+//   PointCloudPtr cloud_in(new PointCloud);
+//   PointCloudPtr succ_cloud(new PointCloud);
+//   PointCloudPtr cloud_out(new PointCloud);
+//
+//   // Begin ICP Adjustment
+//   GraphState s_new_obj;
+//   s_new_obj.AppendObject(ObjectState(last_object_id,
+//                                      obj_models_[last_object_id].symmetric(), child_pose));
+//   succ_depth_buffer = GetDepthImage(s_new_obj, &last_obj_depth_image);
+//
+//   unadjusted_depth_image->clear();
+//   GetComposedDepthImage(source_depth_image, last_obj_depth_image,
+//                         unadjusted_depth_image);
+//
+//   unsigned short succ_min_depth_unused, succ_max_depth_unused;
+//   vector<int> new_pixel_indices;
+//
+//   if (IsOccluded(source_depth_image, *unadjusted_depth_image, &new_pixel_indices,
+//                  &succ_min_depth_unused,
+//                  &succ_max_depth_unused)) {
+//     // final_depth_image->clear();
+//     // *final_depth_image = *unadjusted_depth_image;
+//     return -1;
+//   }
+//
+//   vector<unsigned short> new_obj_depth_image(kDepthImageWidth *
+//                                              kDepthImageHeight, kKinectMaxDepth);
+//
+//   // Do ICP alignment on object *only* if it has been occluded by an existing
+//   // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
+//
+//   for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
+//     new_obj_depth_image[new_pixel_indices[ii]] =
+//       unadjusted_depth_image->at(new_pixel_indices[ii]);
+//   }
+//
+//   // Create point cloud (cloud_in) corresponding to new pixels.
+//   cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image);
+//
+//   // Align with ICP
+//   // Only non-occluded points
+//
+//   GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out,
+//                      parent_counted_pixels);
+//   // icp_cost = static_cast<int>(kICPCostMultiplier * icp_fitness_score);
+//   int last_idx = child_state.NumObjects() - 1;
+//
+//   // TODO: verify
+//   const ObjectState modified_last_object(last_object.id(),
+//                                          last_object.symmetric(), pose_out);
+//   adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
+//   // End ICP Adjustment
+//
+//   // Check again after icp
+//   if (!IsValidPose(source_state, last_object_id,
+//                    adjusted_child_state->object_states().back().cont_pose(), true)) {
+//     // printf(" state %d is invalid\n ", child_id);
+//     // succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
+//     // final_depth_image->clear();
+//     // *final_depth_image = depth_image;
+//     return -1;
+//   }
+//
+//   // num_occluders is the number of valid pixels in the input depth image that
+//   // occlude the rendered scene corresponding to adjusted_child_state.
+//   int num_occluders = 0;
+//   succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &num_occluders);
+//   // All points
+//   succ_cloud = GetGravityAlignedPointCloud(depth_image);
+//
+//   unsigned short succ_min_depth, succ_max_depth;
+//   new_pixel_indices.clear();
+//   new_obj_depth_image.clear();
+//   new_obj_depth_image.resize(kNumPixels, kKinectMaxDepth);
+//
+//   if (IsOccluded(source_depth_image, depth_image, &new_pixel_indices,
+//                  &succ_min_depth,
+//                  &succ_max_depth)) {
+//     // final_depth_image->clear();
+//     // *final_depth_image = depth_image;
+//     return -1;
+//   }
+//
+//   for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
+//     new_obj_depth_image[new_pixel_indices[ii]] =
+//       depth_image[new_pixel_indices[ii]];
+//   }
+//
+//   // Create point cloud (cloud_out) corresponding to new pixels.
+//   cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
+//
+//   // Cache the min and max depths
+//   child_properties->last_min_depth = succ_min_depth;
+//   child_properties->last_max_depth = succ_max_depth;
+//
+//   // Compute costs
+//   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
+//                           env_params_.num_objects;
+//   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
+//   target_cost = GetTargetCost(cloud_out);
+//   source_cost = GetSourceCost(succ_cloud,
+//                               adjusted_child_state->object_states().back(),
+//                               false, parent_counted_pixels, child_counted_pixels);
+//   // target_cost = GetTargetCostSDF(cloud_out);
+//   //
+//   // source_cost = GetSourceCostSDF(
+//   //                             adjusted_child_state->object_states().back(),
+//   //                             false, parent_counted_pixels, child_counted_pixels);
+//
+//   if (last_level) {
+//     vector<int> updated_counted_pixels;
+//     last_level_cost = GetLastLevelCost(succ_cloud,
+//                                        adjusted_child_state->object_states().back(), *child_counted_pixels,
+//                                        &updated_counted_pixels);
+//     // // NOTE: we won't include the points that lie outside the union of volumes.
+//     // // Refer to the header for documentation on child_counted_pixels.
+//     // *child_counted_pixels = updated_counted_pixels;
+//     *child_counted_pixels = updated_counted_pixels;
+//   }
+//
+//   // total_cost = source_cost + target_cost + last_level_cost;
+//   total_cost = source_cost;
+//   total_cost = source_cost + target_cost;
+//
+//   if (perch_params_.use_clutter_mode) {
+//     total_cost += static_cast<int>(perch_params_.clutter_regularizer * num_occluders);
+//   }
+//
+//   final_depth_image->clear();
+//   *final_depth_image = depth_image;
+//
+//   child_properties->target_cost = target_cost;
+//   child_properties->source_cost = source_cost;
+//   child_properties->last_level_cost = last_level_cost;
+//
+//   // std::stringstream cloud_ss;
+//   // cloud_ss.precision(20);
+//   // cloud_ss << debug_dir_ + "cloud_" << rand() << ".pcd";
+//   // pcl::PCDWriter writer;
+//   // writer.writeBinary (cloud_ss.str()  , *succ_cloud);
+//
+//   // if (image_debug_) {
+//   //   std::stringstream ss1, ss2, ss3;
+//   //   ss1.precision(20);
+//   //   ss2.precision(20);
+//   //   ss1 << debug_dir_ + "cloud_" << child_id << ".pcd";
+//   //   ss2 << debug_dir_ + "cloud_aligned_" << child_id << ".pcd";
+//   //   ss3 << debug_dir_ + "cloud_succ_" << child_id << ".pcd";
+//   //   pcl::PCDWriter writer;
+//   //   writer.writeBinary (ss1.str()  , *cloud_in);
+//   //   writer.writeBinary (ss2.str()  , *cloud_out);
+//   //   writer.writeBinary (ss3.str()  , *succ_cloud);
+//   // }
+//
+//   return total_cost;
+// }
 
 bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
                                       &parent_depth_image, const vector<unsigned short> &succ_depth_image,
@@ -1448,7 +1596,8 @@ int EnvObjectRecognition::GetTargetCostSDF(const PointCloudPtr
     bool point_unexplained = false;
     if (!scene_df_->isInBoundsInterp(grid_p)) {
       // TODO: make principled
-      df_val = perch_params_.sensor_resolution + 1.0;
+      // df_val = perch_params_.sensor_resolution + 1.0;
+      df_val = scene_df_->resolution * fabs(scene_df_->getValueInterpolated(make_float3(0.0, 0.0, 0.0)));
     } else {
       df_val = scene_df_->resolution * fabs(scene_df_->getValueInterpolated(grid_p));
       // printf("df val: %f\n", df_val);
@@ -1478,7 +1627,8 @@ int EnvObjectRecognition::GetTargetCostSDF(const PointCloudPtr
       cost = 0.0;
     }
 
-    nn_score += cost;
+    // nn_score += cost;
+    nn_score += 1000 * df_val;
   }
 
   int target_cost = 0;
@@ -2008,7 +2158,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedOrganizedPointCloud(
   cloud->width = kDepthImageWidth;
   cloud->height = kDepthImageHeight;
   cloud->points.resize(kNumPixels);
-  cloud->is_dense = true;
+  cloud->is_dense = false;
 
   for (int ii = 0; ii < kNumPixels; ++ii) {
     auto &point = cloud->points[VectorIndexToPCLIndex(ii)];
@@ -2324,9 +2474,9 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   knn.reset(new pcl::search::KdTree<PointT>(true));
   knn->setInputCloud(observed_cloud_);
 
-  if (mpi_comm_->rank() == kMasterRank) {
-    LabelEuclideanClusters();
-  }
+  // if (mpi_comm_->rank() == kMasterRank) {
+  //   LabelEuclideanClusters();
+  // }
 
   // Project point cloud to table.
   *projected_cloud_ = *observed_cloud_;
@@ -2353,71 +2503,79 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   projected_knn_.reset(new pcl::search::KdTree<PointT>(true));
   projected_knn_->setInputCloud(projected_cloud_);
 
-  // Create DART model for observed scene and compute distance field.
-  const float sdf_res = perch_params_.sensor_resolution / 2.0;
-  const float sdf_padding = 0.01; // pad grid with 1 cm
-  PointT min_pt, max_pt;
-  pcl::getMinMax3D(*observed_cloud_, min_pt, max_pt);
-  const int dim_x = (max_pt.x - min_pt.x) / sdf_res + sdf_padding;
-  const int dim_y = (max_pt.y - min_pt.y) / sdf_res + sdf_padding;
-  const int dim_z = (max_pt.z - min_pt.z) / sdf_res + sdf_padding;
-  uint3 dim = make_uint3(dim_x, dim_y, dim_z);
-  float3 offset = make_float3(min_pt.x, min_pt.y, min_pt.z);
-  int num_voxels = dim.x * dim.y * dim.z;
-  scene_df_.reset(new dart::Grid3D<float>(dim, offset, sdf_res));
+  if (kUseSceneSDF) {
+    // Create DART model for observed scene and compute distance field.
+    // const float sdf_res = perch_params_.sensor_resolution / 2.0;
+    const float sdf_res = perch_params_.sensor_resolution;
+    const float sdf_padding = 0.01; // pad grid with 1 cm
+    PointT min_pt, max_pt;
+    pcl::getMinMax3D(*observed_cloud_, min_pt, max_pt);
+    const int dim_x = (max_pt.x - min_pt.x) / sdf_res + sdf_padding;
+    const int dim_y = (max_pt.y - min_pt.y) / sdf_res + sdf_padding;
+    const int dim_z = (max_pt.z - min_pt.z) / sdf_res + sdf_padding;
+    uint3 dim = make_uint3(dim_x, dim_y, dim_z);
+    float3 offset = make_float3(min_pt.x, min_pt.y, min_pt.z);
+    int num_voxels = dim.x * dim.y * dim.z;
+    scene_df_.reset(new dart::Grid3D<float>(dim, offset, sdf_res));
 
-  printf("Min Point: %f %f %f\n", min_pt.x, min_pt.y, min_pt.z);
-  printf("Scene DF Size: %d %d %d\n", dim.x, dim.y, dim.z);
+    for (int z=0; z<dim.z; z++) {
+      for (int y=0; y<dim.y; y++) {
+          for (int x=0; x<dim.x; x++) {
+              scene_df_->data[x + y*dim.x + z*dim.x*dim.y] = 1e20;
+          }
+      }
+    }
 
-  printf("Total points: %d\n", valid_indices_.size());
+    int num_points_added = 0;
+    for (int ii = 0; ii < static_cast<int>(valid_indices_.size()); ++ii) {
+      const auto& point = observed_cloud_->points[valid_indices_[ii]];
+      float3 p = make_float3(point.x, point.y, point.z);
+      float3 grid_p = scene_df_->getGridCoords(p);
 
-  for (int z=0; z<dim.z; z++)
-    for (int y=0; y<dim.y; y++)
-        for (int x=0; x<dim.x; x++)
-            scene_df_->data[x + y*dim.x + z*dim.x*dim.y] = 1e20;
+      if (!scene_df_->isInBoundsInterp(grid_p)) {
+        continue;
+      } else {
+        uint3 coords = make_uint3(int(grid_p.x - 0.5), int(grid_p.y - 0.5), int(grid_p.z - 0.5));
+        int idx = coords.x + dim_x * (coords.y + dim_y * coords.z);
+        scene_df_->data[idx] = 0.0;
+        num_points_added++;
+      }
+    }
 
-  int count = 0;
-  for (int ii = 0; ii < static_cast<int>(valid_indices_.size()); ++ii) {
-    const auto& point = observed_cloud_->points[valid_indices_[ii]];
-    float3 p = make_float3(point.x, point.y, point.z);
-    float3 grid_p = scene_df_->getGridCoords(p);
+    high_res_clock::time_point sdf_begin_time = high_res_clock::now();
+#if CUDA_BUILD
+    float * sdf_in; cudaMalloc(&sdf_in,num_voxels*sizeof(float));
+    float * sdf_out; cudaMalloc(&sdf_out,num_voxels*sizeof(float));
+    cudaMemcpy(sdf_in, scene_df_->data, num_voxels*sizeof(float), cudaMemcpyHostToDevice);
+#else
+    float* sdf_in = scene_df_->data;
+    float *sdf_out = new float[num_voxels];
+#endif // CUDA_BUILD
 
-    if (!scene_df_->isInBoundsInterp(grid_p)) {
-      continue;
-    } else {
-      uint3 coords = make_uint3(int(grid_p.x - 0.5), int(grid_p.y - 0.5), int(grid_p.z - 0.5));
-      int idx = coords.x + dim_x * (coords.y + dim_y * coords.z);
-      scene_df_->data[idx] = 0.0;
-      count++;
+    // Distances
+    // dart::distanceTransform3D<float, true>(sdf_in, sdf_out, dim.x, dim.y, dim.z);
+    // Sq distances
+    dart::distanceTransform3D<float, false>(sdf_in, sdf_out, dim.x, dim.y, dim.z);
+
+#if CUDA_BUILD
+    cudaMemcpy(scene_df_->data,sdf_out,num_voxels*sizeof(float),cudaMemcpyDeviceToHost);
+    cudaFree(sdf_in);
+    cudaFree(sdf_out);
+#else
+     memcpy(scene_df_->data, sdf_out, num_voxels * sizeof(float));
+#endif // CUDA_BUILD
+    high_res_clock::time_point sdf_end_time = high_res_clock::now();
+    auto sdf_time = std::chrono::duration_cast<std::chrono::duration<double>>(sdf_end_time - sdf_begin_time);
+
+    if (IsMaster(mpi_comm_)) {
+      printf("BBox Bottom Left: %f %f %f\n", min_pt.x, min_pt.y, min_pt.z);
+      printf("BBox Top Right: %f %f %f\n", max_pt.x, max_pt.y, max_pt.z);
+      printf("Scene DF Size: %d %d %d\n", dim.x, dim.y, dim.z);
+      printf("Total points: %d\n", valid_indices_.size());
+      printf("Points added: %d\n", num_points_added);
+      printf("SDF computation took %f\n", sdf_time.count());
     }
   }
-  printf("Points added: %d\n", count);
-
-  printf("Computing scene SDF\n");
-
-#if CUDA_BUILD
-  float * sdf_in; cudaMalloc(&sdf_in,num_voxels*sizeof(float));
-  float * sdf_out; cudaMalloc(&sdf_out,num_voxels*sizeof(float));
-  cudaMemcpy(sdf_in, scene_df_->data, num_voxels*sizeof(float), cudaMemcpyHostToDevice);
-#else
-  float* sdf_in = scene_df_->data;
-  float *sdf_out = new float[num_voxels];
-#endif // CUDA_BUILD
-
-  dart::distanceTransform3D<float, true>(sdf_in, sdf_out, dim.x, dim.y, dim.z);
-
-#if CUDA_BUILD
-  cudaMemcpy(scene_df_->data,sdf_out,num_voxels*sizeof(float),cudaMemcpyDeviceToHost);
-  cudaFree(sdf_in);
-  cudaFree(sdf_out);
-#else
-   memcpy(scene_df_->data, sdf_out, num_voxels * sizeof(float));
-#endif // CUDA_BUILD
-
-  printf("Computed scene SDF\n");
-
-
-  mpi_comm_->barrier();
 
   min_observed_depth_ = kKinectMaxDepth;
   max_observed_depth_ = 0;
@@ -2550,8 +2708,46 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   SetTableHeight(input.table_height);
   SetCameraPose(input.camera_pose);
   ResetEnvironmentState();
-  *original_input_cloud_ = input.cloud;
-  *constraint_cloud_ = input.constraint_cloud;
+
+  if (input.rgb_file != "" && input.depth_file != "") {
+    six_dof_ = true;
+    boost::filesystem::path rgb_path = input.rgb_file;
+    const string image_num = rgb_path.stem().string();
+    const string dir = rgb_path.parent_path().string();
+  
+    cout << "Reading input from file\n";
+    cout << input.rgb_file << endl;
+    cout << input.depth_file << endl;
+    cout << image_num << endl;
+    cout << dir << endl;
+
+    if (IsMaster(mpi_comm_)) {
+      pose_estimator_->ReadModels(input.model_names);
+      pose_estimator_->SetImageNum(image_num);
+      pose_estimator_->SetVerbose(dir);
+    }
+    rgb_img_ = cv::imread(input.rgb_file);
+    depth_img_ = cv::imread(input.depth_file,  CV_LOAD_IMAGE_ANYCOLOR | CV_LOAD_IMAGE_ANYDEPTH);
+    // TODO: remove duplication in the following block.
+    vector<unsigned short> depth_image(depth_img_.rows * depth_img_.cols);
+    for (int row = 0; row < depth_img_.rows; ++row) {
+      for (int col = 0; col < depth_img_.cols; ++col) {
+        int idx = OpenCVIndexToVectorIndex(col, row);
+        unsigned short val = depth_img_.at<unsigned short>(row, col);
+        if (val != 0 && val < 1500) {
+          depth_image[idx] = val;
+        } else {
+          depth_image[idx] = kKinectMaxDepth;
+        }
+      }
+    }
+    original_input_cloud_ = GetGravityAlignedOrganizedPointCloud(depth_image);
+
+  } else {
+    *original_input_cloud_ = input.cloud;
+    *constraint_cloud_ = input.constraint_cloud;
+  }
+  mpi_comm_->barrier();
 
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
@@ -2569,7 +2765,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   Eigen::Affine3f transform;
   transform.matrix() = input.camera_pose.matrix().cast<float>();
   transform = cam_to_body.inverse() * transform.inverse();
-  transformPointCloud(input.cloud, *depth_img_cloud,
+  transformPointCloud(*original_input_cloud_, *depth_img_cloud,
                       transform);
 
   vector<unsigned short> depth_image =
@@ -2588,11 +2784,11 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   SetObservation(input.model_names.size(), depth_image);
 
   // Precompute RCNN heuristics.
-  rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input,
-                                                         kinect_simulator_));
-  rcnn_heuristic_factory_->SetDebugDir(debug_dir_);
 
   if (perch_params_.use_rcnn_heuristic) {
+    rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input,
+                                                         kinect_simulator_));
+    rcnn_heuristic_factory_->SetDebugDir(debug_dir_);
     rcnn_heuristic_factory_->LoadHeuristicsFromDisk(input.heuristics_dir);
     rcnn_heuristics_ = rcnn_heuristic_factory_->GetHeuristics();
   }
@@ -3023,6 +3219,73 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           // }
         }
       }
+    }
+  }
+}
+
+void EnvObjectRecognition::GenerateSixDOFSuccessorStates(const GraphState
+                                                   &source_state, std::vector<GraphState> *succ_states) {
+
+  assert(succ_states != nullptr);
+  succ_states->clear();
+
+  Eigen::Affine3d cam_to_body;
+  cam_to_body.matrix() << 0, 0, 1, 0,
+                     -1, 0, 0, 0,
+                     0, -1, 0, 0,
+                     0, 0, 0, 1;
+
+  const auto &source_object_states = source_state.object_states();
+
+  for (int ii = 0; ii < env_params_.num_models; ++ii) {
+    auto it = std::find_if(source_object_states.begin(),
+    source_object_states.end(), [ii](const ObjectState & object_state) {
+      return object_state.id() == ii;
+    });
+
+    if (it != source_object_states.end()) {
+      continue;
+    }
+
+    auto model_bank_it = model_bank_.find(obj_models_[ii].name());
+    assert (model_bank_it != model_bank_.end());
+    const auto &model_meta_data = model_bank_it->second;
+    const string model_name = model_meta_data.name;
+
+    std::vector<Eigen::Isometry3d> isometries;
+    const int kNumSuccessors = 200;
+
+
+    if (pose_candidates_.find(model_name) == pose_candidates_.end()) {
+      std::vector<Eigen::Matrix4f> transforms;
+      transforms = pose_estimator_->GetObjectPoseCandidates(rgb_img_, depth_img_,
+                                                            model_name, kNumSuccessors);
+      isometries.resize(transforms.size());
+
+      for (size_t jj = 0; jj < transforms.size(); ++jj) {
+        Eigen::Affine3d transform;
+        transform.matrix() = transforms[jj].cast<double>();
+        Eigen::Affine3d composed_transform;
+
+        Eigen::Affine3f pre_transform = obj_models_[ii].preprocessing_transform();
+        Eigen::Affine3d T_inv_pre_transform = pre_transform.inverse().cast<double>();
+        composed_transform = transform * T_inv_pre_transform;
+        isometries[jj].matrix() = composed_transform.matrix();
+        // std::cout << pre_transform.matrix() << endl;
+        // std::cout << isometry.matrix() << endl;
+      }
+
+      pose_candidates_[model_name] = isometries;
+    } else {
+      isometries = pose_candidates_[model_name];
+    }
+
+    for (size_t jj = 0; jj < isometries.size(); ++jj) {
+      ContPose p(isometries[jj]);
+      GraphState s = source_state; // Can only add objects, not remove them
+      const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+      s.AppendObject(new_object);
+      succ_states->push_back(s);
     }
   }
 }

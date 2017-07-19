@@ -1,0 +1,12 @@
+<launch>
+  <master auto="start"/>
+  <param name="/use_sim_time" value="true"/>
+  <arg name="image_debug" default="false" />
+  <include file="$(find sbpl_perception)/config/ycb_objects.xml"/>
+  <node pkg="sbpl_perception" type="ycb_demo" name="ycb_demo" output="screen" launch-prefix="mpirun -n 8" respawn="false">
+    <rosparam command="load" file="$(find sbpl_perception)/config/demo_env_config.yaml" />
+    <rosparam command="load" file="$(find sbpl_perception)/config/demo_planner_config.yaml" />
+    <rosparam command="load" file="$(find sbpl_perception)/config/camera_config.yaml" />
+    <param name="image_debug" value="$(arg image_debug)"/>
+  </node>
+</launch>

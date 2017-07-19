@@ -21,6 +21,17 @@ ContPose::ContPose(double x, double y, double z, double roll, double pitch,
   yaw_(angles::normalize_angle_positive(yaw)) {
 };
 
+ContPose::ContPose(const Eigen::Isometry3d& transform) {
+  auto translation = transform.translation();
+  x_ = translation[0];
+  y_ = translation[1];
+  z_ = translation[2];
+  auto euler_angles = transform.rotation().eulerAngles(2, 1, 0);
+  roll_ = angles::normalize_angle_positive(euler_angles[2]);
+  pitch_ = angles::normalize_angle_positive(euler_angles[1]);
+  yaw_ = angles::normalize_angle_positive(euler_angles[0]);
+};
+
 ContPose::ContPose(const DiscPose &disc_pose) {
   x_ = DiscretizationManager::DiscXToContX(disc_pose.x());
   y_ = DiscretizationManager::DiscYToContY(disc_pose.y());

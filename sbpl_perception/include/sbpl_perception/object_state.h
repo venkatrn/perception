@@ -15,6 +15,7 @@ class ContPose {
   ContPose() = default;
   ContPose(const ContPose& other) = default;
   ContPose(double x, double y, double z, double roll, double pitch, double yaw);
+  ContPose(const Eigen::Isometry3d& transform);
   ContPose(const DiscPose &disc_pose);
 
   const double &x() const {

@@ -60,6 +60,9 @@ struct RecognitionInput {
   // TODO: generalize this as a per-object heuristic instead for the
   // multi-object case.
   PointCloud constraint_cloud;
+  // Optionally run on rgb+depth images from disk.
+  std::string rgb_file;
+  std::string depth_file;
 };
 
 // A container for the holding the meta-data associated with a 3D model.
@@ -171,6 +174,8 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
   ar &input.table_height;
   ar &input.heuristics_dir;
   ar &input.constraint_cloud;
+  ar &input.rgb_file;
+  ar &input.depth_file;
 }
 
 template<class Archive>

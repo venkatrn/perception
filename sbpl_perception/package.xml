@@ -15,6 +15,7 @@
   <buildtool_depend>catkin</buildtool_depend>
 
   <!-- Dependencies needed to compile this package. -->
+  <build_depend>deep_rgbd_utils</build_depend>
   <build_depend>cv_bridge</build_depend>
   <build_depend>kinect_sim</build_depend>
   <build_depend>perception_utils</build_depend>
@@ -28,6 +29,7 @@
   <!-- <build_depend>libccd&#45;dev</build_depend> -->
 
   <!-- Dependencies needed after this package is compiled. -->
+  <run_depend>deep_rgbd_utils</run_depend>
   <run_depend>cv_bridge</run_depend>
   <run_depend>kinect_sim</run_depend>
   <run_depend>perception_utils</run_depend>

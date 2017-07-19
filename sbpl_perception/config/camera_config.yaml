@@ -17,3 +17,23 @@ camera_zfar: 20.0
 # camera_cy: 205.37746288838397
 # camera_znear: 0.1
 # camera_zfar: 20.0
+
+# YCB UW RGB Camera
+camera_width: 640
+camera_height: 480
+camera_fx: 1066.778
+camera_fy: 1067.487
+camera_cx: 312.9869
+camera_cy: 241.3109
+camera_znear: 0.1
+camera_zfar: 20.0
+
+# YCB UW Depth Camera
+# camera_width: 640
+# camera_height: 480
+# camera_fx: 567.6188
+# camera_fy: 568.1618
+# camera_cx: 310.0724
+# camera_cy: 242.7912
+# camera_znear: 0.1
+# camera_zfar: 20.0

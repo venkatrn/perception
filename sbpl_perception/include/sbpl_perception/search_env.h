@@ -7,6 +7,8 @@
  * Carnegie Mellon University, 2015
  */
 
+#include <deep_rgbd_utils/pose_estimator.h>
+
 #include <kinect_sim/model.h>
 #include <kinect_sim/scene.h>
 #include <kinect_sim/simulation_io.hpp>
@@ -261,6 +263,16 @@ class EnvObjectRecognition : public EnvironmentMHA {
                                                      std::vector<unsigned short>
                                                      &depth_image);
 
+  // Entity that generates object pose candidates using RANSAC.
+  // TODO: make non-mutable.
+  mutable std::unique_ptr<dru::PoseEstimator> pose_estimator_; 
+  // True if we are using PoseEstimator to obtain 6 dof pose candidates for
+  // objects, instead of 3 dof discretization.
+  bool six_dof_ = false;
+  cv::Mat rgb_img_;
+  cv::Mat depth_img_;
+  std::unordered_map<std::string, std::vector<Eigen::Isometry3d>> pose_candidates_;
+
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
 
@@ -340,6 +352,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   void GenerateSuccessorStates(const GraphState &source_state,
                                std::vector<GraphState> *succ_states) const;
+  void GenerateSixDOFSuccessorStates(const GraphState &source_state,
+                               std::vector<GraphState> *succ_states);
 
   // Returns true if a valid depth image was composed.
   static bool GetComposedDepthImage(const std::vector<unsigned short>

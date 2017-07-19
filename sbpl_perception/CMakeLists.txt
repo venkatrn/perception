@@ -17,6 +17,7 @@ set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 
 # Load catkin and all dependencies required for this package
 find_package(catkin REQUIRED COMPONENTS 
+  deep_rgbd_utils
   cv_bridge 
   kinect_sim 
   perception_utils 
@@ -65,6 +66,7 @@ include_directories(MPI_INCLUDE_PATH)
 
 catkin_package(
   CATKIN_DEPENDS 
+    deep_rgbd_utils
     cv_bridge 
     kinect_sim 
     perception_utils 
@@ -118,6 +120,9 @@ target_link_libraries(sim_test ${PROJECT_NAME})
 
 add_executable(demo src/experiments/demo.cpp)
 target_link_libraries(demo ${PROJECT_NAME})
+
+add_executable(ycb_demo src/experiments/ycb_demo.cpp)
+target_link_libraries(ycb_demo ${PROJECT_NAME})
 
 catkin_add_gtest(${PROJECT_NAME}_states_test tests/states_test.cpp)
 target_link_libraries(${PROJECT_NAME}_states_test ${PROJECT_NAME})

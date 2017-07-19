@@ -1,5 +1,7 @@
-search_resolution_translation: 0.1 # m 0.04
-search_resolution_yaw: 0.3926991 # rad
+# search_resolution_translation: 0.1 # m 0.04
+search_resolution_translation: 0.00001 # m 0.04
+#search_resolution_yaw: 0.3926991 # rad
+search_resolution_yaw: 0.00001 # rad
 
 perch_params:
   sensor_resolution_radius: 0.003 #m
