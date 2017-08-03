@@ -15,6 +15,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
 set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 
+set(L2S_ROOT "/home/venkatrn/research/learningToSee")
+include_directories(${L2S_ROOT}/include)
+link_libraries(${L2S_ROOT}/build/liblearningToSee.a)
+
+set(SUITESPARSE_INCLUDE_DIRS "/usr/include/suitesparse" CACHE PATH "suitesparse include directory")
+set(SUITESPARSE_LIBRARIES "cholmod;metis")
+include_directories(${SUITESPARSE_INCLUDE_DIRS})
+link_libraries(${SUITESPARSE_LIBRARIES})
+
 # Load catkin and all dependencies required for this package
 find_package(catkin REQUIRED COMPONENTS 
   deep_rgbd_utils
@@ -160,6 +169,10 @@ target_link_libraries(perch ${PROJECT_NAME})
 add_executable(perch_single_object
   experiments/src/perch_single_object.cpp)
 target_link_libraries(perch_single_object ${PROJECT_NAME})
+
+add_executable(sixd_perch
+  experiments/src/sixd_perch.cpp)
+target_link_libraries(sixd_perch ${PROJECT_NAME})
 
 # add_executable(greedy_icp
 #   experiments/src/greedy_icp.cpp)

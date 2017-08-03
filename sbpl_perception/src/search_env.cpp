@@ -15,6 +15,8 @@
 #include <ros/ros.h>
 #include <ros/package.h>
 
+#include <l2s/image/depthFilling.h>
+
 #include <pcl/conversions.h>
 #include <pcl/filters/filter.h>
 #include <pcl_ros/transforms.h>
@@ -55,7 +57,7 @@ constexpr bool kUseDepthSensitiveCost = false;
 // The multiplier used in the above definition.
 constexpr double kDepthSensitiveCostMultiplier = 100.0;
 // If true, we will use a normalized outlier cost function.
-constexpr bool kNormalizeCost = false;
+constexpr bool kNormalizeCost = true;
 // When use_clutter is true, we will treat every pixel that is not within
 // the object volume as an extraneous occluder if its depth is less than
 // depth(rendered pixel) - kOcclusionThreshold.
@@ -64,8 +66,12 @@ constexpr unsigned short kOcclusionThreshold = 50; // mm
 // out of bounds of the supporting place.
 constexpr double kFootprintTolerance = 0.02; // m
 // Should we use SDF for computing costs, instead of nearest neighbor lookups.
-bool kUseObjectSDF = false;
-bool kUseSceneSDF = true;
+constexpr bool kUseObjectSDF = true;
+constexpr bool kUseSceneSDF = true;
+constexpr int kNumSuccessors = 40;
+constexpr double kSDFCostMultiplier = 1000.0;
+constexpr double kSDFMax = 0.1 * 0.1;
+const string kCachedSDFFolder = ros::package::getPath("sbpl_perception") + "/data/ycb_models/sdfs/";
 }  // namespace
 
 namespace sbpl_perception {
@@ -104,10 +110,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
 
   dart::Model::initializeRenderer(new dart::AssimpMeshReader());
 
-  if (IsMaster(mpi_comm_)) {
-    pose_estimator_.reset(new dru::PoseEstimator(false));
-    pose_estimator_->UseDepth(true);
-  }
+  pose_estimator_.reset(new dru::PoseEstimator(false));
+  pose_estimator_->UseDepth(true);
 
   // Load algorithm parameters.
   // NOTE: Do not change these default parameters. Configure these in the
@@ -224,9 +228,14 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
       dart::readModelXML(xml_file.c_str(), dart_model);
       dart_model.computeStructure();
       // const float kSDFResolution = 0.0005;
-      const float kSDFResolution = 0.5;
-      dart_model.voxelize(kSDFResolution, kSDFResolution*2.0,"/tmp/" + model_name);
-      //
+      float kSDFResolution = 0.0005;
+      float object_sdf_padding = 0.05; // 5 cm
+      if (kMeshInMillimeters) {
+        kSDFResolution *= 1000.0;
+        object_sdf_padding *= 1000.0;
+      }
+      dart_model.voxelize(kSDFResolution, object_sdf_padding, kCachedSDFFolder + model_name);
+      
       if (IsMaster(mpi_comm_)) {
         printf("Read %s with %d polygons and %d triangles\n", model_name.c_str(),
                static_cast<int>(mesh.polygons.size()),
@@ -422,23 +431,23 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   }
 
   // If in cache, return
-  auto it = succ_cache.find(source_state_id);
-
-  if (it != succ_cache.end()) {
-    *costs = cost_cache[source_state_id];
-
-    if (static_cast<int>(source_state.NumObjects()) == env_params_.num_objects -
-        1) {
-      succ_ids->resize(costs->size(), env_params_.goal_state_id);
-    } else {
-      *succ_ids = succ_cache[source_state_id];
-    }
-
-    printf("Expanding cached state: %d with %zu objects\n",
-           source_state_id,
-           source_state.NumObjects());
-    return;
-  }
+  // auto it = succ_cache.find(source_state_id);
+  //
+  // if (it != succ_cache.end()) {
+  //   *costs = cost_cache[source_state_id];
+  //
+  //   if (static_cast<int>(source_state.NumObjects()) == env_params_.num_objects -
+  //       1) {
+  //     succ_ids->resize(costs->size(), env_params_.goal_state_id);
+  //   } else {
+  //     *succ_ids = succ_cache[source_state_id];
+  //   }
+  //
+  //   printf("Expanding cached state: %d with %zu objects\n",
+  //          source_state_id,
+  //          source_state.NumObjects());
+  //   return;
+  // }
 
   printf("Expanding state: %d with %zu objects\n",
          source_state_id,
@@ -454,6 +463,30 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   if (six_dof_) {
     GenerateSixDOFSuccessorStates(source_state, &candidate_succs);
+
+    // Prune away those successors for which we have already generated an edge.
+    // NOTE: assumes each state will be expanded only once during a batch.
+    // auto it = succ_cache.find(source_state_id);
+    // if (it != succ_cache.end()) {
+    //   int num_cached_succs = it->second.size();
+    //
+    //   if (num_cached_succs >= candidate_succs.size()) {
+    //       *costs = cost_cache[source_state_id];
+    //       if (static_cast<int>(source_state.NumObjects()) == env_params_.num_objects -
+    //           1) {
+    //         succ_ids->resize(costs->size(), env_params_.goal_state_id);
+    //       } else {
+    //         *succ_ids = succ_cache[source_state_id];
+    //       }
+    //       printf("Expanding cached state: %d with %zu objects\n",
+    //              source_state_id,
+    //              source_state.NumObjects());
+    //       return;
+    //   }
+    //
+    //   candidate_succs.erase(candidate_succs.begin(), candidate_succs.begin() + num_cached_succs);
+    // }
+
   } else {
     GenerateSuccessorStates(source_state, &candidate_succs);
   }
@@ -469,17 +502,43 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   candidate_costs.resize(candidate_succ_ids.size());
 
   // Prepare the cost computation input vector.
-  vector<CostComputationInput> cost_computation_input(candidate_succ_ids.size());
+  vector<CostComputationInput> cost_computation_input;
+  cost_computation_input.reserve(candidate_succ_ids.size());
+  vector<int> cached_succs;
+  vector<int> cached_costs;
+  cached_costs.reserve(candidate_succ_ids.size());
+  cached_succs.reserve(candidate_succ_ids.size());
 
-  for (size_t ii = 0; ii < cost_computation_input.size(); ++ii) {
-    auto &input_unit = cost_computation_input[ii];
+  for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
+
+    // If we have a cost for this edge already, no need to compute again.
+    if (hash_manager_.Exists(candidate_succs[ii])) {
+      const int child_id = hash_manager_.GetStateID(candidate_succs[ii]);
+      std::pair<int, int> edge = std::make_pair(source_state_id, child_id);
+      auto it = edge_cost_cache_.find(edge);
+      if (it != edge_cost_cache_.end()) {
+        int cost = it->second;
+        if (IsGoalState(candidate_succs[ii])) {
+          cached_succs.push_back(env_params_.goal_state_id);
+        } else {
+          cached_succs.push_back(child_id);
+        }
+        cached_costs.push_back(cost);
+        continue;
+      }
+    }
+
+    CostComputationInput input_unit;
     input_unit.source_state = source_state;
     input_unit.child_state = candidate_succs[ii];
     input_unit.source_id = source_state_id;
     input_unit.child_id = candidate_succ_ids[ii];
     input_unit.source_depth_image = source_depth_image;
     input_unit.source_counted_pixels = counted_pixels_map_[source_state_id];
+    cost_computation_input.push_back(input_unit);
   }
+  printf("CANDIDATE SUCCS: %zu\n", candidate_succs.size());
+  printf("NUM CACHED EDGES: %zu\n", cached_costs.size());
 
   vector<CostComputationOutput> cost_computation_output;
   ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
@@ -487,7 +546,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
 
   //---- PARALLELIZE THIS LOOP-----------//
-  for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
+  for (size_t ii = 0; ii < cost_computation_output.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
 
     bool invalid_state = output_unit.cost == -1;
@@ -515,7 +574,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
                                input_unit.child_state);
 
-    if (adjusted_states_.find(candidate_succ_ids[ii]) != adjusted_states_.end()) {
+    if (!six_dof_ && adjusted_states_.find(candidate_succ_ids[ii]) != adjusted_states_.end()) {
       invalid_state = true;
     }
 
@@ -558,7 +617,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   //--------------------------------------//
 
-  for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
+  for (size_t ii = 0; ii < cost_computation_output.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
 
     if (candidate_costs[ii] == -1) {
@@ -572,6 +631,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     }
 
     succ_cache[source_state_id].push_back(candidate_succ_ids[ii]);
+    std::pair<int, int> edge = make_pair(source_state_id, candidate_succ_ids[ii]);
+    edge_cost_cache_[edge] = candidate_costs[ii];
     costs->push_back(candidate_costs[ii]);
 
     if (image_debug_) {
@@ -597,8 +658,14 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     }
   }
 
-  // cache succs and costs
-  cost_cache[source_state_id] = *costs;
+  // cache new succs and costs
+  cost_cache[source_state_id].insert(cost_cache[source_state_id].end(), costs->begin(), costs->end());
+
+  // Now append the cached edges
+  if (!cached_succs.empty()) {
+    succ_ids->insert(succ_ids->end(), cached_succs.begin(), cached_succs.end());
+    costs->insert(costs->end(), cached_costs.begin(), cached_costs.end());
+  }
 
   if (perch_params_.debug_verbose) {
     printf("Succs for %d\n", source_state_id);
@@ -1285,16 +1352,16 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     target_cost = GetTargetCost(cloud_out);
   }
 
-  // if (kUseObjectSDF) {
-  //   source_cost = GetSourceCostSDF(
-  //                               adjusted_child_state->object_states().back(),
-  //                               false, parent_counted_pixels, child_counted_pixels);
-  // } else {
-  //
-  //   source_cost = GetSourceCost(succ_cloud,
-  //                               adjusted_child_state->object_states().back(),
-  //                               false, parent_counted_pixels, child_counted_pixels);
-  // }
+  if (kUseObjectSDF) {
+    source_cost = GetSourceCostSDF(new_obj_depth_image,
+                                adjusted_child_state->object_states().back(),
+                                false, parent_counted_pixels, child_counted_pixels);
+  } else {
+
+    source_cost = GetSourceCost(succ_cloud,
+                                adjusted_child_state->object_states().back(),
+                                false, parent_counted_pixels, child_counted_pixels);
+  }
 
 
   // if (image_debug_ && mpi_comm_->rank() == kMasterRank) {
@@ -1321,8 +1388,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   }
 
   // total_cost = source_cost + target_cost + last_level_cost;
-  total_cost = target_cost;
-  // total_cost = source_cost + target_cost;
+  // total_cost = target_cost;
+  total_cost = source_cost + target_cost;
 
   if (perch_params_.use_clutter_mode) {
     int num_occluders = 0;
@@ -1593,20 +1660,26 @@ int EnvObjectRecognition::GetTargetCostSDF(const PointCloudPtr
     float3 grid_p = scene_df_->getGridCoords(p);
     float df_val = 0.0;
 
+    const float sensor_res_sq = perch_params_.sensor_resolution * perch_params_.sensor_resolution;
+
     bool point_unexplained = false;
     if (!scene_df_->isInBoundsInterp(grid_p)) {
       // TODO: make principled
-      // df_val = perch_params_.sensor_resolution + 1.0;
-      df_val = scene_df_->resolution * fabs(scene_df_->getValueInterpolated(make_float3(0.0, 0.0, 0.0)));
+      // df_val = sensor_res_sq + 1e-5;
+      // df_val = scene_df_->resolution * fabs(scene_df_->getValueInterpolated(make_float3(0.0, 0.0, 0.0)));
+      df_val = kSDFMax;
     } else {
-      df_val = scene_df_->resolution * fabs(scene_df_->getValueInterpolated(grid_p));
+      df_val = scene_df_->resolution * scene_df_->resolution * fabs(scene_df_->getValueInterpolated(grid_p));
       // printf("df val: %f\n", df_val);
     }
-    if (df_val > perch_params_.sensor_resolution) {
+    if (df_val > sensor_res_sq) {
       point_unexplained = true;
+      // df_val= sqrt(df_val);
     } else {
       point_unexplained = false;
+      // df_val= 0.0;
     }
+    df_val = std::min(df_val, kSDFMax);
 
     double cost = 0;
 
@@ -1627,8 +1700,8 @@ int EnvObjectRecognition::GetTargetCostSDF(const PointCloudPtr
       cost = 0.0;
     }
 
-    // nn_score += cost;
-    nn_score += 1000 * df_val;
+    nn_score += cost;
+    // nn_score += kSDFCostMultiplier * df_val;
   }
 
   int target_cost = 0;
@@ -1707,7 +1780,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   return target_cost;
 }
 
-int EnvObjectRecognition::GetSourceCostSDF(const ObjectState &last_object, const bool last_level,
+int EnvObjectRecognition::GetSourceCostSDF(const std::vector<unsigned short>& last_obj_depth_image, const ObjectState &last_object, const bool last_level,
                                         const std::vector<int> &parent_counted_pixels,
                                         std::vector<int> *child_counted_pixels) {
 
@@ -1733,70 +1806,99 @@ int EnvObjectRecognition::GetSourceCostSDF(const ObjectState &last_object, const
   // inscribed cylinder.
   vector<int> indices_circumscribed;
 
-  if (last_level) {
+  if (six_dof_) {
     indices_to_consider.resize(valid_indices_.size());
-    auto it = std::set_difference(valid_indices_.begin(), valid_indices_.end(),
-                                  child_counted_pixels->begin(), child_counted_pixels->end(),
-                                  indices_to_consider.begin());
+    // const auto& object_indices = object_pixels_[obj_models_[last_object.id()].name()];
+    // auto it = std::set_intersection(valid_indices_.begin(), valid_indices_.end(),
+    //                                 object_indices.begin(), object_indices.end(),
+    //                                 indices_to_consider.begin());
+    // indices_to_consider.resize(it - indices_to_consider.begin());
+    //
+
+    vector<int> mask_indices;
+    mask_indices.reserve(last_obj_depth_image.size());
+    for (size_t ii = 0; ii < last_obj_depth_image.size(); ++ii) {
+      if (last_obj_depth_image[ii] != kKinectMaxDepth) {
+        mask_indices.push_back(VectorIndexToPCLIndex(ii));
+      }
+    }
+    std::sort(mask_indices.begin(), mask_indices.end());
+    auto it = std::set_intersection(valid_indices_.begin(), valid_indices_.end(),
+                                    mask_indices.begin(), mask_indices.end(),
+                                    indices_to_consider.begin());
     indices_to_consider.resize(it - indices_to_consider.begin());
   } else {
-    ContPose last_obj_pose = last_object.cont_pose();
-    int last_obj_id = last_object.id();
-    PointT obj_center;
-    obj_center.x = last_obj_pose.x();
-    obj_center.y = last_obj_pose.y();
-    obj_center.z = last_obj_pose.z();
+    if (last_level) {
+      indices_to_consider.resize(valid_indices_.size());
+      auto it = std::set_difference(valid_indices_.begin(), valid_indices_.end(),
+                                    child_counted_pixels->begin(), child_counted_pixels->end(),
+                                    indices_to_consider.begin());
+      indices_to_consider.resize(it - indices_to_consider.begin());
+    } else {
+      ContPose last_obj_pose = last_object.cont_pose();
+      int last_obj_id = last_object.id();
+      PointT obj_center;
+      obj_center.x = last_obj_pose.x();
+      obj_center.y = last_obj_pose.y();
+      obj_center.z = last_obj_pose.z();
 
-    vector<float> sqr_dists;
-    vector<int> validation_points;
+      vector<float> sqr_dists;
+      vector<int> validation_points;
 
-    // Check that this object state is valid, i.e, it has at least
-    // perch_params_.min_neighbor_points_for_valid_pose within the circumscribed cylinder.
-    // This should be true if we correctly validate successors.
-    const double validation_search_rad =
-      obj_models_[last_obj_id].GetInflationFactor() *
-      obj_models_[last_obj_id].GetCircumscribedRadius();
-    int num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
-                                                                validation_search_rad,
-                                                                validation_points,
-                                                                sqr_dists, kNumPixels);
-    assert(num_validation_neighbors >=
-           perch_params_.min_neighbor_points_for_valid_pose);
+      // Check that this object state is valid, i.e, it has at least
+      // perch_params_.min_neighbor_points_for_valid_pose within the circumscribed cylinder.
+      // This should be true if we correctly validate successors.
+      const double validation_search_rad =
+        obj_models_[last_obj_id].GetInflationFactor() *
+        obj_models_[last_obj_id].GetCircumscribedRadius();
+      int num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
+                                                                  validation_search_rad,
+                                                                  validation_points,
+                                                                  sqr_dists, kNumPixels);
+      assert(num_validation_neighbors >=
+             perch_params_.min_neighbor_points_for_valid_pose);
 
-    // Remove the points already counted.
-    vector<int> filtered_validation_points;
-    filtered_validation_points.resize(validation_points.size());
-    std::sort(validation_points.begin(), validation_points.end());
-    auto filter_it = std::set_difference(validation_points.begin(),
-                                         validation_points.end(),
-                                         child_counted_pixels->begin(), child_counted_pixels->end(),
-                                         filtered_validation_points.begin());
-    filtered_validation_points.resize(filter_it -
-                                      filtered_validation_points.begin());
-    validation_points = filtered_validation_points;
 
-    vector<Eigen::Vector3d> eig_points(validation_points.size());
-    vector<Eigen::Vector2d> eig2d_points(validation_points.size());
+      // Remove the points already counted.
+      vector<int> filtered_validation_points;
+      filtered_validation_points.resize(validation_points.size());
+      std::sort(validation_points.begin(), validation_points.end());
+      auto filter_it = std::set_difference(validation_points.begin(),
+                                           validation_points.end(),
+                                           child_counted_pixels->begin(), child_counted_pixels->end(),
+                                           filtered_validation_points.begin());
+      filtered_validation_points.resize(filter_it -
+                                        filtered_validation_points.begin());
+      validation_points = filtered_validation_points;
 
-    for (size_t ii = 0; ii < validation_points.size(); ++ii) {
-      PointT point = observed_cloud_->points[validation_points[ii]];
-      eig_points[ii][0] = point.x;
-      eig_points[ii][1] = point.y;
-      eig_points[ii][2] = point.z;
+      vector<Eigen::Vector3d> eig_points(validation_points.size());
+      vector<Eigen::Vector2d> eig2d_points(validation_points.size());
 
-      eig2d_points[ii][0] = point.x;
-      eig2d_points[ii][1] = point.y;
-    }
+      for (size_t ii = 0; ii < validation_points.size(); ++ii) {
+        PointT point = observed_cloud_->points[validation_points[ii]];
+        eig_points[ii][0] = point.x;
+        eig_points[ii][1] = point.y;
+        eig_points[ii][2] = point.z;
 
-    // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose());
-    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
-                                   eig2d_points, last_object.cont_pose());
+        eig2d_points[ii][0] = point.x;
+        eig2d_points[ii][1] = point.y;
+      }
+      
+      vector<bool> inside_points;
+      if (six_dof_) {
+        inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose());
+      }
+      else {
+        inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
+                                     eig2d_points, last_object.cont_pose());
+      }
 
-    indices_to_consider.clear();
+      indices_to_consider.clear();
 
-    for (size_t ii = 0; ii < inside_points.size(); ++ii) {
-      if (inside_points[ii]) {
-        indices_to_consider.push_back(validation_points[ii]);
+      for (size_t ii = 0; ii < inside_points.size(); ++ii) {
+        if (inside_points[ii]) {
+          indices_to_consider.push_back(validation_points[ii]);
+        }
       }
     }
   }
@@ -1826,22 +1928,33 @@ int EnvObjectRecognition::GetSourceCostSDF(const ObjectState &last_object, const
     int outlier = 0;
     if (!sdf.isInBoundsInterp(grid_p)) {
       // TODO: make principled
-      df_val = perch_params_.sensor_resolution;
+      // df_val = perch_params_.sensor_resolution;
+      // df_val = sdf.resolution * fabs(sdf.getValueInterpolated(make_float3(0.0, 0.0, 0.0)));
+      df_val = kSDFMax;
     } else {
-      df_val = sdf.resolution * fabs(sdf.getValueInterpolated(grid_p)) / 1000.0;
-    }
-    if (df_val > perch_params_.sensor_resolution) {
+      df_val = sdf.resolution * sdf.resolution * fabs(sdf.getValueInterpolated(grid_p));
+      if (kMeshInMillimeters) {
+        df_val /= (1000.0 * 1000.0);
+      }
+    } 
+
+    const float sensor_res_sq = perch_params_.sensor_resolution * perch_params_.sensor_resolution;
+    if (df_val > sensor_res_sq) {
       outlier = 1;
     } else {
       outlier = 0;
     }
+    df_val = std::min(df_val, kSDFMax);
 
-    // nn_score += (100 * df_val);
+    // nn_score += (kSDFCostMultiplier * df_val);
     nn_score += outlier ;
   }
 
   // Counted pixels always need to be sorted.
-  std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
+  if (!six_dof_) {
+    std::sort(child_counted_pixels->begin(), child_counted_pixels->end());
+  }
+
 
   int source_cost = 0;
 
@@ -2505,69 +2618,72 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   if (kUseSceneSDF) {
     // Create DART model for observed scene and compute distance field.
-    // const float sdf_res = perch_params_.sensor_resolution / 2.0;
     const float sdf_res = perch_params_.sensor_resolution;
-    const float sdf_padding = 0.01; // pad grid with 1 cm
+    // const float sdf_res = perch_params_.sensor_resolution;
+    const float sdf_padding = 0.02; // pad grid with 2 cm
     PointT min_pt, max_pt;
     pcl::getMinMax3D(*observed_cloud_, min_pt, max_pt);
-    const int dim_x = (max_pt.x - min_pt.x) / sdf_res + sdf_padding;
-    const int dim_y = (max_pt.y - min_pt.y) / sdf_res + sdf_padding;
-    const int dim_z = (max_pt.z - min_pt.z) / sdf_res + sdf_padding;
+    const int dim_x = ((max_pt.x - min_pt.x) + 2 * sdf_padding) / sdf_res;
+    const int dim_y = ((max_pt.y - min_pt.y) + 2 * sdf_padding) / sdf_res;
+    const int dim_z = ((max_pt.z - min_pt.z) + 2 * sdf_padding) / sdf_res;
     uint3 dim = make_uint3(dim_x, dim_y, dim_z);
     float3 offset = make_float3(min_pt.x, min_pt.y, min_pt.z);
     int num_voxels = dim.x * dim.y * dim.z;
     scene_df_.reset(new dart::Grid3D<float>(dim, offset, sdf_res));
 
-    for (int z=0; z<dim.z; z++) {
-      for (int y=0; y<dim.y; y++) {
-          for (int x=0; x<dim.x; x++) {
-              scene_df_->data[x + y*dim.x + z*dim.x*dim.y] = 1e20;
-          }
-      }
-    }
-
-    int num_points_added = 0;
-    for (int ii = 0; ii < static_cast<int>(valid_indices_.size()); ++ii) {
-      const auto& point = observed_cloud_->points[valid_indices_[ii]];
-      float3 p = make_float3(point.x, point.y, point.z);
-      float3 grid_p = scene_df_->getGridCoords(p);
-
-      if (!scene_df_->isInBoundsInterp(grid_p)) {
-        continue;
-      } else {
-        uint3 coords = make_uint3(int(grid_p.x - 0.5), int(grid_p.y - 0.5), int(grid_p.z - 0.5));
-        int idx = coords.x + dim_x * (coords.y + dim_y * coords.z);
-        scene_df_->data[idx] = 0.0;
-        num_points_added++;
-      }
-    }
-
-    high_res_clock::time_point sdf_begin_time = high_res_clock::now();
-#if CUDA_BUILD
-    float * sdf_in; cudaMalloc(&sdf_in,num_voxels*sizeof(float));
-    float * sdf_out; cudaMalloc(&sdf_out,num_voxels*sizeof(float));
-    cudaMemcpy(sdf_in, scene_df_->data, num_voxels*sizeof(float), cudaMemcpyHostToDevice);
-#else
-    float* sdf_in = scene_df_->data;
-    float *sdf_out = new float[num_voxels];
-#endif // CUDA_BUILD
-
-    // Distances
-    // dart::distanceTransform3D<float, true>(sdf_in, sdf_out, dim.x, dim.y, dim.z);
-    // Sq distances
-    dart::distanceTransform3D<float, false>(sdf_in, sdf_out, dim.x, dim.y, dim.z);
-
-#if CUDA_BUILD
-    cudaMemcpy(scene_df_->data,sdf_out,num_voxels*sizeof(float),cudaMemcpyDeviceToHost);
-    cudaFree(sdf_in);
-    cudaFree(sdf_out);
-#else
-     memcpy(scene_df_->data, sdf_out, num_voxels * sizeof(float));
-#endif // CUDA_BUILD
-    high_res_clock::time_point sdf_end_time = high_res_clock::now();
-    auto sdf_time = std::chrono::duration_cast<std::chrono::duration<double>>(sdf_end_time - sdf_begin_time);
-
     if (IsMaster(mpi_comm_)) {
+      printf("Starting scene SDF computation\n");
+
+      for (int z=0; z<dim.z; z++) {
+        for (int y=0; y<dim.y; y++) {
+            for (int x=0; x<dim.x; x++) {
+                scene_df_->data[x + y*dim.x + z*dim.x*dim.y] = 1e20;
+            }
+        }
+      }
+
+      int num_points_added = 0;
+      for (int ii = 0; ii < static_cast<int>(valid_indices_.size()); ++ii) {
+        const auto& point = observed_cloud_->points[valid_indices_[ii]];
+        float3 p = make_float3(point.x, point.y, point.z);
+        float3 grid_p = scene_df_->getGridCoords(p);
+
+        if (!scene_df_->isInBoundsInterp(grid_p)) {
+          continue;
+        } else {
+          uint3 coords = make_uint3(int(grid_p.x - 0.5), int(grid_p.y - 0.5), int(grid_p.z - 0.5));
+          int idx = coords.x + dim_x * (coords.y + dim_y * coords.z);
+          scene_df_->data[idx] = 0.0;
+          num_points_added++;
+        }
+      }
+
+
+      high_res_clock::time_point sdf_begin_time = high_res_clock::now();
+#if CUDA_BUILD
+      float * sdf_in; cudaMalloc(&sdf_in,num_voxels*sizeof(float));
+      float * sdf_out; cudaMalloc(&sdf_out,num_voxels*sizeof(float));
+      cudaMemcpy(sdf_in, scene_df_->data, num_voxels*sizeof(float), cudaMemcpyHostToDevice);
+#else
+      float* sdf_in = scene_df_->data;
+      float *sdf_out = new float[num_voxels];
+#endif // CUDA_BUILD
+
+      // Distances
+      // dart::distanceTransform3D<float, true>(sdf_in, sdf_out, dim.x, dim.y, dim.z);
+      // Sq distances
+      dart::distanceTransform3D<float, false>(sdf_in, sdf_out, dim.x, dim.y, dim.z);
+
+#if CUDA_BUILD
+      cudaMemcpy(scene_df_->data,sdf_out,num_voxels*sizeof(float),cudaMemcpyDeviceToHost);
+      cudaFree(sdf_in);
+      cudaFree(sdf_out);
+#else
+       memcpy(scene_df_->data, sdf_out, num_voxels * sizeof(float));
+#endif // CUDA_BUILD
+      high_res_clock::time_point sdf_end_time = high_res_clock::now();
+      auto sdf_time = std::chrono::duration_cast<std::chrono::duration<double>>(sdf_end_time - sdf_begin_time);
+
       printf("BBox Bottom Left: %f %f %f\n", min_pt.x, min_pt.y, min_pt.z);
       printf("BBox Top Right: %f %f %f\n", max_pt.x, max_pt.y, max_pt.z);
       printf("Scene DF Size: %d %d %d\n", dim.x, dim.y, dim.z);
@@ -2575,6 +2691,8 @@ void EnvObjectRecognition::SetObservation(int num_objects,
       printf("Points added: %d\n", num_points_added);
       printf("SDF computation took %f\n", sdf_time.count());
     }
+    mpi_comm_->barrier();
+    broadcast(*mpi_comm_, scene_df_->data, num_voxels, kMasterRank);
   }
 
   min_observed_depth_ = kKinectMaxDepth;
@@ -2655,6 +2773,7 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   g_value_map_.clear();
   succ_cache.clear();
   cost_cache.clear();
+  edge_cost_cache_.clear();
   last_object_rendering_cost_.clear();
   depth_image_cache_.clear();
   counted_pixels_map_.clear();
@@ -2666,6 +2785,8 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   minz_map_[env_params_.start_state_id] = 0;
   maxz_map_[env_params_.start_state_id] = 0;
   g_value_map_[env_params_.start_state_id] = 0;
+
+  pose_candidates_.clear();
 
   observed_cloud_.reset(new PointCloud);
   original_input_cloud_.reset(new PointCloud);
@@ -2715,26 +2836,48 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     const string image_num = rgb_path.stem().string();
     const string dir = rgb_path.parent_path().string();
   
-    cout << "Reading input from file\n";
     cout << input.rgb_file << endl;
     cout << input.depth_file << endl;
+    cout << input.probs_mat << endl;
+    cout << input.verts_mat << endl;
     cout << image_num << endl;
-    cout << dir << endl;
+    //cout << dir << endl;
 
-    if (IsMaster(mpi_comm_)) {
-      pose_estimator_->SetImageNum(image_num);
-      pose_estimator_->SetVerbose(dir);
+    pose_estimator_->SetImageNum(image_num);
+    pose_estimator_->SetPrediction(input.probs_mat, input.verts_mat);
+    // pose_estimator_->SetVerbose(dir);
+    
+    for (const string& model_name : input.model_names) {
+      cv::Mat object_mask;
+      pose_estimator_->GetObjectMask(model_name, object_mask);
+      for (int row = 0; row < object_mask.rows; ++row) {
+        for (int col = 0; col < object_mask.cols; ++col) {
+          if (object_mask.at<uchar>(row, col) == 0) {
+            continue;
+          }
+          object_pixels_[model_name].push_back(OpenCVIndexToPCLIndex(col, row));
+        }
+      }
+      std::sort(object_pixels_[model_name].begin(), object_pixels_[model_name].end());
     }
+
     rgb_img_ = cv::imread(input.rgb_file);
     depth_img_ = cv::imread(input.depth_file,  CV_LOAD_IMAGE_ANYCOLOR | CV_LOAD_IMAGE_ANYDEPTH);
+
+    cv::Mat filled_depth_image;
+    depth_img_.convertTo(filled_depth_image, CV_32FC1);
+    l2s::ImageXYCf l2s_depth_image(filled_depth_image.cols,
+                                   filled_depth_image.rows, 1, (float *)filled_depth_image.data);
+    l2s::fillDepthImageRecursiveMedianFilter(l2s_depth_image, 2);
+
     // TODO: remove duplication in the following block.
     vector<unsigned short> depth_image(depth_img_.rows * depth_img_.cols);
-    for (int row = 0; row < depth_img_.rows; ++row) {
-      for (int col = 0; col < depth_img_.cols; ++col) {
+    for (int row = 0; row < filled_depth_image.rows; ++row) {
+      for (int col = 0; col < filled_depth_image.cols; ++col) {
         int idx = OpenCVIndexToVectorIndex(col, row);
-        unsigned short val = depth_img_.at<unsigned short>(row, col);
-        if (val != 0 && val < 1500) {
-          depth_image[idx] = val;
+        float val = filled_depth_image.at<float>(row, col);
+        if (val > 1e-5 && val < 1500) {
+          depth_image[idx] = static_cast<unsigned short>(val);
         } else {
           depth_image[idx] = kKinectMaxDepth;
         }
@@ -3222,6 +3365,41 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
   }
 }
 
+void EnvObjectRecognition::UpdateBatch() {
+  for (int ii = 0; ii < env_params_.num_models; ++ii) {
+
+    auto model_bank_it = model_bank_.find(obj_models_[ii].name());
+    assert (model_bank_it != model_bank_.end());
+    const auto &model_meta_data = model_bank_it->second;
+    const string model_name = model_meta_data.name;
+
+    std::vector<Eigen::Isometry3d> isometries;
+
+    std::vector<Eigen::Matrix4f> transforms;
+    transforms = pose_estimator_->GetObjectPoseCandidates(rgb_img_, depth_img_,
+                                                          model_name, kNumSuccessors);
+    isometries.resize(transforms.size());
+
+    for (size_t jj = 0; jj < transforms.size(); ++jj) {
+      Eigen::Affine3d transform;
+      transform.matrix() = transforms[jj].cast<double>();
+      Eigen::Affine3d composed_transform;
+
+      Eigen::Affine3f pre_transform = obj_models_[ii].preprocessing_transform();
+      Eigen::Affine3d T_inv_pre_transform = pre_transform.inverse().cast<double>();
+      composed_transform = transform * T_inv_pre_transform;
+      isometries[jj].matrix() = composed_transform.matrix();
+      // std::cout << pre_transform.matrix() << endl;
+      // std::cout << isometry.matrix() << endl;
+    }
+    auto &pose_candidates = pose_candidates_[model_name];
+    pose_candidates.reserve(pose_candidates.size() + isometries.size());
+    pose_candidates.insert(pose_candidates.end(), isometries.begin(), isometries.end());
+    printf("Num Candidates for %s: %d\n", model_name.c_str(), pose_candidates.size());
+  }
+  ++batch_;
+}
+
 void EnvObjectRecognition::GenerateSixDOFSuccessorStates(const GraphState
                                                    &source_state, std::vector<GraphState> *succ_states) {
 
@@ -3252,8 +3430,6 @@ void EnvObjectRecognition::GenerateSixDOFSuccessorStates(const GraphState
     const string model_name = model_meta_data.name;
 
     std::vector<Eigen::Isometry3d> isometries;
-    const int kNumSuccessors = 200;
-
 
     if (pose_candidates_.find(model_name) == pose_candidates_.end()) {
       std::vector<Eigen::Matrix4f> transforms;

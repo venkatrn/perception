@@ -22,6 +22,7 @@
 #include <sbpl_perception/utils/utils.h>
 #include <sbpl_utils/hash_manager/hash_manager.h>
 
+#include <boost/functional/hash.hpp>
 #include <boost/mpi.hpp>
 #include <Eigen/Dense>
 #include <opencv/cv.h>
@@ -178,6 +179,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Greedy ICP planner
   GraphState ComputeGreedyICPPoses();
 
+  void UpdateBatch() override;
   void GetSuccs(GraphState source_state, std::vector<GraphState> *succs,
                 std::vector<int> *costs);
   bool IsGoalState(GraphState state);
@@ -272,6 +274,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   cv::Mat rgb_img_;
   cv::Mat depth_img_;
   std::unordered_map<std::string, std::vector<Eigen::Isometry3d>> pose_candidates_;
+  // Mapping from object ID to set of input pixel indices belonging to it.
+  std::unordered_map<std::string, std::vector<int>> object_pixels_;
 
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
@@ -321,6 +325,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<GraphState, std::vector<unsigned short>>
                                                            adjusted_single_object_depth_image_cache_;
   std::unordered_map<GraphState, GraphState> adjusted_single_object_state_cache_;
+  // Mapping from edge (parent id, child id) to cost.
+  std::unordered_map<std::pair<int, int>, int, boost::hash<std::pair<int,int>>> edge_cost_cache_;
 
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
@@ -347,6 +353,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   Eigen::Isometry3d cam_to_world_;
 
   EnvStats env_stats_;
+
+  int batch_ = 0;
 
   void ResetEnvironmentState();
 
@@ -383,8 +391,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     const ObjectState &last_object, const bool last_level,
                     const std::vector<int> &parent_counted_pixels,
                     std::vector<int> *child_counted_pixels);
-  int GetSourceCostSDF(const ObjectState &last_object, const bool last_level,
-                    const std::vector<int> &parent_counted_pixels,
+  int GetSourceCostSDF(const std::vector<unsigned short>& new_obj_depth_image, 
+                       const ObjectState &last_object, const bool last_level,
+                      const std::vector<int> &parent_counted_pixels,
                     std::vector<int> *child_counted_pixels);
   // NOTE: updated_counted_pixels should always be equal to the number of
   // points in the input point cloud.

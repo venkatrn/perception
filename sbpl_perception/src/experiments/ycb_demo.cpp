@@ -21,6 +21,22 @@ using std::vector;
 using std::string;
 using namespace sbpl_perception;
 
+namespace {
+  const string kDatasetDir = "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/dataset_uw_test";
+  const string kOutputDir = "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/uw_test_results";
+  // const string kSceneNum = "0058";
+  // const string kImageNum = "3";
+  const string kSceneNum = "0058";
+  const string kImageNum = "3";
+} // namespace
+
+void GetInputPaths(string scene_num, string image_num, string& rgb_file, string& depth_file, string& probs_mat, string& verts_mat) {
+  rgb_file = kDatasetDir + "/" + scene_num + "/rgb/" + image_num + ".png";
+  depth_file = kDatasetDir + "/" + scene_num + "/depth/" + image_num + ".png";
+  probs_mat = kOutputDir + "/" + scene_num + "/" + image_num + "_probs.mat";
+  verts_mat = kOutputDir + "/" + scene_num + "/" + image_num + "_verts.mat";
+}
+
 PointCloudPtr DepthImageToOrganizedCloud(const cv::Mat& depth_image_mm, const cv::Mat& rgb_image) {
   PointCloudPtr cloud(new PointCloud);
   cloud->width = depth_image_mm.cols;
@@ -81,10 +97,18 @@ int main(int argc, char **argv) {
   // point cloud.
   input.camera_pose = camera_pose;
   // input.model_names = vector<string>({"006_mustard_bottle"});
-  input.model_names = vector<string>({"006_mustard_bottle", "019_pitcher_base"});
-  // input.model_names = vector<string>({"019_pitcher_base"});
-  input.rgb_file = "/home/venkatrn/indigo_workspace/src/perch/sbpl_perception/demo/9.png";
-  input.depth_file = "/home/venkatrn/indigo_workspace/src/perch/sbpl_perception/demo/9_depth.png";
+  // input.model_names = vector<string>({"006_mustard_bottle","007_tuna_fish_can", "019_pitcher_base"});
+  // input.model_names = vector<string>({"005_tomato_soup_can","003_cracker_box", "035_power_drill", "010_potted_meat_can"});
+  input.model_names = vector<string>({"004_sugar_box", "019_pitcher_base", "008_pudding_box", "009_gelatin_box"});
+  // input.model_names = vector<string>({"004_sugar_box", "008_pudding_box", "009_gelatin_box"});
+  // input.model_names = vector<string>({"019_pitcher_base", "011_banana", "002_master_chef_can", "035_power_drill"});
+  // input.model_names = vector<string>({"035_power_drill"});
+  // input.model_names = vector<string>({"035_power_drill", "003_cracker_box"});
+  // input.model_names = vector<string>({"007_tuna_fish_can"});
+  // input.rgb_file = "/home/venkatrn/indigo_workspace/src/perch/sbpl_perception/demo/5.png";
+  // input.depth_file = "/home/venkatrn/indigo_workspace/src/perch/sbpl_perception/demo/5_depth.png";
+  // input.probs_mat = "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/uw_test_results/0059";
+  GetInputPaths(kSceneNum, kImageNum, input.rgb_file, input.depth_file, input.probs_mat, input.verts_mat);
 
   cv::Mat depth_img, rgb_img;
   depth_img = cv::imread(input.depth_file,  CV_LOAD_IMAGE_ANYCOLOR | CV_LOAD_IMAGE_ANYDEPTH);

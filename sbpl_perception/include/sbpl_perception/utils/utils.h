@@ -63,6 +63,8 @@ struct RecognitionInput {
   // Optionally run on rgb+depth images from disk.
   std::string rgb_file;
   std::string depth_file;
+  std::string probs_mat;
+  std::string verts_mat;
 };
 
 // A container for the holding the meta-data associated with a 3D model.
@@ -176,6 +178,8 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
   ar &input.constraint_cloud;
   ar &input.rgb_file;
   ar &input.depth_file;
+  ar &input.probs_mat;
+  ar &input.verts_mat;
 }
 
 template<class Archive>
