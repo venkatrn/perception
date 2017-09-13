@@ -24,6 +24,7 @@ include_directories(${PROJECT_SOURCE_DIR}/include ${catkin_INCLUDE_DIRS}
 
 add_library(${PROJECT_NAME}
   src/perception_utils.cpp
+  src/pose_evaluator.cpp
   src/vfh/vfh_pose_estimator.cpp)
 target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${HDF5_hdf5_LIBRARY}
   ${PCL_LIBRARIES})

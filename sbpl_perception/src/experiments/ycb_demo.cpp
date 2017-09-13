@@ -24,15 +24,26 @@ using namespace sbpl_perception;
 namespace {
   const string kDatasetDir = "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/dataset_uw_test";
   const string kOutputDir = "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/uw_test_results";
+  // const string kSceneNum = "0059";
+  // const string kImageNum = "1";
   // const string kSceneNum = "0058";
-  // const string kImageNum = "3";
+  // const string kImageNum = "8";
+  // const string kSceneNum = "0049";
+  // const string kImageNum = "6";
+  // const string kSceneNum = "0048";
+  // const string kImageNum = "6";
+  // const string kSceneNum = "0057";
+  // const string kImageNum = "8";
+  // const string kSceneNum = "0048";
+  // const string kImageNum = "6";
   const string kSceneNum = "0058";
-  const string kImageNum = "3";
+  const string kImageNum = "6";
 } // namespace
 
-void GetInputPaths(string scene_num, string image_num, string& rgb_file, string& depth_file, string& probs_mat, string& verts_mat) {
+void GetInputPaths(string scene_num, string image_num, string& rgb_file, string& depth_file, string& predictions_file, string& probs_mat, string& verts_mat) {
   rgb_file = kDatasetDir + "/" + scene_num + "/rgb/" + image_num + ".png";
   depth_file = kDatasetDir + "/" + scene_num + "/depth/" + image_num + ".png";
+  predictions_file = kOutputDir + "/" + scene_num + "/" + image_num + "_predictions.txt";
   probs_mat = kOutputDir + "/" + scene_num + "/" + image_num + "_probs.mat";
   verts_mat = kOutputDir + "/" + scene_num + "/" + image_num + "_verts.mat";
 }
@@ -98,17 +109,21 @@ int main(int argc, char **argv) {
   input.camera_pose = camera_pose;
   // input.model_names = vector<string>({"006_mustard_bottle"});
   // input.model_names = vector<string>({"006_mustard_bottle","007_tuna_fish_can", "019_pitcher_base"});
-  // input.model_names = vector<string>({"005_tomato_soup_can","003_cracker_box", "035_power_drill", "010_potted_meat_can"});
+  // input.model_names = vector<string>({"005_tomato_soup_can","003_cracker_box", "035_power_drill", "010_potted_meat_can", "007_tuna_fish_can", "040_large_marker"});
   input.model_names = vector<string>({"004_sugar_box", "019_pitcher_base", "008_pudding_box", "009_gelatin_box"});
   // input.model_names = vector<string>({"004_sugar_box", "008_pudding_box", "009_gelatin_box"});
   // input.model_names = vector<string>({"019_pitcher_base", "011_banana", "002_master_chef_can", "035_power_drill"});
   // input.model_names = vector<string>({"035_power_drill"});
   // input.model_names = vector<string>({"035_power_drill", "003_cracker_box"});
-  // input.model_names = vector<string>({"007_tuna_fish_can"});
+  // input.model_names = vector<string>({"007_tuna_fish_can", "004_sugar_box", "010_potted_meat_can", "024_bowl"});
+  // input.model_names = vector<string>({"007_tuna_fish_can", "002_master_chef_can", "051_large_clamp", "052_extra_large_clamp", 
+    // "025_mug"});
+  // input.model_names = vector<string>({"005_tomato_soup_can", "021_bleach_cleanser", "036_wood_block", "025_mug", "004_sugar_box", "002_master_chef_can"});
+  // input.model_names = vector<string>({"035_power_drill", "011_banana", "019_pitcher_base", "002_master_chef_can"});
   // input.rgb_file = "/home/venkatrn/indigo_workspace/src/perch/sbpl_perception/demo/5.png";
   // input.depth_file = "/home/venkatrn/indigo_workspace/src/perch/sbpl_perception/demo/5_depth.png";
   // input.probs_mat = "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/uw_test_results/0059";
-  GetInputPaths(kSceneNum, kImageNum, input.rgb_file, input.depth_file, input.probs_mat, input.verts_mat);
+  GetInputPaths(kSceneNum, kImageNum, input.rgb_file, input.depth_file, input.predictions_file, input.probs_mat, input.verts_mat);
 
   cv::Mat depth_img, rgb_img;
   depth_img = cv::imread(input.depth_file,  CV_LOAD_IMAGE_ANYCOLOR | CV_LOAD_IMAGE_ANYDEPTH);
@@ -132,6 +147,14 @@ int main(int argc, char **argv) {
   // Alternatively, to get the (x,y,\theta) poses in the world frame, use:
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
+
+  if (IsMaster(world)) {
+    auto stats_vector = object_recognizer.GetLastPlanningEpisodeStats();
+    for (size_t ii = 0; ii < stats_vector.size(); ++ii) {
+      cout << stats_vector[ii].expands
+         << " " << stats_vector[ii].time << " " << stats_vector[ii].cost << endl;
+    }
+  }
   
   if (IsMaster(world)) {
     if (object_transforms.empty()) {

@@ -1,9 +1,10 @@
 # Inflation epsilon for the planner. Returned solution cost will be within
 # inflation_epsilon of the optimal solution.
-inflation_epsilon: 10
+inflation_epsilon: 100.0 # 3,5
+decrement_epsilon: 0.2 # 3,5
 # Max time-limit for the planner. Used in conjunction with "first_solution"
 # param (refer below)/
-max_planning_time: 100.0 # seconds
+max_planning_time: 300.0 # seconds
 # For non-anytime planners, if this is true, then planner will ignore time
 # limit and continue searching until a solution is found.
 # For anytime planners, the same as above holds, but in addition, if false,

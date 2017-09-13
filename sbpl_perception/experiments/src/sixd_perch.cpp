@@ -28,7 +28,7 @@ namespace {
 string kDatasetDir =
   "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/dataset_uw_test";
 string kOutputDir =
-  "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/uw_test_results";
+  "/home/venkatrn/indigo_workspace/src/deep_rgbd_utils/uw_test_results_perch";
 const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
 } // namespace
@@ -77,10 +77,11 @@ bool ReadGTFile(const std::string &gt_file, std::vector<string> *model_names,
   return true;
 }
 
-void GetInputPaths(string scene_num, string image_num, string &rgb_file,
-                   string &depth_file, string &probs_mat, string &verts_mat) {
+void GetInputPaths(string scene_num, string image_num, string &rgb_file, string& depth_file,
+                   string &predictions_file, string &probs_mat, string &verts_mat) {
   rgb_file = kDatasetDir + "/" + scene_num + "/rgb/" + image_num + ".png";
   depth_file = kDatasetDir + "/" + scene_num + "/depth/" + image_num + ".png";
+  predictions_file = kOutputDir + "/" + scene_num + "/" + image_num + "_predictions.txt";
   probs_mat = kOutputDir + "/" + scene_num + "/" + image_num + "_probs.mat";
   verts_mat = kOutputDir + "/" + scene_num + "/" + image_num + "_verts.mat";
 }
@@ -118,7 +119,7 @@ vector<Eigen::Affine3f> RunPerch(std::shared_ptr<boost::mpi::communicator>
   // input.model_names = {models[0]};
   // input.model_names = {models[0], models[1]};
   input.model_names = models;
-  GetInputPaths(scene, image, input.rgb_file, input.depth_file, input.probs_mat,
+  GetInputPaths(scene, image, input.rgb_file, input.depth_file, input.predictions_file, input.probs_mat,
                 input.verts_mat);
 
   // cv::Mat depth_img, rgb_img;
@@ -165,7 +166,7 @@ int main(int argc, char **argv) {
   kDatasetDir = dataset_dir.native();
   kOutputDir = output_dir.native();
 
-  bool image_debug = true;
+  bool image_debug = false;
   object_recognizer.GetMutableEnvironment()->SetDebugOptions(image_debug);
 
   string target_object = "";
@@ -267,6 +268,7 @@ int main(int argc, char **argv) {
       }
 
       std::ofstream scene_file;
+      std::ofstream stats_file;
 
       // for (size_t ii = 0; ii < model_names.size(); ++ii) {
       //   // cout << "true pose " << endl;
@@ -295,9 +297,12 @@ int main(int argc, char **argv) {
       auto transforms = RunPerch(world, object_recognizer, scene, image_num, model_names);
       world->barrier();
       if (IsMaster(world)) {
+        const string scene_poses_file = output_dir.string() + "/" + scene + "/" +
+                                        image_num + "_perch.txt";
         const string scene_stats_file = output_dir.string() + "/" + scene + "/" +
-                                        image_num + "_predictions.txt";
-        scene_file.open(scene_stats_file, std::ofstream::out);
+                                        image_num + "_stats.txt";
+        scene_file.open(scene_poses_file, std::ofstream::out);
+        stats_file.open(scene_stats_file, std::ofstream::out);
         for (size_t jj = 0; jj < model_names.size(); ++jj) {
           scene_file << model_names[jj] << endl;
           if (!transforms.empty()) {
@@ -308,12 +313,24 @@ int main(int argc, char **argv) {
           }
         }
         scene_file.close();
+
+        auto stats_vector = object_recognizer.GetLastPlanningEpisodeStats();
+        EnvStats env_stats = object_recognizer.GetLastEnvStats();
+        for (size_t ii = 0; ii < stats_vector.size(); ++ii) {
+        // stats_file << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
+        //      <<
+        //      stats_vector[0].expands
+        //      << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
+          stats_file << stats_vector[ii].expands
+               << " " << stats_vector[ii].time << " " << stats_vector[ii].cost << endl;
+        }
+        stats_file.close();
       }
     }
     count++;
-    if (count == 2) {
-      break;
-    }
+    // if (count == 2) {
+    //   break;
+    // }
   }
   return 0;
 }

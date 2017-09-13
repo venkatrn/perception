@@ -66,26 +66,28 @@ line_styles = {'-','--','-','.-',':',':'};
 figure;
 ax = axes;
 
-% shandle = scatter(ax, lazy_time, nonlazy_time, 100, palette1{1},...
-% 'MarkerEdgeColor', palette1{1}, 'LineWidth', 2);
-%
-% set(ax, 'FontSize', 30, 'LineWidth', 2, 'FontName', 'Times');
-%
-% xlim([0 150]);
-% ylim([0 150]);
-% xh = xlabel('D2P (seconds)');
-% yh = ylabel('PERCH (seconds)');
-% th = title('Speedup Ratios for $w=10$');
-%
-% set(xh, 'FontName', 'cmr10', 'interpreter', 'latex');
-% set(yh, 'FontName', 'cmr10', 'interpreter', 'latex');
-% set(th, 'FontName', 'cmr10', 'interpreter', 'latex');
-%
-% set(gca, 'XTick', [0:30:150])
-% set(gca, 'YTick', [0:30:150])
+shandle = scatter(ax, lazy_time, nonlazy_time, 100, palette1{1},...
+'MarkerEdgeColor', palette1{1}, 'LineWidth', 2);
 
-% xt = get(gca, 'XTick');
-% set(gca, 'FontSize', 25);
+set(ax, 'FontSize', 30, 'LineWidth', 2, 'FontName', 'cmr10');
+
+xlim([0 150]);
+ylim([0 150]);
+xh = xlabel('D2P (seconds)');
+yh = ylabel('PERCH (seconds)');
+th = title('Speedup Ratios for $w=10$');
+
+set(xh, 'FontName', 'cmr10', 'interpreter', 'latex');
+set(yh, 'FontName', 'cmr10', 'interpreter', 'latex');
+set(th, 'FontName', 'cmr10', 'interpreter', 'latex');
+
+set(gca, 'XTick', [0:30:150])
+set(gca, 'YTick', [0:30:150])
+
+xt = get(gca, 'XTick');
+set(gca, 'FontSize', 25);
+% set(ax, 'FontName', 'cmr10', 'interpreter', 'latex');
+set(gca,'TickLabelInterpreter', 'latex');
 
 hold on;
 x = 0:150;
@@ -95,35 +97,45 @@ y3 = 4*x;
 %
 y2(y2>150) = 150;
 y3(y3>150) = 150;
-harea = area(ax, x, [y1; y2; y3]');
-pH = arrayfun(@(x) allchild(x),harea);
-set(harea(1), 'FaceColor', palette1{2});
-set(harea(3), 'FaceColor', palette1{3});
-set(harea(2), 'FaceColor', palette1{4});
-alpha(0.2);
+% harea = area(ax, x, [y1; y2; y3]');
+Y = [y1; y2; y3]';
+% harea = patch(ax, [x flip(x)], [Y zeros(size(Y))]);
+harea1 = patch([x flip(x)], [y1 0*y1], palette1{2}, 'FaceAlpha', 0.2,...
+'EdgeAlpha', 0.2);
+harea2 = patch([x flip(x)], [y2 flip(y1)], palette1{3}, 'FaceAlpha', 0.2,...
+'EdgeAlpha', 0.2);
+harea3 = patch([x flip(x)], [y3 flip(y2)], palette1{4}, 'FaceAlpha', 0.2,...
+'EdgeAlpha', 0.2);
+% pH = arrayfun(@(x) allchild(x),harea,'UniformOutput', false);
+% set(harea(1), 'FaceColor', palette1{2});
+% set(harea(3), 'FaceColor', palette1{3});
+% set(harea(2), 'FaceColor', palette1{4});
+% alpha(0.2);
+% set(pH,'FaceAlpha', 0.2);
+% pH = get(harea, 'children')
 % set(pH,'FaceAlpha', 0.2);
 %
 xlim(ax, [0 150]);
 ylim(ax, [0 150]);
-% set(ax, 'FontSize', 30, 'LineWidth', 2, 'FontName', 'Times');
+set(ax, 'FontSize', 30, 'LineWidth', 2, 'FontName', 'Times');
 
-% ratios = {'  speedup $\leq 1$', '  $1 \leq$ speedup $\leq 2$','  $2 \leq$ speedup $\leq 4$'};
+% ratios = {'  speedup $\leq 1$', '  $1 \leq$ speedup $\leq 2$','  $2 \leq$ speedup $\leq 3$'};
 % % ratios={'a','b'}
 %         % 'D2P ($w=3$)', 'PERCH ($w=3$)'};
 %         
-% % L = legend(harea(1), harea(2), harea(3), ratios);
+% L = legend(harea1, harea2, harea3, ratios);
 % % L = legend(ratios)
-% % set(L,'interpreter', 'latex', 'FontName', 'cmr10', 'Location', 'NorthEast');
-% % set(L, 'FontSize', 25)
-% % legend boxoff;
+% set(L,'interpreter', 'latex', 'FontName', 'cmr10', 'Location', 'NorthEast');
+% set(L, 'FontSize', 25)
+% legend boxoff;
 %
 % % t1h = text(90, 25, '{\bf speedup $\mathbf{\leq 1}$}');
 % % t2h = text(45, 110, '{\bf $\mathbf{1\leq}$ speedup $\bm{\leq 2}$}');
 % % t3h = text(5, 140, '$1\leq$ speedup $\leq 2$');
-% t1h = text(90, 25, 'speedup $\leq 1$');
-% t2h = text(45, 110, '$1\leq$ speedup $\leq 2$');
-% t3h = text(5, 140, '$1\leq$ speedup $\leq 2$');
-% set(t1h, 'FontName', 'cmr10', 'FontSize', 26, 'FontWeight', 'bold', 'interpreter', 'latex');
-% set(t2h, 'FontName', 'cmr10', 'FontSize', 26, 'FontWeight', 'bold', 'interpreter', 'latex');
-% set(t3h, 'FontName', 'cmr10', 'FontSize', 26, 'FontWeight', 'bold', 'interpreter', 'latex');
+t1h = text(90, 25, 'speedup $\leq 1$');
+t2h = text(45, 110, '$1\leq$ speedup $\leq 2$');
+t3h = text(5, 140, '$2\leq$ speedup $\leq 3$');
+set(t1h, 'FontName', 'cmr10', 'FontSize', 26, 'FontWeight', 'bold', 'interpreter', 'latex');
+set(t2h, 'FontName', 'cmr10', 'FontSize', 26, 'FontWeight', 'bold', 'interpreter', 'latex');
+set(t3h, 'FontName', 'cmr10', 'FontSize', 26, 'FontWeight', 'bold', 'interpreter', 'latex');
 %

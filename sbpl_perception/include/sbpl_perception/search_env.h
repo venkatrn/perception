@@ -49,6 +49,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_randist.h>
+
 namespace sbpl_perception {
 
 struct EnvConfig {
@@ -179,7 +182,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // Greedy ICP planner
   GraphState ComputeGreedyICPPoses();
 
-  void UpdateBatch() override;
+  void UpdateBatch(int incumbent_goal_parent_id, int sol_cost_change) override;
   void GetSuccs(GraphState source_state, std::vector<GraphState> *succs,
                 std::vector<int> *costs);
   bool IsGoalState(GraphState state);
@@ -205,7 +208,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // For MHA
   void GetSuccs(int q_id, int source_state_id, std::vector<int> *succ_ids,
                 std::vector<int> *costs) {
-    printf("Expanding %d from %d\n", source_state_id, q_id);
+    // printf("Expanding %d from %d\n", source_state_id, q_id);
     GetSuccs(source_state_id, succ_ids, costs);
   }
 
@@ -213,7 +216,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     std::vector<int> *costs,
                     std::vector<bool> *true_costs) {
     // throw std::runtime_error("don't use lazy for now...");
-    printf("Lazily expanding %d from %d\n", source_state_id, q_id);
+    // printf("Lazily expanding %d from %d\n", source_state_id, q_id);
     GetLazySuccs(source_state_id, succ_ids, costs, true_costs);
   }
 
@@ -274,8 +277,15 @@ class EnvObjectRecognition : public EnvironmentMHA {
   cv::Mat rgb_img_;
   cv::Mat depth_img_;
   std::unordered_map<std::string, std::vector<Eigen::Isometry3d>> pose_candidates_;
+  std::unordered_map<std::string, std::vector<Eigen::Matrix4f>> predicted_transforms_;
   // Mapping from object ID to set of input pixel indices belonging to it.
   std::unordered_map<std::string, std::vector<int>> object_pixels_;
+  // DTS for batch updates
+  int last_played_arm_;
+  std::vector<double> alpha_;
+  std::vector<double> beta_;
+  const gsl_rng_type* gsl_rand_T;
+  gsl_rng* gsl_rand; 
 
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
@@ -374,12 +384,27 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // of the last added object is adjusted using ICP and the computed state properties.
   int GetCost(const GraphState &source_state, const GraphState &child_state,
               const std::vector<unsigned short> &source_depth_image,
+              const std::vector<unsigned short> &unadjusted_last_object_depth_image,
+              const std::vector<unsigned short> &adjusted_last_object_depth_image,
+              const GraphState &adjusted_last_object_state,
               const std::vector<int> &parent_counted_pixels,
               std::vector<int> *child_counted_pixels,
               GraphState *adjusted_child_state,
               GraphStateProperties *state_properties,
               std::vector<unsigned short> *adjusted_child_depth_image,
               std::vector<unsigned short> *unadjusted_child_depth_image);
+  int GetCost(const GraphState &source_state, const GraphState &child_state,
+              const std::vector<unsigned short> &source_depth_image,
+              const std::vector<int> &parent_counted_pixels,
+              std::vector<int> *child_counted_pixels,
+              GraphState *adjusted_child_state,
+              GraphStateProperties *state_properties,
+              std::vector<unsigned short> *adjusted_child_depth_image,
+              std::vector<unsigned short> *unadjusted_child_depth_image) {
+    std::vector<unsigned short> null_vector;
+    GraphState null_state;
+    GetCost(source_state, child_state, source_depth_image, null_vector, null_vector, null_state, parent_counted_pixels, child_counted_pixels, adjusted_child_state, state_properties, adjusted_child_depth_image, unadjusted_child_depth_image);
+  }
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr
