@@ -5,7 +5,7 @@
 - git:
     local-name: improved-mha-planner
     uri: https://github.com/venkatrn/improved-mha-planner.git
-    version: master
+    version: incremental
 - git:
     local-name: sbpl_utils
     uri: https://github.com/venkatrn/sbpl_utils.git
