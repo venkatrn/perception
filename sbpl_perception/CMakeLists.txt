@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 2.8)
 project(sbpl_perception)
 
 # Set the build type.  Options are:
@@ -10,24 +10,48 @@ project(sbpl_perception)
 # set(ROS_BUILD_TYPE RelWithDebInfo)
 # set(ROS_BUILD_TYPE Debug)
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS "-std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
-set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
+# set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
+#set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Load catkin and all dependencies required for this package
-find_package(catkin REQUIRED COMPONENTS 
-  cv_bridge 
-  kinect_sim 
-  perception_utils 
-  pcl_ros 
-  roscpp 
-  roslib 
-  sbpl 
+find_package(catkin REQUIRED COMPONENTS
+  cv_bridge
+  kinect_sim
+  perception_utils
+  pcl_ros
+  roscpp
+  roslib
+  sbpl
   sbpl_utils)
-find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
+
+
+#find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
+
+set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
+set (BOOST_LIBRARYDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/lib")
+set (Boost_NO_SYSTEM_PATHS ON)
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+#find_package(Boost 1.67.0 REQUIRED mpi serialization system)
+include_directories(${Boost_INCLUDE_DIRS})
+set( Boost_LIBRARIES
+        ${BOOST_LIBRARYDIR}/libboost_serialization.so
+        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
+
 # find_package(OpenCV REQUIRED)
-find_package(MPI REQUIRED)
+#find_package(MPI REQUIRED)
+
+#find_package(PkgConfig REQUIRED)
+#pkg_check_modules(SBPL REQUIRED sbpl)
+#include_directories(${SBPL_INCLUDE_DIRS})
+#link_directories(${SBPL_LIBRARY_DIRS})
+
 find_package(OpenMP)
 # find_package(fcl REQUIRED)
 find_package(octomap REQUIRED)
@@ -38,34 +62,41 @@ find_package(PkgConfig QUIET)
 # TODO: why does the following line cause a nightmare?
 # find_package(PCL REQUIRED)
 
-include(CMakeForceCompiler)
-CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
+#include(CMakeForceCompiler)
+#CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
+
+#CMAKE_FORCE_CXX_COMPILER(/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
+
 # set(CMAKE_CXX_COMPILE_FLAGS ${CMAKE_CXX_COMPILE_FLAGS} ${MPI_COMPILE_FLAGS} ${OpenMP_CXX_FLAGS})
 # set(CMAKE_CXX_LINK_FLAGS ${CMAKE_CXX_LINK_FLAGS} ${MPI_LINK_FLAGS})
 
 include_directories(include ${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${FCL_INCLUDE_DIRS})
-include_directories(MPI_INCLUDE_PATH)
+
+# include_directories(${MPI_INCLUDE_PATH})
+set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
+include_directories(${MPI_ROOT}/include)
 
 catkin_package(
-  CATKIN_DEPENDS 
-    cv_bridge 
-    kinect_sim 
-    perception_utils 
-    pcl_ros 
-    roscpp 
-    roslib 
-    sbpl 
+  CATKIN_DEPENDS
+    cv_bridge
+    kinect_sim
+    perception_utils
+    pcl_ros
+    roscpp
+    roslib
+    sbpl
     sbpl_utils
-  DEPENDS 
-    # OpenCV 
-    MPI 
-    OpenMP 
-    PCL 
-    Boost
-  INCLUDE_DIRS 
+  DEPENDS
+    # OpenCV
+    #MPI
+    OpenMP
+    PCL
+    #Boost
+  INCLUDE_DIRS
     include
-  LIBRARIES 
+    ${MPI_ROOT}/include/
+  LIBRARIES
     ${PROJECT_NAME}
   )
 
@@ -82,25 +113,36 @@ add_library(${PROJECT_NAME}
   # src/utils/object_utils.cpp
   src/utils/dataset_generator.cpp)
 
-target_link_libraries(${PROJECT_NAME} ${MPI_LIBRARIES} ${Boost_LIBRARIES} ${catkin_LIBRARIES}
-  ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  # ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
+#set( MPI_CXX_LIBRARIES
+#        ${MPI_ROOT}/lib/libmpi.so)
+#message(WARNING ${catkin_LIBRARIES})
 
-add_executable(real_test src/experiments/experiments.cpp)
-target_link_libraries(real_test ${PROJECT_NAME})
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES}
+  #${MPI_CXX_LIBRARIES}
+  #${PCL_LIBRARIES} ${OpenCV_LIBRARIES} /usr/lib/libvtkCommon.so.5.10 /usr/lib/libvtkFiltering.so.5.10 /usr/lib/libvtkRendering.so.5.10 /usr/lib/libvtkIO.so.5.10
+  # ${MPI_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  #/usr/lib/libvtkGraphics.so.5.10
+  )
 
-add_executable(sim_test src/experiments/sim_test.cpp)
-target_link_libraries(sim_test ${PROJECT_NAME})
+#add_executable(real_test src/experiments/experiments.cpp)
+#target_link_libraries(real_test ${PROJECT_NAME})
+
+#add_executable(sim_test src/experiments/sim_test.cpp)
+#target_link_libraries(sim_test ${PROJECT_NAME})
 
 add_executable(demo src/experiments/demo.cpp)
 target_link_libraries(demo ${PROJECT_NAME})
 
-catkin_add_gtest(${PROJECT_NAME}_states_test tests/states_test.cpp)
-target_link_libraries(${PROJECT_NAME}_states_test ${PROJECT_NAME})
+  include(CMakeForceCompiler)
+  #CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
 
-catkin_add_gtest(${PROJECT_NAME}_hash_manager_test tests/hash_manager_test.cpp)
-target_link_libraries(${PROJECT_NAME}_hash_manager_test ${PROJECT_NAME})
+  CMAKE_FORCE_CXX_COMPILER(/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
+
+#catkin_add_gtest(${PROJECT_NAME}_states_test tests/states_test.cpp)
+#target_link_libraries(${PROJECT_NAME}_states_test ${PROJECT_NAME})
+
+#catkin_add_gtest(${PROJECT_NAME}_hash_manager_test tests/hash_manager_test.cpp)
+#target_link_libraries(${PROJECT_NAME}_hash_manager_test ${PROJECT_NAME})
 
 
 #####################################################################
@@ -117,21 +159,21 @@ target_link_libraries(${PROJECT_NAME}_hash_manager_test ${PROJECT_NAME})
 #   experiments/src/roi_saver.cpp)
 # target_link_libraries(roi_saver ${PROJECT_NAME})
 
-add_executable(ground_truth_parser
-  experiments/src/ground_truth_parser.cpp)
-target_link_libraries(ground_truth_parser ${PROJECT_NAME})
+#add_executable(ground_truth_parser
+#  experiments/src/ground_truth_parser.cpp)
+#target_link_libraries(ground_truth_parser ${PROJECT_NAME})
 
 # add_executable(vfh_estimator
 #   experiments/src/vfh_estimator.cpp)
 # target_link_libraries(vfh_estimator ${PROJECT_NAME})
 
-add_executable(perch
-  experiments/src/perch.cpp)
-target_link_libraries(perch ${PROJECT_NAME})
+#add_executable(perch
+#  experiments/src/perch.cpp)
+#target_link_libraries(perch ${PROJECT_NAME})
 
-add_executable(perch_single_object
-  experiments/src/perch_single_object.cpp)
-target_link_libraries(perch_single_object ${PROJECT_NAME})
+#add_executable(perch_single_object
+#  experiments/src/perch_single_object.cpp)
+#target_link_libraries(perch_single_object ${PROJECT_NAME})
 
 # add_executable(greedy_icp
 #   experiments/src/greedy_icp.cpp)
@@ -155,3 +197,24 @@ target_link_libraries(perch_single_object ${PROJECT_NAME})
 #   ${CATKIN_DEVEL_PREFIX}/experiments)
 # set_target_properties(ground_truth_parser PROPERTIES LIBRARY_OUTPUT_DIRECTORY
 #   ${CATKIN_DEVEL_PREFIX}/experiments)
+
+install(DIRECTORY include/${PROJECT_NAME}/
+        DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  PATTERN ".svn" EXCLUDE)
+
+install(DIRECTORY config/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/config
+  PATTERN ".svn" EXCLUDE)
+
+install(DIRECTORY demo/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/demo
+  PATTERN ".svn" EXCLUDE)
+
+install(TARGETS demo
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

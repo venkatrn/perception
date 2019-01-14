@@ -40,10 +40,10 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   bool image_debug = false;
 
   if (IsMaster(mpi_world_)) {
-    ///////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////
     // NOTE: Do not modify any default params here. Make all changes in the
     // appropriate yaml config files. They will override these ones.
-    ///////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////
 
     if (!ros::isInitialized()) {
       printf("ERROR: ObjectRecognizer must be instantiated after ros::init(..) has been called\n");
@@ -144,8 +144,8 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
     planner_params_.dec_eps = 0.2;
     planner_params_.repair_time = -1;
     // Unused
-    // planner_params_.anchor_eps = 1.0;
-    // planner_params_.use_anchor = true;
+    planner_params_.anchor_eps = 1.0;
+    planner_params_.use_anchor = true;
   }
 
   // All processes should wait until master has loaded params.
@@ -390,4 +390,3 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
   return plan_success;
 }
 }  // namespace
-

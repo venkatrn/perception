@@ -16,6 +16,7 @@
 
 #include <opencv/cv.h>
 #include <opencv2/core/core.hpp>
+#include <opencv2/imgproc.hpp>
 
 #include <pcl/PolygonMesh.h>
 
@@ -46,9 +47,9 @@ class ObjectModel {
   std::vector<bool> PointsInsideFootprint(const PointCloudPtr &cloud, const ContPose &pose) const;
 
 
-  // Return the convex-hull footprint of the object at the pose of the object. 
+  // Return the convex-hull footprint of the object at the pose of the object.
   PointCloudPtr GetFootprint(const ContPose &pose, bool use_inflation=false) const;
-  
+
   static void TransformPolyMesh(const pcl::PolygonMesh::Ptr
                        &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform);
   // Accessors
@@ -79,7 +80,7 @@ class ObjectModel {
   double max_z() const {
     return max_z_;
   }
-  double GetInflationFactor() const{ 
+  double GetInflationFactor() const{
     return inflation_factor_;
   }
 

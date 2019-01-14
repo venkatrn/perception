@@ -296,8 +296,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, unsigned short> maxz_map_;
   std::unordered_map<int, int> g_value_map_;
   // Keep track of the observed pixels we have accounted for in cost computation for a given state.
-  // This includes all points in the observed point cloud that fall within the volume of objects assigned 
-  // so far in the state. For the last level states, this *does not* include the points that 
+  // This includes all points in the observed point cloud that fall within the volume of objects assigned
+  // so far in the state. For the last level states, this *does not* include the points that
   // lie outside the union volumes of all assigned objects.
   std::unordered_map<int, std::vector<int>> counted_pixels_map_;
   // Maps state hash to depth image.
@@ -427,6 +427,3 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
 };
 } // namespace
-
-
-

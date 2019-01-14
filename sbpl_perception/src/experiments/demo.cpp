@@ -21,14 +21,18 @@ using std::string;
 using namespace sbpl_perception;
 
 int main(int argc, char **argv) {
+  ROS_ERROR("Starting:\n");
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
 
+  // std::cout << "I am process " << world.rank() << " of " << world.size()
+    // << "." << std::endl;
+  std::cout << "Started MPI Done:\n";
   ros::init(argc, argv, "perch_demo");
   ObjectRecognizer object_recognizer(world);
-
-  // The camera pose and preprocessed point cloud, both in world frame.
+  //
+  // // The camera pose and preprocessed point cloud, both in world frame.
   Eigen::Isometry3d camera_pose;
   camera_pose.matrix() <<
                        0.00974155,   0.997398, -0.0714239,  -0.031793,
@@ -78,7 +82,7 @@ int main(int argc, char **argv) {
   // Alternatively, to get the (x,y,\theta) poses in the world frame, use:
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
-  
+
   if (IsMaster(world)) {
     if (object_transforms.empty()) {
       printf("PERCH could not find a solution for the given input\n");

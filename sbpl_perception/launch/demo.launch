@@ -1,9 +1,9 @@
 <launch>
   <master auto="start"/>
-  <param name="/use_sim_time" value="true"/>
+  <!-- <param name="/use_sim_time" value="true"/> -->
   <arg name="image_debug" default="false" />
   <include file="$(find sbpl_perception)/config/household_objects.xml"/>
-  <node pkg="sbpl_perception" type="demo" name="demo" output="screen" launch-prefix="mpirun -n 4" respawn="false">
+  <node pkg="sbpl_perception" type="demo" name="demo" output="screen" launch-prefix="/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpirun -np 4" respawn="false">
     <rosparam command="load" file="$(find sbpl_perception)/config/demo_env_config.yaml" />
     <rosparam command="load" file="$(find sbpl_perception)/config/demo_planner_config.yaml" />
     <param name="image_debug" value="$(arg image_debug)"/>

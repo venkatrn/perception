@@ -6,6 +6,7 @@
 #include <pcl/io/vtk_lib_io.h>
 #include <vtkPolyDataMapper.h>
 #include <pcl/apps/render_views_tesselated_sphere.h>
+#include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/surface/mls.h>
 #include <pcl/filters/filter.h>
 
@@ -228,9 +229,9 @@ VFHPoseEstimator::getPoseConstrained (
   pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::SAMPLE_LOCAL_PLANE);
   mls.setUpsamplingRadius (0.003); //0.002
   mls.setUpsamplingStepSize (0.001); //001
-  // mls.setUpsamplingMethod (pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::VOXEL_GRID_DILATION); 
-  // mls.setDilationIterations (2); 
-  // mls.setDilationVoxelSize (0.003);//3mm Kinect resolution 
+  // mls.setUpsamplingMethod (pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::VOXEL_GRID_DILATION);
+  // mls.setDilationIterations (2);
+  // mls.setDilationVoxelSize (0.003);//3mm Kinect resolution
   mls.process(*cloud);
   cout << "FILTERED " << cloud->size() << endl;
 
@@ -693,7 +694,9 @@ bool VFHPoseEstimator::generateTrainingViewsFromModels(boost::filesystem::path
 
     // Render
     render_views.addModelFromPolyData(object);
-    render_views.generateViews();
+
+    // Aditya
+    // render_views.generateViews();
 
     // Object for storing the rendered views.
     std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> views;
@@ -809,9 +812,9 @@ bool VFHPoseEstimator::trainClassifier(boost::filesystem::path &dataDir) {
     pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::SAMPLE_LOCAL_PLANE);
     mls.setUpsamplingRadius (0.003); //0.002
     mls.setUpsamplingStepSize (0.001); //001
-    // mls.setUpsamplingMethod (pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::VOXEL_GRID_DILATION); 
-    // mls.setDilationIterations (2); 
-    // mls.setDilationVoxelSize (0.003);//3mm Kinect resolution 
+    // mls.setUpsamplingMethod (pcl::MovingLeastSquares<pcl::PointXYZ, pcl::PointXYZ>::VOXEL_GRID_DILATION);
+    // mls.setDilationIterations (2);
+    // mls.setDilationVoxelSize (0.003);//3mm Kinect resolution
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZ>);
     mls.process(*filtered);
     copyPointCloud(*filtered, *cloud);

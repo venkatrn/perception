@@ -30,7 +30,7 @@
 
 #include <opencv/highgui.h>
 #include <opencv2/highgui/highgui.hpp>
-#include <opencv2/contrib/contrib.hpp>
+// #include <opencv2/contrib/contrib.hpp>
 
 #include <boost/lexical_cast.hpp>
 #include <omp.h>

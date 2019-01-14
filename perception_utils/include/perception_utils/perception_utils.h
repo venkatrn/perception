@@ -14,7 +14,7 @@
 
 #include <opencv/highgui.h>
 #include <opencv2/highgui/highgui.hpp>
-#include <opencv2/contrib/contrib.hpp>
+// #include <opencv2/contrib/contrib.hpp>
 #include <opencv2/photo/photo.hpp>
 
 #include <chrono>
@@ -155,4 +155,3 @@ bool IsPointValid(const PointT &point);
 void InpaintDepthImage(const PointCloudPtr &cloud_in, const cv::Mat &mask,
                        double max_range, cv::Mat &inpainted_depth_image, bool visualize = false);
 } /** perception_utils **/
-

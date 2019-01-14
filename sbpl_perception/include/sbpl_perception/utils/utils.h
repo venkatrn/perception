@@ -1,8 +1,10 @@
 #pragma once
 
+using namespace std;
 #include <opencv/highgui.h>
 #include <opencv2/highgui/highgui.hpp>
-#include <opencv2/contrib/contrib.hpp>
+#include <opencv2/imgproc.hpp>
+// #include <opencv2/contrib/contrib.hpp>
 #include <perception_utils/pcl_typedefs.h>
 #include <perception_utils/pcl_serialization.h>
 #include <sbpl_perception/graph_state.h>
