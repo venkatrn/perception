@@ -149,8 +149,8 @@ target_link_libraries(demo ${PROJECT_NAME})
 # Needed only for experiments and debugging.
 #####################################################################
 
-# add_executable(heuristic_test src/experiments/heuristic_test.cpp)
-# target_link_libraries(heuristic_test ${PROJECT_NAME})
+add_executable(heuristic_test src/experiments/heuristic_test.cpp)
+target_link_libraries(heuristic_test ${PROJECT_NAME})
 
 # add_executable(generate_dataset src/utils/generate_dataset.cpp)
 # target_link_libraries(generate_dataset ${PROJECT_NAME})
@@ -167,13 +167,13 @@ target_link_libraries(demo ${PROJECT_NAME})
 #   experiments/src/vfh_estimator.cpp)
 # target_link_libraries(vfh_estimator ${PROJECT_NAME})
 
-#add_executable(perch
-#  experiments/src/perch.cpp)
-#target_link_libraries(perch ${PROJECT_NAME})
+add_executable(perch
+  experiments/src/perch.cpp)
+target_link_libraries(perch ${PROJECT_NAME})
 
-#add_executable(perch_single_object
-#  experiments/src/perch_single_object.cpp)
-#target_link_libraries(perch_single_object ${PROJECT_NAME})
+add_executable(perch_single_object
+  experiments/src/perch_single_object.cpp)
+target_link_libraries(perch_single_object ${PROJECT_NAME})
 
 # add_executable(greedy_icp
 #   experiments/src/greedy_icp.cpp)

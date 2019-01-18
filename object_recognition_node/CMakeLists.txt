@@ -12,14 +12,34 @@ set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS "-std=c++11")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-include(CMakeForceCompiler)
-CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
+#include(CMakeForceCompiler)
+#CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
 
-find_package(catkin REQUIRED genmsg actionlib_msgs actionlib 
+set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
+include(CMakeForceCompiler)
+CMAKE_FORCE_CXX_COMPILER(${MPI_ROOT}/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
+include_directories(${MPI_ROOT}/include)
+
+find_package(catkin REQUIRED genmsg actionlib_msgs actionlib
   COMPONENTS roscpp sensor_msgs perception_utils
   keyboard tf tf_conversions eigen_conversions sbpl_perception)
-find_package(Boost COMPONENTS mpi REQUIRED)
-find_package(MPI REQUIRED)
+#find_package(Boost COMPONENTS mpi REQUIRED)
+#find_package(MPI REQUIRED)
+
+set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
+set (BOOST_LIBRARYDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/lib")
+set (Boost_NO_SYSTEM_PATHS ON)
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+#find_package(Boost 1.67.0 REQUIRED mpi serialization system)
+include_directories(${Boost_INCLUDE_DIRS})
+set( Boost_LIBRARIES
+        ${BOOST_LIBRARYDIR}/libboost_serialization.so
+        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
+
 
 # find_package(catkin REQUIRED genmsg actionlib_msgs actionlib)
 add_action_files(DIRECTORY action FILES DoPerch.action)
@@ -27,7 +47,7 @@ add_service_files(FILES LocalizeObjects.srv)
 
 include_directories(${PROJECT_SOURCE_DIR}/include ${catkin_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
-include_directories(MPI_INCLUDE_PATH)
+#include_directories(MPI_INCLUDE_PATH)
 
 generate_messages(
   DEPENDENCIES
@@ -41,7 +61,8 @@ generate_messages(
 catkin_package(
   CATKIN_DEPENDS roscpp sensor_msgs perception_utils keyboard tf tf_conversions
   sbpl_perception
-  DEPENDS MPI Boost
+  DEPENDS
+  #MPI Boost
   INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
   )
@@ -58,14 +79,20 @@ install(PROGRAMS
 # Ugh, change package name so we can use object_recognition_node as target
 # name.
 add_executable(obj_rec_node src/object_recognition_node.cpp)
-target_link_libraries(obj_rec_node ${PROJECT_NAME} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
+target_link_libraries(obj_rec_node ${PROJECT_NAME}
+  #libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  #libvtkGraphics.so
+  )
 
 add_executable(object_localizer src/object_localizer_service.cpp)
-target_link_libraries(object_localizer ${catkin_LIBRARIES} ${PROJECT_NAME} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
+target_link_libraries(object_localizer ${catkin_LIBRARIES} ${PROJECT_NAME}
+  #libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  #libvtkGraphics.so
+  )
 
 add_executable(object_localizer_client_example
   src/test/object_localizer_client_example.cpp)
-target_link_libraries(object_localizer_client_example ${catkin_LIBRARIES} ${PROJECT_NAME} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
-  libvtkGraphics.so)
+target_link_libraries(object_localizer_client_example ${catkin_LIBRARIES} ${PROJECT_NAME}
+  #libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
+  #libvtkGraphics.so
+  )
