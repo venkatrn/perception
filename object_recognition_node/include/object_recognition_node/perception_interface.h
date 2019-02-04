@@ -40,7 +40,7 @@ class PerceptionInterface
     // Mutators
     pcl::visualization::PCLVisualizer* mutable_viewer() const {return viewer_;}
     pcl::visualization::RangeImageVisualizer* mutable_range_image_viewer() const {return range_image_viewer_;}
-    
+
   private:
     ros::NodeHandle nh_;
     ros::ServiceClient object_localization_client_;
@@ -55,6 +55,7 @@ class PerceptionInterface
     double ymin_, ymax_;
     ros::Publisher pose_pub_;
     ros::Publisher mesh_marker_pub_;
+    ros::Publisher filtered_point_cloud_pub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;
     ros::Subscriber keyboard_sub_;
@@ -74,7 +75,7 @@ class PerceptionInterface
     std::vector<PointCloud> recent_observations_;
 
     sensor_msgs::Image recent_depth_image_;
-    PointCloudPtr recent_cloud_; 
+    PointCloudPtr recent_cloud_;
 
     // Does all the work
     void CloudCBInternal(const PointCloudPtr& original_cloud);

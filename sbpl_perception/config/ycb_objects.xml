@@ -11,9 +11,9 @@
       symmetric (rotationally symmetric about Z-axis)]
       -->
       [004_sugar_box,
-      $(find sbpl_perception)/data/ycb_models/004_sugar_box.ply,
+      $(find sbpl_perception)/data/ycb_models/004_sugar_box_aligned.ply,
       false,
-      false,
+      true,
       1,
       0.06,
       1
@@ -106,7 +106,7 @@
     1,
     0.06,
     1
-    ]
     ] -->
+    ]
   </rosparam>
 </launch>

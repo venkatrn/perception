@@ -43,8 +43,8 @@ using namespace sbpl_perception;
 
 namespace {
 std::vector<std::vector<int>> kColorPalette = {
-  {240, 163, 255}, {0, 117, 220}, {153, 63, 0}, {76, 0, 92}, {25, 25, 25}, {0, 92, 49}, {43, 206, 72}, 
-  {255, 204, 153}, {128, 128, 128}, {148, 255, 181}, {143, 124, 0}, {157, 204, 0}, {194, 0, 136}, 
+  {240, 163, 255}, {0, 117, 220}, {153, 63, 0}, {76, 0, 92}, {25, 25, 25}, {0, 92, 49}, {43, 206, 72},
+  {255, 204, 153}, {128, 128, 128}, {148, 255, 181}, {143, 124, 0}, {157, 204, 0}, {194, 0, 136},
   {0, 51, 128}, {255, 164, 5}, {255, 168, 187}, {66, 102, 0}, {255, 0, 16}, {94, 241, 242}, {0, 153, 143},
   {224, 255, 102}, {116, 10, 255}, {153, 0, 0}, {255, 255, 128}, {255, 255, 0}, {255, 80, 5}};
 } // namespace
@@ -86,6 +86,8 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
                                         this);
   perch_server_.reset(new PerchServer(nh_, "perch_server", false));
   perch_server_->registerGoalCallback(boost::bind(&PerceptionInterface::PERCHGoalCB, this));
+  filtered_point_cloud_pub_ = nh.advertise<sensor_msgs::PointCloud2>("/obj_recognition/filtered_point_cloud", 1);
+
   // perch_server_->registerPreemptCallback(boost::bing(&PerceptionInterface::PreemptCB, this));
   perch_server_->start();
 
@@ -107,7 +109,10 @@ void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
                                   &sensor_cloud) {
 
   if (capture_kinect_ == false) {
+    ROS_ERROR("%s", "Capture kinect false");
     return;
+  } else {
+    ROS_ERROR("%s", "Cloud received");
   }
 
   PointCloudPtr pcl_cloud(new PointCloud);
@@ -229,12 +234,20 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.5);
   pt_filter.filter(*table_removed_cloud);
 
+  sensor_msgs::PointCloud2 output;
+  pcl::PCLPointCloud2 outputPCL;
+  pcl::toPCLPointCloud2( *table_removed_cloud ,outputPCL);
+
+  // Convert to ROS data type
+  pcl_conversions::fromPCL(outputPCL, output);
+  filtered_point_cloud_pub_.publish(output);
+
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
   // table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
   //                                                           coefficients, 0.012, 1000, true);
 
   // std::vector<pcl::ModelCoefficients> model_coefficients;
-  // std::vector<pcl::PointIndices> model_inliers;                         
+  // std::vector<pcl::PointIndices> model_inliers;
   // std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>> regions;
   // perception_utils::OrganizedSegmentation(table_removed_cloud, model_coefficients, model_inliers, &regions);
   // cout << "MPS found " << model_inliers.size() << " planes\n";
