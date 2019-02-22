@@ -1,11 +1,11 @@
 search_resolution_translation: 0.08 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
 
-use_full_object_point_cloud: false
+# use_full_object_point_cloud: true
 
 perch_params:
-  sensor_resolution_radius: 0.01 #m
-  min_neighbor_points_for_valid_pose: 1000 #50
+  sensor_resolution_radius: 0.003 #m
+  min_neighbor_points_for_valid_pose: 500 #50
   min_points_for_constraint_cloud: 50
   max_icp_iterations: 15
   icp_max_correspondence: 0.05 #m #0.075
@@ -16,7 +16,7 @@ perch_params:
   ## Clutter mode
   use_clutter_mode: false
   # Should be in [0,1]
-  clutter_regularizer: 0.0
+  clutter_regularizer: 0
 
   ## Visualization and Debugging
   visualize_expanded_states: true

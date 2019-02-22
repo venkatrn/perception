@@ -214,6 +214,7 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
 
 bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                        ContPose pose, bool after_refinement = false) const {
+
   vector<int> indices;
   vector<float> sqr_dists;
   PointT point;
@@ -256,6 +257,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                                          sqr_dists, perch_params_.min_neighbor_points_for_valid_pose); //0.2
 
   if (num_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
+    // std::cout << "Invalid 1" << endl;
     return false;
   }
 
@@ -273,6 +275,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
     if ((pose.x() - obj_pose.x()) * (pose.x() - obj_pose.x()) +
         (pose.y() - obj_pose.y()) *
         (pose.y() - obj_pose.y()) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
+      // std::cout << "Invalid 2" << endl;
       return false;
     }
   }
@@ -293,6 +296,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
         point.x > env_params_.x_max + kFootprintTolerance ||
         point.y < env_params_.y_min - kFootprintTolerance ||
         point.y > env_params_.y_max + kFootprintTolerance) {
+      // std::cout << "Invalid 3" << endl;
       return false;
     }
   }
@@ -318,6 +322,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                 static_cast<int>(constraint_cloud_->points.size()));
 
     if (num_inside < min_points) {
+      // std::cout << "Invalid 4" << endl;
       return false;
     }
   }
@@ -589,6 +594,7 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
                                                   std::vector<CostComputationInput> &input,
                                                   std::vector<CostComputationOutput> *output,
                                                   bool lazy) {
+  std::cout << "Computing costs in parallel" << endl;
   int count = 0;
   int original_count = 0;
   auto appended_input = input;
@@ -680,6 +686,7 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
   // If root node, we cannot evaluate successors lazily (i.e., need to render
   // all first level states).
   if (source_state_id == env_params_.start_state_id) {
+    std::cout << "Rendering all first level states" << endl;
     GetSuccs(source_state_id, succ_ids, costs);
     true_costs->resize(succ_ids->size(), true);
     return;
@@ -1101,6 +1108,8 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
 
     if (!IsValidPose(source_state, last_object_id,
                      last_object.cont_pose(), true)) {
+      std::cout << "Rejecting pose later";
+
       return -1;
     }
 
@@ -1174,6 +1183,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                   vector<unsigned short> *final_depth_image,
                                   vector<unsigned short> *unadjusted_depth_image) {
 
+  // std::cout << "Getting cost for state with number of objects : " << child_state.NumObjects() << endl;
   assert(child_state.NumObjects() > 0);
 
   *adjusted_child_state = child_state;
@@ -1193,6 +1203,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   PointCloudPtr cloud_out(new PointCloud);
 
   // Begin ICP Adjustment
+  // Computing images after adding objects to scene
   GraphState s_new_obj;
   s_new_obj.AppendObject(ObjectState(last_object_id,
                                      obj_models_[last_object_id].symmetric(), child_pose));
@@ -1244,7 +1255,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // Check again after icp
   if (!IsValidPose(source_state, last_object_id,
                    adjusted_child_state->object_states().back().cont_pose(), true)) {
-    // printf(" state %d is invalid\n ", child_id);
+    printf(" state %d is invalid\n ", source_state);
     // succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
     // final_depth_image->clear();
     // *final_depth_image = depth_image;
@@ -1963,7 +1974,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
     const auto &object_state = object_states[ii];
     ObjectModel obj_model = obj_models_[object_state.id()];
     ContPose p = object_state.cont_pose();
-
+    // std::cout << "Object model in pose : " << p << endl;
     auto transformed_mesh = obj_model.GetTransformedMesh(p);
 
     PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
@@ -2001,6 +2012,10 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
 void EnvObjectRecognition::SetCameraPose(Eigen::Isometry3d camera_pose) {
   env_params_.camera_pose = camera_pose;
   cam_to_world_ = camera_pose;
+  // cam_to_world_.matrix() << -0.000109327,    -0.496186,     0.868216,     0.436204,
+  //                     -1,  5.42467e-05, -9.49191e-05,    0.0324911,
+  //            -4.0826e-10,    -0.868216,    -0.496186,     0.573853,
+  //                      0,            0,            0,            1;
   return;
 }
 
@@ -2075,6 +2090,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   // Project point cloud to table.
   *projected_cloud_ = *observed_cloud_;
 
+  // Aditya
   valid_indices_.clear();
   valid_indices_.reserve(projected_cloud_->size());
 
@@ -2237,7 +2253,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   //   input.model_repetitions.resize(input.model_names.size(), 1);
   // }
 
-
+  std::cout << "Set Input Camera Pose" << endl;
   Eigen::Affine3f cam_to_body;
   cam_to_body.matrix() << 0, 0, 1, 0,
                      -1, 0, 0, 0,
@@ -2247,6 +2263,8 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   Eigen::Affine3f transform;
   transform.matrix() = input.camera_pose.matrix().cast<float>();
   transform = cam_to_body.inverse() * transform.inverse();
+
+  // transforming to camera frame to get depth image
   transformPointCloud(input.cloud, *depth_img_cloud,
                       transform);
 
@@ -2677,16 +2695,17 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
 
           if (!IsValidPose(source_state, ii, p)) {
+            // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
             continue;
           }
-
+          // std::cout << "Valid pose for theta : " << theta << endl;
 
           GraphState s = source_state; // Can only add objects, not remove them
           const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
           s.AppendObject(new_object);
 
           succ_states->push_back(s);
-
+          // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
           // If symmetric object, don't iterate over all thetas
           if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
             break;
@@ -2703,6 +2722,8 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
       }
     }
   }
+
+  std::cout << "Size of successor states : " << succ_states->size() << endl;
 }
 
 bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short>

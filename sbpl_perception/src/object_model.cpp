@@ -68,7 +68,7 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   PointT min_pt, max_pt;
   pcl::getMinMax3D(*cloud_in, min_pt, max_pt);
   double z_translation = min_pt.z;
-
+  std::cout << "Preprocessing Model" << endl;
   // std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl
   //   << max_pt.y - min_pt.y << endl
   //   << max_pt.z - min_pt.z << endl;
@@ -78,7 +78,7 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
 
   // By default, assume cad models are in mm.
   if (mesh_in_mm) {
-    const double kScale = 0.001;
+    const double kScale = 0.01;
     // const double kScale = 0.001 * 0.7; // UGH, chess piece models are
     // off-scale. TODO: add scaling paramater for models in config file.
     transform.scale(kScale);
@@ -89,6 +89,8 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
 
   Eigen::Vector3f translation;
   translation << -x_translation, -y_translation, -z_translation;
+  // Aditya
+  // translation << 0, 0, -z_translation;
   transform.translation() = translation;
 
   transformPointCloud(*cloud_in, *cloud_out, transform);
@@ -209,6 +211,8 @@ ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name,
   pcl::PolygonMesh::Ptr mesh_out(new pcl::PolygonMesh);
   preprocessing_transform_ = PreprocessModel(mesh_in, mesh_out,
                                              kMeshInMillimeters, flipped);
+
+  std::cout << "Preprocess done" << endl;
   mesh_ = *mesh_out;
   symmetric_ = symmetric;
   name_ = name;
@@ -301,6 +305,7 @@ void ObjectModel::SetObjectProperties() {
   // printf("Inflation factor for model %s: %f\n", name_.c_str(), inflation_factor_);
 
   // Rasterize the footprint for fast point-within-footprint checking
+  // Aditya
   const double half_side = (GetCircumscribedRadius() + kMeshAdditiveInflation);
   const int cv_side = static_cast<int>(2.0 * half_side / kFootprintRes);
   footprint_raster_.create(cv_side, cv_side, CV_8UC1);

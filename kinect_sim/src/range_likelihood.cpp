@@ -1028,7 +1028,7 @@ pcl::simulation::RangeLikelihood::getGlobalPoint (int u, int v, float range,
   // world_point[2] = static_cast<float> (transform (2,
   //                                                 0) * pt.coeffRef (0) + transform (2, 1) * pt.coeffRef (1) + transform (2,
   //                                                     2) * pt.coeffRef (2) + transform (2, 3));
-  
+
   // world_point << pc.points[0].x, pc.points[0].y, pc.points[0].z;
 
 }

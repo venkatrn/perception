@@ -29,11 +29,11 @@
 # camera_zfar: 20.0
 
 # RealSense 2
-camera_width: 1920
-camera_height: 1080
-camera_fx: 574.8859643503413
-camera_fy: 573.0964762770437
-camera_cx: 319.217523786758
-camera_cy: 242.3030820452889
-camera_znear: 0.01
+camera_width: 640
+camera_height: 480
+camera_fx: 619.274
+camera_fy: 619.361
+camera_cx: 324.285
+camera_cy: 238.717
+camera_znear: 0.1
 camera_zfar: 20.0

@@ -276,10 +276,20 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   tf::StampedTransform transform;
   tf_listener_.lookupTransform(reference_frame_.c_str(),
                                camera_frame_.c_str(), ros::Time(0.0), transform);
-  Eigen::Affine3d camera_pose;
+  Eigen::Isometry3d camera_pose;
   tf::transformTFToEigen(transform, camera_pose);
+  std::cout << "Camera Pose" << endl;
   std::cout << camera_pose.matrix() << endl;
 
+
+  tf_listener_.lookupTransform(reference_frame_.c_str(),
+                               "/camera_color_optical_frame", ros::Time(0.0), transform);
+  printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
+      transform.getOrigin().y(), transform.getOrigin().z());
+  Eigen::Isometry3d camera_to_world_pose;
+  tf::transformTFToEigen(transform, camera_to_world_pose);
+  std::cout << "Camera To World Pose" << endl;
+  std::cout << camera_to_world_pose.matrix() << endl;
   // string output_dir = ros::package::getPath("object_recognition_node");
   // static int image_count = 0;
   // string output_image_name = string("frame_") + std::to_string(image_count);
@@ -378,9 +388,9 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       marker.action = visualization_msgs::Marker::ADD;
       marker.pose.position = pose.position;
       marker.pose.orientation = pose.orientation;
-      marker.scale.x = 1.0;
-      marker.scale.y = 1.0;
-      marker.scale.z = 1.0;
+      marker.scale.x = 0.01;
+      marker.scale.y = 0.01;
+      marker.scale.z = 0.01;
       marker.color.a = 0.8; // Don't forget to set the alpha!
       marker.color.r = red;
       marker.color.g = green;
@@ -422,7 +432,9 @@ void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
                                              &object_name) {
   cout << "[Perception Interface]: Got request to identify " << object_name.data
        << endl;
-  latest_requested_objects_ = vector<string>({object_name.data});
+  // latest_requested_objects_ = vector<string>({object_name.data});
+  // latest_requested_objects_ = {"004_sugar_box", "035_power_drill"};
+  latest_requested_objects_ = {"crate"};
   capture_kinect_ = true;
   recent_observations_.clear();
   return;

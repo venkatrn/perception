@@ -1,5 +1,5 @@
 <launch>
-  <param name="mesh_in_mm" value="false"/>
+  <param name="mesh_in_mm" value="True"/>
   <rosparam param="model_bank" subst_value="True">
 
     [
@@ -13,15 +13,15 @@
       [crate,
       $(find sbpl_perception)/data/crate/crate_full.ply,
       false,
-      true,
+      false,
       1,
       0.06,
       1
       ],
-      [004_sugar_box,
-      $(find sbpl_perception)/data/ycb_models/004_sugar_box_aligned.ply,
+      <!-- [004_sugar_box,
+      $(find sbpl_perception)/data/ycb_models/004_sugar_box.ply,
       false,
-      true,
+      false,
       1,
       0.06,
       1
@@ -34,7 +34,7 @@
       1,
       0.06,
       1
-      ],
+      ], -->
     ]
   </rosparam>
 </launch>

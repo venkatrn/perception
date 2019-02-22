@@ -7,14 +7,14 @@ using namespace pcl::simulation;
 
 // Initialize to some default values, but allow users to change elsewhere.
 // Parameters for MS Kinect V1.0
-int kCameraWidth = 640;
-int kCameraHeight = 480;
-float kCameraFX = 576.09757860f;
-float kCameraFY = 576.09757860f;
-float kCameraCX = 321.06398107f;
-float kCameraCY = 242.97676897f;
-float kZNear = 0.1f;
-float kZFar = 20.0f;
+// int kCameraWidth = 640;
+// int kCameraHeight = 480;
+// float kCameraFX = 576.09757860f;
+// float kCameraFY = 576.09757860f;
+// float kCameraCX = 321.06398107f;
+// float kCameraCY = 242.97676897f;
+// float kZNear = 0.1f;
+// float kZFar = 20.0f;
 
 // Parameters for MS Kinect V2.0
 // APC: these values are from calib_ir.yaml
@@ -26,6 +26,16 @@ float kZFar = 20.0f;
 // float kCameraCY = 205.37746288838397f;
 // float kZNear = 0.1f;
 // float kZFar = 20.0f;
+
+// Realsense
+int kCameraWidth = 640;
+int kCameraHeight = 480;
+float kCameraFX = 619.274f;
+float kCameraFY = 619.361f;
+float kCameraCX = 324.285f;
+float kCameraCY = 238.717f;
+float kZNear = 0.1f;
+float kZFar = 20.0f;
 
 void
 pcl::simulation::Camera::move (double vx, double vy, double vz)
@@ -48,7 +58,7 @@ pcl::simulation::Camera::updatePose ()
 
   pose_.setIdentity ();
   pose_ *= m;
-  
+
   Vector3d v;
   v << x_, y_, z_;
   pose_.translation () = v;

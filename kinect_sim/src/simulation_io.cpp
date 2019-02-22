@@ -56,6 +56,9 @@ pcl::simulation::SimExample::SimExample(int argc, char **argv,
   camera_->set(0.471703, 1.59862, 3.10937, 0, 0.418879, -12.2129);
   camera_->setPitch(0.418879); // not sure why this is here:
 
+  // Aditya
+  // camera_->set(0.436, 0.032, 0.574, -2.090, 0.000, -1.571);
+
   for (int i = 0; i < 2048; i++) {
     float v = i / 2048.0;
     v = powf(v, 3) * 6;
@@ -118,15 +121,15 @@ pcl::simulation::SimExample::doSim (Eigen::Isometry3d pose_in) {
   int n = 1;
   poses.push_back (pose_in);
   rl_->computeLikelihoods (reference, poses, scores);
-  /*
-  std::cout << "camera: " << camera_->getX ()
-       << " " << camera_->getY ()
-       << " " << camera_->getZ ()
-       << " " << camera_->getRoll ()
-       << " " << camera_->getPitch ()
-       << " " << camera_->getYaw ()
-       << std::endl;
-       */
+
+  // std::cout << "camera: " << camera_->getX ()
+  //      << " " << camera_->getY ()
+  //      << " " << camera_->getZ ()
+  //      << " " << camera_->getRoll ()
+  //      << " " << camera_->getPitch ()
+  //      << " " << camera_->getYaw ()
+  //      << std::endl;
+
 
   delete [] reference;
 }
@@ -472,6 +475,3 @@ pcl::simulation::SimExample::write_rgb_image(const uint8_t *rgb_buffer,
 
   delete [] rgb_img;
 }
-
-
-
