@@ -15,7 +15,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
 # set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 #set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
 
+
+find_package(ZLIB)
+include_directories(${ZLIB_INCLUDE_DIRS})
 # Load catkin and all dependencies required for this package
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
@@ -25,7 +29,9 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib
   sbpl
+  rospy
   sbpl_utils)
+
 
 
 #find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
@@ -77,6 +83,8 @@ include_directories(include ${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS}
 set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
 include_directories(${MPI_ROOT}/include)
 
+
+
 catkin_package(
   CATKIN_DEPENDS
     cv_bridge
@@ -87,6 +95,7 @@ catkin_package(
     roslib
     sbpl
     sbpl_utils
+    rospy
   DEPENDS
     # OpenCV
     #MPI
@@ -117,7 +126,7 @@ add_library(${PROJECT_NAME}
 #        ${MPI_ROOT}/lib/libmpi.so)
 #message(WARNING ${catkin_LIBRARIES})
 
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES}
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES}
   #${MPI_CXX_LIBRARIES}
   #${PCL_LIBRARIES} ${OpenCV_LIBRARIES} /usr/lib/libvtkCommon.so.5.10 /usr/lib/libvtkFiltering.so.5.10 /usr/lib/libvtkRendering.so.5.10 /usr/lib/libvtkIO.so.5.10
   # ${MPI_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
@@ -217,4 +226,10 @@ install(TARGETS demo
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+catkin_install_python(
+  PROGRAMS
+  src/scripts/render_poses.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

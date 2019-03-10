@@ -24,6 +24,7 @@
   <build_depend>sbpl</build_depend>
   <build_depend>sbpl_utils</build_depend>
   <build_depend>libpcl-all-dev</build_depend>
+  <build_depend>rospy</build_depend>
   <!-- <build_depend>libfcl&#45;dev</build_depend> -->
   <!-- <build_depend>libccd&#45;dev</build_depend> -->
 
@@ -38,6 +39,7 @@
   <run_depend>sbpl_utils</run_depend>
   <run_depend>libpcl-all</run_depend>
   <run_depend>libpcl-all-dev</run_depend>
+  <run_depend>rospy</run_depend>
   <!-- <run_depend>libfcl&#45;dev</run_depend> -->
   <!-- <run_depend>libccd&#45;dev</run_depend> -->
 

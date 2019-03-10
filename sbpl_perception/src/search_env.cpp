@@ -2255,6 +2255,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
 
   std::cout << "Set Input Camera Pose" << endl;
   Eigen::Affine3f cam_to_body;
+  // Rotate things by 90 to put in camera optical frame
   cam_to_body.matrix() << 0, 0, 1, 0,
                      -1, 0, 0, 0,
                      0, -1, 0, 0,
@@ -2281,6 +2282,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     writer.writeBinary (ss.str()  , *original_input_cloud_);
   }
 
+  // Write input depth image to folder
   SetObservation(input.model_names.size(), depth_image);
 
   // Precompute RCNN heuristics.
