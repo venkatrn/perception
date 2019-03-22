@@ -21,6 +21,17 @@ ContPose::ContPose(double x, double y, double z, double roll, double pitch,
   yaw_(angles::normalize_angle_positive(yaw)) {
 };
 
+ContPose::ContPose(int external_pose_id, std::string external_render_path,
+                   double x, double y, double z, double roll, double pitch,
+                   double yaw) :
+  external_pose_id_(external_pose_id),
+  external_render_path_(external_render_path),
+  x_(x), y_(y), z_(z),
+  roll_(angles::normalize_angle_positive(roll)),
+  pitch_(angles::normalize_angle_positive(pitch)),
+  yaw_(angles::normalize_angle_positive(yaw)) {
+};
+
 ContPose::ContPose(const DiscPose &disc_pose) {
   x_ = DiscretizationManager::DiscXToContX(disc_pose.x());
   y_ = DiscretizationManager::DiscYToContY(disc_pose.y());

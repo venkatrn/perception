@@ -1,6 +1,6 @@
 # The *organized* point cloud in world frame (we assume world frame is gravity
 # aligned, i.e, negative z-axis is same as gravity direction).
-sensor_msgs/PointCloud2 input_organized_cloud 
+sensor_msgs/PointCloud2 input_organized_cloud
 
 # The IDs of the objects present in the scene.
 string[] object_ids
@@ -16,18 +16,20 @@ float64 x_min
 float64 x_max
 float64 y_min
 float64 y_max
-# Z-value of the support surface on which objects are resting. 
+# Z-value of the support surface on which objects are resting.
 # TODO: This should be replace by z_min and z_max when we add support for 6 DoF pose.
 float64 support_surface_height
 
 # Optional directory containing precomputed heuristics for this input (see
-# sbpl_perception/utils/utils.h for more details). 
+# sbpl_perception/utils/utils.h for more details).
 string heuristics_dir
 
 # Optional constraint point cloud (see
-# sbpl_perception/utils/utils.h for more details). 
-sensor_msgs/PointCloud2 constraint_cloud 
+# sbpl_perception/utils/utils.h for more details).
+sensor_msgs/PointCloud2 constraint_cloud
 
+
+string reference_frame_
 ---
 
 # An array of 4x4 homogeneous matrix transformations from 3D model to object pose in the

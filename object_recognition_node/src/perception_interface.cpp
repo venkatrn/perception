@@ -74,7 +74,7 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
 
   model_bank_ = ModelBankFromList(model_bank_list);
 
-  pose_pub_ = nh.advertise<geometry_msgs::Pose>("perch_pose", 1);
+  pose_pub_ = nh.advertise<geometry_msgs::PoseStamped>("perch_pose", 1);
   mesh_marker_pub_ = nh.advertise<visualization_msgs::Marker>("perch_marker", 1);
   cloud_sub_ = nh.subscribe("input_cloud", 1, &PerceptionInterface::CloudCB,
                             this);
@@ -282,14 +282,14 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   std::cout << camera_pose.matrix() << endl;
 
 
-  tf_listener_.lookupTransform(reference_frame_.c_str(),
-                               "/camera_color_optical_frame", ros::Time(0.0), transform);
-  printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
-      transform.getOrigin().y(), transform.getOrigin().z());
-  Eigen::Isometry3d camera_to_world_pose;
-  tf::transformTFToEigen(transform, camera_to_world_pose);
-  std::cout << "Camera To World Pose" << endl;
-  std::cout << camera_to_world_pose.matrix() << endl;
+  // tf_listener_.lookupTransform(reference_frame_.c_str(),
+  //                              "/camera_color_optical_frame", ros::Time(0.0), transform);
+  // printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
+  //     transform.getOrigin().y(), transform.getOrigin().z());
+  // Eigen::Isometry3d camera_to_world_pose;
+  // tf::transformTFToEigen(transform, camera_to_world_pose);
+  // std::cout << "Camera To World Pose" << endl;
+  // std::cout << camera_to_world_pose.matrix() << endl;
   // string output_dir = ros::package::getPath("object_recognition_node");
   // static int image_count = 0;
   // string output_image_name = string("frame_") + std::to_string(image_count);
@@ -322,6 +322,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.y_max = ymax_;
   req.support_surface_height = table_height_;
   req.object_ids = latest_requested_objects_;
+  req.reference_frame_ = reference_frame_;
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
@@ -374,9 +375,11 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       viewer_->setPointCloudRenderingProperties(
         pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
 
-      geometry_msgs::Pose pose;
-      tf::poseEigenToMsg(object_transform, pose);
-      latest_object_poses_[ii] = pose;
+      geometry_msgs::PoseStamped msg;
+      msg.header.frame_id = reference_frame_;
+      msg.header.stamp = ros::Time::now();
+      tf::poseEigenToMsg(object_transform, msg.pose);
+      latest_object_poses_[ii] = msg.pose;
 
       // Publish the mesh marker
       visualization_msgs::Marker marker;
@@ -386,8 +389,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       marker.id = ii;
       marker.type = visualization_msgs::Marker::MESH_RESOURCE;
       marker.action = visualization_msgs::Marker::ADD;
-      marker.pose.position = pose.position;
-      marker.pose.orientation = pose.orientation;
+      marker.pose.position = msg.pose.position;
+      marker.pose.orientation = msg.pose.orientation;
       marker.scale.x = 0.01;
       marker.scale.y = 0.01;
       marker.scale.z = 0.01;
@@ -401,7 +404,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 
       // TODO: generalize to mutliple objects
       if (ii == 0) {
-        pose_pub_.publish(pose);
+        pose_pub_.publish(msg);
       }
     }
 

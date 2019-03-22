@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
   camera_pose.matrix() <<
                           0.868216,  0.000109327,     0.496186,     0.436202,
                         -9.49191e-05,            1, -5.42467e-05,    0.0174911,
-                         -0.496186,  4.05831e-10,     0.868216,     0.573853,
+                         -0.496186,  4.05831e-10,     0.868216,     0.709983,
                                  0,            0,            0,            1;
   // const string demo_pcd_file = ros::package::getPath("sbpl_perception") +
                                // "/demo/demo_pointcloud.pcd";
@@ -66,20 +66,21 @@ int main(int argc, char **argv) {
 
   RecognitionInput input;
   // Set the bounds for the the search space (in world frame).
-  // input.x_min = -0.179464;
-  // input.x_max = 0.141014;
-  // input.y_min = -0.397647;
-  // input.y_max = 0.0103991;
-  input.x_min = 0.80;
-  input.x_max = 1.29;
-  input.y_min = -0.3;
-  input.y_max = 0.3;
-  input.table_height = -0.075;
+
+  ros::NodeHandle nh("~");
+  nh.param("x_min", input.x_min, 0.0);
+  nh.param("x_max", input.x_max, 0.0);
+  nh.param("y_min", input.y_min, 0.0);
+  nh.param("y_max", input.y_max, 0.0);
+  nh.param("table_height", input.table_height, 0.0);
+  nh.param("use_external_render", input.use_external_render, 0);
+
   // Set the camera pose, list of models in the scene, and the preprocessed
   // point cloud.
   input.camera_pose = camera_pose;
   // input.model_names = vector<string>({"tilex_spray", "tide", "glass_7"});
-  input.model_names = vector<string>({"004_sugar_box", "035_power_drill"});
+  // input.model_names = vector<string>({"004_sugar_box", "035_power_drill"});
+  input.model_names = vector<string>({"004_sugar_box"});
   // input.model_names = vector<string>({"crate"});
   input.cloud = *cloud_in;
 

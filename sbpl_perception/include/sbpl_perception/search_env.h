@@ -43,6 +43,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include <ros/ros.h>
+
 namespace sbpl_perception {
 
 struct EnvConfig {
@@ -60,6 +62,7 @@ struct EnvParams {
   int goal_state_id, start_state_id;
   int num_objects; // This is the number of objects on the table
   int num_models; // This is the number of models available (can be more or less than number of objects on table
+  int use_external_render;
 };
 
 struct PERCHParams {
@@ -252,16 +255,25 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // TODO: Make these private
   std::unique_ptr<RCNNHeuristicFactory> rcnn_heuristic_factory_;
   Heuristics rcnn_heuristics_;
+
+  PointCloudPtr GetGravityAlignedPointCloud(
+    const vector<unsigned short> &depth_image, uint8_t rgb[3]);
+
   PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short>
                                             &depth_image);
   PointCloudPtr GetGravityAlignedOrganizedPointCloud(const
                                                      std::vector<unsigned short>
                                                      &depth_image);
 
+  void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id);
+
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
 
  private:
+
+  ros::Publisher render_point_cloud_topic;
+  // ros::Rate loop_rate;
 
   std::vector<ObjectModel> obj_models_;
   pcl::simulation::Scene::Ptr scene_;

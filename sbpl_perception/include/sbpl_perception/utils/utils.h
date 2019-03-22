@@ -62,6 +62,10 @@ struct RecognitionInput {
   // TODO: generalize this as a per-object heuristic instead for the
   // multi-object case.
   PointCloud constraint_cloud;
+
+  int use_external_render;
+
+  std::string reference_frame_;
 };
 
 // A container for the holding the meta-data associated with a 3D model.

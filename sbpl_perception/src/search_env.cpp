@@ -49,7 +49,7 @@ constexpr bool kUseDepthSensitiveCost = false;
 // The multiplier used in the above definition.
 constexpr double kDepthSensitiveCostMultiplier = 100.0;
 // If true, we will use a normalized outlier cost function.
-constexpr bool kNormalizeCost = false;
+constexpr bool kNormalizeCost = true;
 // When use_clutter is true, we will treat every pixel that is not within
 // the object volume as an extraneous occluder if its depth is less than
 // depth(rendered pixel) - kOcclusionThreshold.
@@ -104,6 +104,11 @@ EnvObjectRecognition::EnvObjectRecognition(const
     }
 
     ros::NodeHandle private_nh("~perch_params");
+
+
+    // ros::NodeHandle nh_;
+    render_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/rendered_point_cloud", 1);
+
     private_nh.param("sensor_resolution_radius", perch_params_.sensor_resolution,
                      0.003);
     private_nh.param("min_neighbor_points_for_valid_pose",
@@ -370,8 +375,16 @@ void EnvObjectRecognition::LabelEuclideanClusters() {
   cv::imwrite(fname.c_str(), c_image);
 }
 
+
+bool compareCostComputationOutput(CostComputationOutput i1, CostComputationOutput i2)
+{
+    return (i1.cost < i2.cost);
+}
+
 void EnvObjectRecognition::GetSuccs(int source_state_id,
                                     vector<int> *succ_ids, vector<int> *costs) {
+
+  printf("GetSuccs() for state\n");
   succ_ids->clear();
   costs->clear();
 
@@ -447,6 +460,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
                          false);
 
+  // Sort in increasing order of cost
+  std::sort(cost_computation_output.begin(), cost_computation_output.end(), compareCostComputationOutput);
 
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
@@ -519,13 +534,15 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   }
 
   //--------------------------------------//
-
+  int min_cost = 9999999999;
+  PointCloudPtr min_cost_point_cloud;
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
 
     if (candidate_costs[ii] == -1) {
       continue;  // Invalid successor
     }
+
 
     if (IsGoalState(candidate_succs[ii])) {
       succ_ids->push_back(env_params_.goal_state_id);
@@ -541,6 +558,12 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       ss.precision(20);
       ss << debug_dir_ + "succ_" << candidate_succ_ids[ii] << ".png";
       PrintImage(ss.str(), output_unit.depth_image);
+
+      uint8_t rgb[3] = {255,0,0};
+      auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
+                                           output_unit.depth_image, rgb);
+      PrintPointCloud(gravity_aligned_point_cloud, candidate_succ_ids[ii]);
+
       printf("State %d,       %d      %d      %d      %d      %d\n",
              candidate_succ_ids[ii],
              output_unit.state_properties.target_cost,
@@ -549,14 +572,37 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
              candidate_costs[ii],
              g_value_map_[candidate_succ_ids[ii]]);
 
-      // auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
-      //                                      output_unit.depth_image);
+      if (candidate_costs[ii] < min_cost)
+      {
+         min_cost = candidate_costs[ii];
+         rgb[0] = 0;
+         rgb[1] = 255;
+         rgb[2] = 0;
+         min_cost_point_cloud = GetGravityAlignedPointCloud(
+                                              output_unit.depth_image, rgb);
+      }
       // std::stringstream cloud_ss;
       // cloud_ss.precision(20);
       // cloud_ss << debug_dir_ + "cloud_" << candidate_succ_ids[ii] << ".pcd";
       // pcl::PCDWriter writer;
       // writer.writeBinary (cloud_ss.str()  , *gravity_aligned_point_cloud);
+      //
+      // sensor_msgs::PointCloud2 output;
+      // pcl::PCLPointCloud2 outputPCL;
+      // pcl::toPCLPointCloud2( *gravity_aligned_point_cloud ,outputPCL);
+      //
+      // // Convert to ROS data type
+      // pcl_conversions::fromPCL(outputPCL, output);
+      // output.header.frame_id = "base_footprint";
+      //
+      // render_point_cloud_topic.publish(output);
+      // ros::spinOnce();
     }
+  }
+
+  if (image_debug_) {
+      printf("Point cloud with least cost has cost value : %f\n", min_cost);
+      PrintPointCloud(min_cost_point_cloud, -1);
   }
 
   // cache succs and costs
@@ -579,6 +625,28 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   // PrintState(source_state_id, fname);
 }
 
+void EnvObjectRecognition::PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id)
+{
+    std::stringstream cloud_ss;
+    cloud_ss.precision(20);
+    cloud_ss << debug_dir_ + "cloud_" << state_id << ".pcd";
+    pcl::PCDWriter writer;
+    writer.writeBinary (cloud_ss.str(), *gravity_aligned_point_cloud);
+
+    sensor_msgs::PointCloud2 output;
+
+    pcl::PCLPointCloud2 outputPCL;
+    pcl::toPCLPointCloud2( *gravity_aligned_point_cloud ,outputPCL);
+
+    // Convert to ROS data type
+    pcl_conversions::fromPCL(outputPCL, output);
+    output.header.frame_id = "base_footprint";
+
+    render_point_cloud_topic.publish(output);
+    ros::spinOnce();
+    ros::Rate loop_rate(5);
+    loop_rate.sleep();
+}
 int EnvObjectRecognition::GetBestSuccessorID(int state_id) {
   const auto &succ_costs = cost_cache[state_id];
   assert(!succ_costs.empty());
@@ -1175,6 +1243,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   return total_cost;
 }
 
+
 int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                   const GraphState &child_state,
                                   const vector<unsigned short> &source_depth_image,
@@ -1183,7 +1252,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                   vector<unsigned short> *final_depth_image,
                                   vector<unsigned short> *unadjusted_depth_image) {
 
-  // std::cout << "Getting cost for state with number of objects : " << child_state.NumObjects() << endl;
+  std::cout << "GetCost() : Getting cost for state with number of objects : " << child_state.NumObjects() << endl;
   assert(child_state.NumObjects() > 0);
 
   *adjusted_child_state = child_state;
@@ -1290,6 +1359,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // Create point cloud (cloud_out) corresponding to new pixels.
   cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
 
+  // if (image_debug_) {
+  //   PrintPointCloud(cloud_out, last_object_id);
+  // }
   // Cache the min and max depths
   child_properties->last_min_depth = succ_min_depth;
   child_properties->last_max_depth = succ_max_depth;
@@ -1299,6 +1371,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                           env_params_.num_objects;
   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
   target_cost = GetTargetCost(cloud_out);
+
 
   // source_cost = GetSourceCost(succ_cloud,
   //                             adjusted_child_state->object_states().back(),
@@ -1337,18 +1410,22 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // pcl::PCDWriter writer;
   // writer.writeBinary (cloud_ss.str()  , *succ_cloud);
 
-  // if (image_debug_) {
-  //   std::stringstream ss1, ss2, ss3;
-  //   ss1.precision(20);
-  //   ss2.precision(20);
-  //   ss1 << debug_dir_ + "cloud_" << child_id << ".pcd";
-  //   ss2 << debug_dir_ + "cloud_aligned_" << child_id << ".pcd";
-  //   ss3 << debug_dir_ + "cloud_succ_" << child_id << ".pcd";
-  //   pcl::PCDWriter writer;
-  //   writer.writeBinary (ss1.str()  , *cloud_in);
-  //   writer.writeBinary (ss2.str()  , *cloud_out);
-  //   writer.writeBinary (ss3.str()  , *succ_cloud);
-  // }
+  if (image_debug_) {
+    // cloud_out = GetGravityAlignedPointCloud(*final_depth_image);
+    // PrintPointCloud(cloud_out, last_object_id);
+
+    // PrintImage("Test", depth_image);
+    // std::stringstream ss1, ss2, ss3;
+    // ss1.precision(20);
+    // ss2.precision(20);
+    // ss1 << debug_dir_ + "cloud_" << child_id << ".pcd";
+    // ss2 << debug_dir_ + "cloud_aligned_" << child_id << ".pcd";
+    // ss3 << debug_dir_ + "cloud_succ_" << child_id << ".pcd";
+    // pcl::PCDWriter writer;
+    // writer.writeBinary (ss1.str()  , *cloud_in);
+    // writer.writeBinary (ss2.str()  , *cloud_out);
+    // writer.writeBinary (ss3.str()  , *succ_cloud);
+  }
 
   return total_cost;
 }
@@ -1564,7 +1641,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       }
     }
 
-    // printf("Points inside: %zu, total points: %zu\n", indices_to_consider.size(), eig_points.size());
+    printf("Points inside: %zu, total points: %zu\n", indices_to_consider.size(), eig_points.size());
 
     // The points within the inscribed cylinder are the ones made
     // "infeasible".
@@ -1651,6 +1728,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
   return source_cost;
 }
 
+
+
 int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
                                            full_rendered_cloud,
                                            const ObjectState &last_object,
@@ -1720,7 +1799,8 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
 }
 
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
-  const vector<unsigned short> &depth_image) {
+  const vector<unsigned short> &depth_image, uint8_t rgb[3]) {
+
   PointCloudPtr cloud(new PointCloud);
 
   for (int ii = 0; ii < kNumPixels; ++ii) {
@@ -1731,7 +1811,10 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
 
     vector<int> indices;
     vector<float> sqr_dists;
-    PointT point;
+    pcl::PointXYZRGB point;
+
+    uint32_t rgbc = ((uint32_t)rgb[0] << 16 | (uint32_t)rgb[1] << 8 | (uint32_t)rgb[2]);
+    point.rgb = *reinterpret_cast<float*>(&rgbc);
 
     // int u = kDepthImageWidth - ii % kDepthImageWidth;
     int u = ii % kDepthImageWidth;
@@ -1755,6 +1838,14 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   cloud->height = cloud->points.size();
   cloud->is_dense = false;
   return cloud;
+}
+
+PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
+  const vector<unsigned short> &depth_image) {
+    PointCloudPtr cloud(new PointCloud);
+    uint8_t rgb[3] = {255,0,0};
+    cloud = GetGravityAlignedPointCloud(depth_image, rgb);
+    return cloud;
 }
 
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedOrganizedPointCloud(
@@ -1969,44 +2060,112 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   scene_->clear();
 
   const auto &object_states = s.object_states();
+  // cout << "External Render :" << env_params_.use_external_render;
+  if (env_params_.use_external_render == 0)
+  {
+      for (size_t ii = 0; ii < object_states.size(); ++ii) {
+        const auto &object_state = object_states[ii];
+        ObjectModel obj_model = obj_models_[object_state.id()];
+        ContPose p = object_state.cont_pose();
+        // std::cout << "Object model in pose : " << p << endl;
+        auto transformed_mesh = obj_model.GetTransformedMesh(p);
 
-  for (size_t ii = 0; ii < object_states.size(); ++ii) {
-    const auto &object_state = object_states[ii];
-    ObjectModel obj_model = obj_models_[object_state.id()];
-    ContPose p = object_state.cont_pose();
-    // std::cout << "Object model in pose : " << p << endl;
-    auto transformed_mesh = obj_model.GetTransformedMesh(p);
-
-    PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
-                                                           GL_POLYGON, transformed_mesh));
-    scene_->add (model);
-  }
-
-  kinect_simulator_->doSim(env_params_.camera_pose);
-  const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
-  kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
-
-  // kinect_simulator_->get_depth_image_cv(depth_buffer, depth_image);
-  // cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
-  // if (mpi_comm_->rank() == kMasterRank) {
-  //   static cv::Mat c_image;
-  //   ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
-  //   cv::imshow("depth image", c_image);
-  //   cv::waitKey(1);
-  // }
-
-  // Consider occlusions from non-modeled objects.
-  if (perch_params_.use_clutter_mode) {
-    for (size_t ii = 0; ii < depth_image->size(); ++ii) {
-      if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) &&
-          depth_image->at(ii) != kKinectMaxDepth) {
-        depth_image->at(ii) = kKinectMaxDepth;
-        (*num_occluders_in_input_cloud)++;
+        PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
+                                                               GL_POLYGON, transformed_mesh));
+        scene_->add (model);
       }
-    }
-  }
 
-  return depth_buffer;
+      kinect_simulator_->doSim(env_params_.camera_pose);
+      const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
+      kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
+
+
+      // kinect_simulator_->get_depth_image_cv(depth_buffer, depth_image);
+      // cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
+      // if (mpi_comm_->rank() == kMasterRank) {
+      //   static cv::Mat c_image;
+      //   ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
+      //   cv::imshow("depth image", c_image);
+      //   cv::waitKey(1);
+      // }
+
+      // Consider occlusions from non-modeled objects.
+      if (perch_params_.use_clutter_mode) {
+        for (size_t ii = 0; ii < depth_image->size(); ++ii) {
+          if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) &&
+              depth_image->at(ii) != kKinectMaxDepth) {
+            depth_image->at(ii) = kKinectMaxDepth;
+            (*num_occluders_in_input_cloud)++;
+          }
+        }
+      }
+
+      return depth_buffer;
+  }
+  else
+  {
+      // const float *depth_buffer;
+      for (size_t ii = 0; ii < object_states.size(); ++ii) {
+        const auto &object_state = object_states[ii];
+        ObjectModel obj_model = obj_models_[object_state.id()];
+        ContPose p = object_state.cont_pose();
+        std::stringstream ss;
+        // cout << p.external_render_path();
+        ss << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
+        std::string image_path = ss.str();
+        printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+
+        cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+        // if (mpi_comm_->rank() == kMasterRank) {
+          // static cv::Mat c_image;
+          // ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
+        cv::imshow("color image", cv_color_image);
+        cv::waitKey(1);
+
+        // cv::Mat cv_depth_image = cv::imread(image_path, -1);
+        // depth_image = cv_depth_image.ptr<unsigned short>();;
+        // }
+      }
+
+      for (size_t ii = 0; ii < object_states.size(); ++ii) {
+        const auto &object_state = object_states[ii];
+        ObjectModel obj_model = obj_models_[object_state.id()];
+        ContPose p = object_state.cont_pose();
+        // std::cout << "Object model in pose : " << p << endl;
+        auto transformed_mesh = obj_model.GetTransformedMesh(p);
+
+        PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
+                                                               GL_POLYGON, transformed_mesh));
+        scene_->add (model);
+      }
+
+      kinect_simulator_->doSim(env_params_.camera_pose);
+      const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
+      kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
+
+      //
+      // kinect_simulator_->get_depth_image_cv(depth_buffer, depth_image);
+      // cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
+      // if (mpi_comm_->rank() == kMasterRank) {
+      //   static cv::Mat c_image;
+      //   ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
+      //   cv::imshow("depth image", c_image);
+      //   cv::waitKey(1);
+      // }
+
+      // Consider occlusions from non-modeled objects.
+      if (perch_params_.use_clutter_mode) {
+        for (size_t ii = 0; ii < depth_image->size(); ++ii) {
+          if (observed_depth_image_[ii] < (depth_image->at(ii) - kOcclusionThreshold) &&
+              depth_image->at(ii) != kKinectMaxDepth) {
+            depth_image->at(ii) = kKinectMaxDepth;
+            (*num_occluders_in_input_cloud)++;
+          }
+        }
+      }
+
+      return depth_buffer;
+  }
 };
 
 void EnvObjectRecognition::SetCameraPose(Eigen::Isometry3d camera_pose) {
@@ -2239,6 +2398,8 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
 void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   ResetEnvironmentState();
 
+
+
   LoadObjFiles(model_bank_, input.model_names);
   SetBounds(input.x_min, input.x_max, input.y_min, input.y_max);
   SetTableHeight(input.table_height);
@@ -2246,7 +2407,9 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   ResetEnvironmentState();
   *original_input_cloud_ = input.cloud;
   *constraint_cloud_ = input.constraint_cloud;
+  env_params_.use_external_render = input.use_external_render;
 
+  printf("External Render : %d\n", env_params_.use_external_render);
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
   // if (input.model_repetitions.empty()) {
@@ -2317,6 +2480,8 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
                                                 const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
+
+   printf("GetICPAdjustedPose()\n");
   *pose_out = pose_in;
 
   pcl::IterativeClosestPointNonLinear<PointT, PointT> icp;
@@ -2385,7 +2550,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     double sin_term = sin(yaw1 + yaw2);
     double total_yaw = atan2(sin_term, cos_term);
 
-    *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], 0.0, 0.0, total_yaw);
+    *pose_out = ContPose(pose_in.external_pose_id(), pose_in.external_render_path(), vec_out[0], vec_out[1], vec_out[2], 0.0, 0.0, total_yaw);
     // printf("Old yaw: %f, New yaw: %f\n", pose_in.theta, pose_out->theta);
     // printf("Old xy: %f %f, New xy: %f %f\n", pose_in.x, pose_in.y, pose_out->x, pose_out->y);
 
@@ -2670,6 +2835,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     });
 
     if (it != source_object_states.end()) {
+      printf("ERROR:Didnt generate any successor\n");
       continue;
     }
 
@@ -2687,41 +2853,108 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     const double res = perch_params_.use_adaptive_resolution ?
                        obj_models_[ii].GetInscribedRadius() : search_resolution;
 
-    for (double x = env_params_.x_min; x <= env_params_.x_max;
-         x += res) {
-      for (double y = env_params_.y_min; y <= env_params_.y_max;
-           y += res) {
-        // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
-        for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-          // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
-          ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
+    if (env_params_.use_external_render == 1)
+    {
+        printf("States for model : %s\n", obj_models_[ii].name().c_str());
+        string render_states_dir;
+        string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
 
-          if (!IsValidPose(source_state, ii, p)) {
-            // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
-            continue;
-          }
-          // std::cout << "Valid pose for theta : " << theta << endl;
+        std::stringstream ss;
+        ss << render_states_path << "/" << obj_models_[ii].name();
+        render_states_dir = ss.str();
+        std::stringstream sst;
+        sst << render_states_path << "/" << obj_models_[ii].name() << "/" << "poses.txt";
+        render_states_path = sst.str();
+        printf("Path for rendered states : %s\n", render_states_path.c_str());
 
-          GraphState s = source_state; // Can only add objects, not remove them
-          const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
-          s.AppendObject(new_object);
+        std::ifstream file(render_states_path);
 
-          succ_states->push_back(s);
-          // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
-          // If symmetric object, don't iterate over all thetas
-          if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
-            break;
-          }
+        std::vector<std::vector<std::string> > dataList;
 
-          // If 180 degree symmetric, then iterate only between 0 and 180.
-          if (model_meta_data.symmetry_mode == 1 &&
-              theta > (M_PI + env_params_.theta_res)) {
-            break;
-          }
+        std::string line = "";
+        // Iterate through each line and split the content using delimeter
+        int external_pose_id = 0;
+        while (getline(file, line))
+        {
+            std::vector<std::string> vec;
+            boost::algorithm::split(vec, line, boost::is_any_of(" "));
+            // cout << vec[0];
+            std::vector<double> doubleVector(vec.size());
 
-          // }
+            std::transform(vec.begin(), vec.end(), doubleVector.begin(), [](const std::string& val)
+            {
+                return std::stod(val);
+            });
+            double theta = doubleVector[5];
+            ContPose p(external_pose_id, render_states_dir,
+                        doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], theta);
+            external_pose_id++;
+            // cout << doubleVector[0];
+            if (!IsValidPose(source_state, ii, p)) {
+              // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
+              continue;
+            }
+
+            GraphState s = source_state; // Can only add objects, not remove them
+            const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+            s.AppendObject(new_object);
+
+            succ_states->push_back(s);
+
+            // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
+            // If symmetric object, don't iterate over all thetas
+            // if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
+            //   break;
+            // }
+            //
+            // // If 180 degree symmetric, then iterate only between 0 and 180.
+            // if (model_meta_data.symmetry_mode == 1 &&
+            //     theta > (M_PI + env_params_.theta_res)) {
+            //   break;
+            // }
         }
-      }
+        // Close the File
+        file.close();
+
+    }
+    else
+    {
+        for (double x = env_params_.x_min; x <= env_params_.x_max;
+             x += res) {
+          for (double y = env_params_.y_min; y <= env_params_.y_max;
+               y += res) {
+            // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
+            for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
+              // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
+              ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
+
+              if (!IsValidPose(source_state, ii, p)) {
+                // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
+                continue;
+              }
+              // std::cout << "Valid pose for theta : " << theta << endl;
+
+              GraphState s = source_state; // Can only add objects, not remove them
+              const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+              s.AppendObject(new_object);
+
+              succ_states->push_back(s);
+              // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
+              // If symmetric object, don't iterate over all thetas
+              if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
+                break;
+              }
+
+              // If 180 degree symmetric, then iterate only between 0 and 180.
+              if (model_meta_data.symmetry_mode == 1 &&
+                  theta > (M_PI + env_params_.theta_res)) {
+                break;
+              }
+
+              // }
+            }
+          }
+        }
     }
   }
 

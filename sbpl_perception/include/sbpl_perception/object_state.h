@@ -16,6 +16,15 @@ class ContPose {
   ContPose(const ContPose& other) = default;
   ContPose(double x, double y, double z, double roll, double pitch, double yaw);
   ContPose(const DiscPose &disc_pose);
+  ContPose(int external_pose_id, std::string external_render_path, double x, double y, double z, double roll, double pitch, double yaw);
+
+  const int &external_pose_id() const {
+    return external_pose_id_;
+  }
+
+  const std::string &external_render_path() const {
+    return external_render_path_;
+  }
 
   const double &x() const {
     return x_;
@@ -54,9 +63,13 @@ class ContPose {
   double roll_ = 0.0;
   double pitch_ = 0.0;
   double yaw_ = 0.0;
+  int external_pose_id_ = -1;
+  std::string external_render_path_= "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered/004_sugar_box";
 
   friend class boost::serialization::access;
   template <typename Ar> void serialize(Ar &ar, const unsigned int) {
+    ar &external_pose_id_;
+    // ar &external_render_path_;
     ar &x_;
     ar &y_;
     ar &z_;
@@ -158,4 +171,3 @@ std::ostream &operator<< (std::ostream &stream, const DiscPose &disc_pose);
 std::ostream &operator<< (std::ostream &stream, const ContPose &cont_pose);
 std::ostream &operator<< (std::ostream &stream,
                           const ObjectState &object_state);
-
