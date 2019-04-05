@@ -28,8 +28,10 @@ string heuristics_dir
 # sbpl_perception/utils/utils.h for more details).
 sensor_msgs/PointCloud2 constraint_cloud
 
-
 string reference_frame_
+
+bool use_external_render
+
 ---
 
 # An array of 4x4 homogeneous matrix transformations from 3D model to object pose in the

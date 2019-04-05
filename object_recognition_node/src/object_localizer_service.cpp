@@ -29,8 +29,9 @@ bool ObjectLocalizerService::LocalizerCallback(LocalizeObjects::Request &req,
   recognition_input.y_max = req.y_max;
   recognition_input.table_height = req.support_surface_height;
   recognition_input.heuristics_dir = req.heuristics_dir;
-  recognition_input.use_external_render = 0;
-  // recognition_input.reference_frame_ = req.reference_frame_;
+  recognition_input.use_external_render = req.use_external_render;
+  ROS_DEBUG("External Render : %d\n", recognition_input.use_external_render);
+  recognition_input.reference_frame_ = req.reference_frame_;
 
   Eigen::Matrix4d pose(req.camera_pose.data.data());
   // Transpose to convert column-major raw data initialization to row-major.
@@ -102,7 +103,7 @@ bool ObjectLocalizerService::LocalizerHelper(const
   if (IsMaster(mpi_world)) {
     recognition_input = input;
   }
-  recognition_input.use_external_render = 0;
+  recognition_input.use_external_render = 1;
   // Wait for master input to be set
   mpi_world->barrier();
   broadcast(*mpi_world, recognition_input, kMasterRank);

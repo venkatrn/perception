@@ -61,7 +61,9 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   private_nh.param("xmax", xmax_, 0.0);
   private_nh.param("ymax", ymax_, 0.0);
   private_nh.param("reference_frame", reference_frame_,
-                   std::string("/base_footprint"));
+                   std::string("/map"));
+  private_nh.param("use_external_render", use_external_render,
+                   0);
   private_nh.param("camera_frame", camera_frame_,
                    std::string("/head_mount_kinect_rgb_link"));
 
@@ -231,7 +233,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
   // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.5);
+  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.25);
   pt_filter.filter(*table_removed_cloud);
 
   sensor_msgs::PointCloud2 output;
@@ -282,14 +284,14 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   std::cout << camera_pose.matrix() << endl;
 
 
-  // tf_listener_.lookupTransform(reference_frame_.c_str(),
-  //                              "/camera_color_optical_frame", ros::Time(0.0), transform);
-  // printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
-  //     transform.getOrigin().y(), transform.getOrigin().z());
-  // Eigen::Isometry3d camera_to_world_pose;
-  // tf::transformTFToEigen(transform, camera_to_world_pose);
-  // std::cout << "Camera To World Pose" << endl;
-  // std::cout << camera_to_world_pose.matrix() << endl;
+  tf_listener_.lookupTransform(reference_frame_.c_str(),
+                               "/camera_color_optical_frame", ros::Time(0.0), transform);
+  printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
+      transform.getOrigin().y(), transform.getOrigin().z());
+  Eigen::Isometry3d camera_to_world_pose;
+  tf::transformTFToEigen(transform, camera_to_world_pose);
+  std::cout << "Camera To World Pose" << endl;
+  std::cout << camera_to_world_pose.matrix() << endl;
   // string output_dir = ros::package::getPath("object_recognition_node");
   // static int image_count = 0;
   // string output_image_name = string("frame_") + std::to_string(image_count);
@@ -323,6 +325,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.support_surface_height = table_height_;
   req.object_ids = latest_requested_objects_;
   req.reference_frame_ = reference_frame_;
+  req.use_external_render = use_external_render;
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
@@ -437,7 +440,8 @@ void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
        << endl;
   // latest_requested_objects_ = vector<string>({object_name.data});
   // latest_requested_objects_ = {"004_sugar_box", "035_power_drill"};
-  latest_requested_objects_ = {"crate"};
+  latest_requested_objects_ = {"004_sugar_box"};
+  // latest_requested_objects_ = {"crate"};
   capture_kinect_ = true;
   recent_observations_.clear();
   return;

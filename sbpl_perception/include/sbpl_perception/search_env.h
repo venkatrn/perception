@@ -63,6 +63,7 @@ struct EnvParams {
   int num_objects; // This is the number of objects on the table
   int num_models; // This is the number of models available (can be more or less than number of objects on table
   int use_external_render;
+  std::string reference_frame_;
 };
 
 struct PERCHParams {
@@ -149,6 +150,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
                              std::vector<unsigned short> *depth_image, int* num_occluders_in_input_cloud);
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image);
+
+  void cvToShort(cv::Mat input_image,
+                                        vector<unsigned short> *depth_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
 
@@ -255,6 +259,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // TODO: Make these private
   std::unique_ptr<RCNNHeuristicFactory> rcnn_heuristic_factory_;
   Heuristics rcnn_heuristics_;
+
+  PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image);
 
   PointCloudPtr GetGravityAlignedPointCloud(
     const vector<unsigned short> &depth_image, uint8_t rgb[3]);

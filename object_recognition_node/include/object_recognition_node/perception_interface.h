@@ -50,7 +50,7 @@ class PerceptionInterface
     //pcl::visualization::PCLVisualizer viewer_;
     sbpl_perception::ModelBank model_bank_;
     bool pcl_visualization_;
-    double table_height_;
+    double table_height_, zmax;
     double xmin_, xmax_;
     double ymin_, ymax_;
     ros::Publisher pose_pub_;
@@ -63,7 +63,7 @@ class PerceptionInterface
     std::string reference_frame_;
     std::string camera_frame_;
     tf::TransformListener tf_listener_;
-
+    int use_external_render;
     bool capture_kinect_;
 
     // Cache results of the latest call to ObjectLocalizerService.

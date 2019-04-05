@@ -198,6 +198,26 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFile (model_meta_data.file.c_str(), mesh);
 
+    // pcl::TextureMesh meshT;
+    // pcl::io::loadPolygonFileOBJ("/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/models/004_sugar_box/textured.obj", meshT);
+    //
+    // printf("Obj File Cloud Size : %d\n", meshT.cloud.data.size());
+    // sensor_msgs::PointCloud2 output;
+
+    // pcl::PCLPointCloud2 outputPCL;
+    // pcl::toPCLPointCloud2( meshT.cloud ,outputPCL);
+
+    // Convert to ROS data type
+    // pcl_conversions::fromPCL(meshT.cloud, output);
+    // output.header.frame_id = env_params_.reference_frame_;
+
+    // for (int i = 0; i < 4; i++)
+    // {
+    //     render_point_cloud_topic.publish(output);
+    //     ros::spinOnce();
+    //     ros::Rate loop_rate(5);
+    //     loop_rate.sleep();
+    // }
     ObjectModel obj_model(mesh, model_meta_data.name,
                           model_meta_data.symmetric,
                           model_meta_data.flipped);
@@ -227,6 +247,8 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   point.x = pose.x();
   point.y = pose.y();
   point.z = pose.z();
+
+  // std::cout << "x:" << point.x << "y:" << point.y << "z:" << point.z << endl;
   // point.z = (obj_models_[model_id].max_z()  - obj_models_[model_id].min_z()) /
   //           2.0 + env_params_.table_height;
 
@@ -602,7 +624,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   if (image_debug_) {
       printf("Point cloud with least cost has cost value : %f\n", min_cost);
-      PrintPointCloud(min_cost_point_cloud, -1);
+      // PrintPointCloud(min_cost_point_cloud, -1);
   }
 
   // cache succs and costs
@@ -627,11 +649,12 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
 void EnvObjectRecognition::PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id)
 {
+    printf("Print File Cloud Size : %d\n", gravity_aligned_point_cloud->points.size());
     std::stringstream cloud_ss;
     cloud_ss.precision(20);
     cloud_ss << debug_dir_ + "cloud_" << state_id << ".pcd";
     pcl::PCDWriter writer;
-    writer.writeBinary (cloud_ss.str(), *gravity_aligned_point_cloud);
+    // writer.writeBinary (cloud_ss.str(), *gravity_aligned_point_cloud);
 
     sensor_msgs::PointCloud2 output;
 
@@ -639,13 +662,18 @@ void EnvObjectRecognition::PrintPointCloud(PointCloudPtr gravity_aligned_point_c
     pcl::toPCLPointCloud2( *gravity_aligned_point_cloud ,outputPCL);
 
     // Convert to ROS data type
+    // pcl::TextureMesh meshT;
+    // pcl::io::loadPolygonFileOBJ("/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/models/004_sugar_box/textured.obj", meshT);
+
+    // printf("Obj File Cloud Size : %d\n", meshT.cloud.data.size());
+
     pcl_conversions::fromPCL(outputPCL, output);
-    output.header.frame_id = "base_footprint";
+    output.header.frame_id = env_params_.reference_frame_;
 
     render_point_cloud_topic.publish(output);
-    ros::spinOnce();
-    ros::Rate loop_rate(5);
-    loop_rate.sleep();
+    // ros::spinOnce();
+    // ros::Rate loop_rate(5);
+    // loop_rate.sleep();
 }
 int EnvObjectRecognition::GetBestSuccessorID(int state_id) {
   const auto &succ_costs = cost_cache[state_id];
@@ -1320,15 +1348,18 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                          last_object.symmetric(), pose_out);
   adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
   // End ICP Adjustment
-
+  printf("pose after icp");
+  std::cout<<adjusted_child_state->object_states().back().cont_pose()<<endl;
   // Check again after icp
   if (!IsValidPose(source_state, last_object_id,
                    adjusted_child_state->object_states().back().cont_pose(), true)) {
-    printf(" state %d is invalid\n ", source_state);
+    printf(" state %d is invalid after icp\n ", source_state);
+
     // succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
     // final_depth_image->clear();
     // *final_depth_image = depth_image;
-    return -1;
+    // return -1;
+    // Aditya
   }
 
   // num_occluders is the number of valid pixels in the input depth image that
@@ -1798,6 +1829,52 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
   return last_level_cost;
 }
 
+PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
+  cv::Mat depth_image, cv::Mat color_image) {
+
+  PointCloudPtr cloud(new PointCloud);
+
+  printf("cvToShort()\n");
+  cv::Size s = depth_image.size();
+
+  // std::cout<<cam_to_world_.matrix()<<endl;
+
+  for (int u = 0; u < s.width; u++) {
+    for (int v = 0; v < s.height; v++) {
+      vector<int> indices;
+      vector<float> sqr_dists;
+      pcl::PointXYZRGB point;
+
+      // https://stackoverflow.com/questions/8932893/accessing-certain-pixel-rgb-value-in-opencv
+      uint32_t rgbc = ((uint32_t)color_image.at<cv::Vec3b>(v,u)[2] << 16 | (uint32_t)color_image.at<cv::Vec3b>(v,u)[1]<< 8 | (uint32_t)color_image.at<cv::Vec3b>(v,u)[0]);
+      point.rgb = *reinterpret_cast<float*>(&rgbc);
+
+      // int u = kDepthImageWidth - ii % kDepthImageWidth;
+      // int u = ii % kDepthImageWidth;
+      // int v = ii / kDepthImageWidth;
+      // v = kDepthImageHeight - 1 - v;
+      // int idx = y * camera_width_ + x;
+      //         int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
+      // point = observed_organized_cloud_->at(v, u);
+
+      Eigen::Vector3f point_eig;
+      kinect_simulator_->rl_->getGlobalPointCV(u, v,
+                                             static_cast<float>(depth_image.at<unsigned short>(v,u)) / 1000.0, cam_to_world_,
+                                             point_eig);
+      point.x = point_eig[0];
+      point.y = point_eig[1];
+      point.z = point_eig[2];
+
+      cloud->points.push_back(point);
+    }
+  }
+
+  cloud->width = 1;
+  cloud->height = cloud->points.size();
+  cloud->is_dense = false;
+  return cloud;
+}
+
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   const vector<unsigned short> &depth_image, uint8_t rgb[3]) {
 
@@ -1831,6 +1908,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
     point.x = point_eig[0];
     point.y = point_eig[1];
     point.z = point_eig[2];
+
     cloud->points.push_back(point);
   }
 
@@ -1984,6 +2062,26 @@ void EnvObjectRecognition::PrintState(GraphState s, string fname) {
   return;
 }
 
+void EnvObjectRecognition::cvToShort(cv::Mat input_image,
+                                      vector<unsigned short> *depth_image) {
+    printf("cvToShort()\n");
+    cv::Size s = input_image.size();
+    const double range = double(max_observed_depth_ - min_observed_depth_);
+
+    for (int ii = 0; ii < s.height; ++ii) {
+      for (int jj = 0; jj < s.width; ++jj) {
+        depth_image->push_back(0);
+      }
+    }
+    for (int ii = 0; ii < s.height; ++ii) {
+      for (int jj = 0; jj < s.width; ++jj) {
+        int idx = ii * s.width + jj;
+        depth_image->at(idx)  =  (input_image.at<unsigned short>(ii, jj));
+        // cout << depth_image->at(idx) << endl;
+      }
+    }
+}
+
 void EnvObjectRecognition::PrintImage(string fname,
                                       const vector<unsigned short> &depth_image) {
 
@@ -2046,12 +2144,24 @@ bool EnvObjectRecognition::IsGoalState(GraphState state) {
 
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
                                                  vector<unsigned short> *depth_image) {
+
   int num_occluders = 0;
   return GetDepthImage(s, depth_image, &num_occluders);
 }
+
+cv::Mat rotate(cv::Mat src, double angle)
+{
+    cv::Mat dst;
+    cv::Point2f pt(src.cols/2., src.rows/2.);
+    cv::Mat r = cv::getRotationMatrix2D(pt, angle, 1.0);
+    cv::warpAffine(src, dst, r, cv::Size(src.cols, src.rows));
+    return dst;
+}
+
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image, int* num_occluders_in_input_cloud) {
 
+  printf("GetDepthImage()\n");;
   *num_occluders_in_input_cloud = 0;
   if (scene_ == NULL) {
     printf("ERROR: Scene is not set\n");
@@ -2105,44 +2215,69 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   else
   {
       // const float *depth_buffer;
-      for (size_t ii = 0; ii < object_states.size(); ++ii) {
-        const auto &object_state = object_states[ii];
-        ObjectModel obj_model = obj_models_[object_state.id()];
-        ContPose p = object_state.cont_pose();
-        std::stringstream ss;
-        // cout << p.external_render_path();
-        ss << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
-        std::string image_path = ss.str();
-        printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
-
-        cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
-        // if (mpi_comm_->rank() == kMasterRank) {
-          // static cv::Mat c_image;
-          // ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
-        cv::imshow("color image", cv_color_image);
-        cv::waitKey(1);
-
-        // cv::Mat cv_depth_image = cv::imread(image_path, -1);
-        // depth_image = cv_depth_image.ptr<unsigned short>();;
-        // }
-      }
-
-      for (size_t ii = 0; ii < object_states.size(); ++ii) {
-        const auto &object_state = object_states[ii];
-        ObjectModel obj_model = obj_models_[object_state.id()];
-        ContPose p = object_state.cont_pose();
-        // std::cout << "Object model in pose : " << p << endl;
-        auto transformed_mesh = obj_model.GetTransformedMesh(p);
-
-        PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
-                                                               GL_POLYGON, transformed_mesh));
-        scene_->add (model);
-      }
-
       kinect_simulator_->doSim(env_params_.camera_pose);
       const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
-      kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
+      if (object_states.size() > 0)
+      {
+          // printf("Using new render as\n");
+          for (size_t ii = 0; ii < object_states.size(); ++ii) {
+            const auto &object_state = object_states[ii];
+            ObjectModel obj_model = obj_models_[object_state.id()];
+            ContPose p = object_state.cont_pose();
+            std::stringstream ss;
+            // cout << p.external_render_path();
+            ss << p.external_render_path() << "/" << obj_model.name() << "/" << p.external_pose_id() << "-color.png";
+            std::string image_path = ss.str();
+            printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
 
+            cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+            // if (mpi_comm_->rank() == kMasterRank) {
+              // static cv::Mat c_image;
+              // ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
+
+
+            ss.str("");
+            ss << p.external_render_path() << "/" << obj_model.name() << "/" << p.external_pose_id() << "-depth.png";
+            image_path = ss.str();
+            // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+
+            cv::Mat cv_depth_image = cv::imread(image_path, CV_LOAD_IMAGE_ANYDEPTH);
+            static cv::Mat c_image;
+            cvToShort(cv_depth_image, depth_image);
+
+            // if (object_states.size() > 1)
+            // {
+                ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
+                cv::imshow("depth image", c_image);
+                cv::waitKey(1);
+                auto gravity_aligned_point_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_color_image);
+
+                PrintPointCloud(gravity_aligned_point_cloud, 1);
+            // }
+            // cv::Mat cv_depth_image = cv::imread(image_path, -1);
+            // depth_image = cv_depth_image.ptr<unsigned short>();;
+            // }
+          }
+      }
+      else
+      {
+        printf("Using original render as\n");
+        for (size_t ii = 0; ii < object_states.size(); ++ii) {
+          const auto &object_state = object_states[ii];
+          ObjectModel obj_model = obj_models_[object_state.id()];
+          ContPose p = object_state.cont_pose();
+          // std::cout << "Object model in pose : " << p << endl;
+          auto transformed_mesh = obj_model.GetTransformedMesh(p);
+
+          PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
+                                                                 GL_POLYGON, transformed_mesh));
+          scene_->add (model);
+        }
+
+        // kinect_simulator_->doSim(env_params_.camera_pose);
+        // const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
+        kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
+      }
       //
       // kinect_simulator_->get_depth_image_cv(depth_buffer, depth_image);
       // cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
@@ -2408,6 +2543,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   *original_input_cloud_ = input.cloud;
   *constraint_cloud_ = input.constraint_cloud;
   env_params_.use_external_render = input.use_external_render;
+  env_params_.reference_frame_ = input.reference_frame_;
 
   printf("External Render : %d\n", env_params_.use_external_render);
   // If #repetitions is not set, we will assume every unique model appears
@@ -2823,6 +2959,7 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(
 void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                                                    &source_state, std::vector<GraphState> *succ_states) const {
 
+  printf("GenerateSuccessorStates()\n");
   assert(succ_states != nullptr);
   succ_states->clear();
 
@@ -2855,17 +2992,17 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
     if (env_params_.use_external_render == 1)
     {
-        printf("States for model : %s\n", obj_models_[ii].name().c_str());
+        // printf("States for model : %s\n", obj_models_[ii].name().c_str());
         string render_states_dir;
         string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
-
+        string render_states_path_parent = render_states_path;
         std::stringstream ss;
         ss << render_states_path << "/" << obj_models_[ii].name();
         render_states_dir = ss.str();
         std::stringstream sst;
         sst << render_states_path << "/" << obj_models_[ii].name() << "/" << "poses.txt";
         render_states_path = sst.str();
-        printf("Path for rendered states : %s\n", render_states_path.c_str());
+        // printf("Path for rendered states : %s\n", render_states_path.c_str());
 
         std::ifstream file(render_states_path);
 
@@ -2874,25 +3011,60 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
         std::string line = "";
         // Iterate through each line and split the content using delimeter
         int external_pose_id = 0;
+        // for (double x = env_params_.x_min; x <= env_params_.x_max;
+        //      x += res) {
+        //   for (double y = env_params_.y_min; y <= env_params_.y_max;
+        //        y += res) {
+        //     // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
+        //     for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
+        //       std::cout << "Internal poses : " << x << " " << y <<  " " << theta <<  endl;
+        //     }
+        //   }
+        // }
         while (getline(file, line))
         {
             std::vector<std::string> vec;
             boost::algorithm::split(vec, line, boost::is_any_of(" "));
-            // cout << vec[0];
+            // cout << vec.size();
             std::vector<double> doubleVector(vec.size());
 
             std::transform(vec.begin(), vec.end(), doubleVector.begin(), [](const std::string& val)
             {
                 return std::stod(val);
             });
-            double theta = doubleVector[5];
-            ContPose p(external_pose_id, render_states_dir,
-                        doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], theta);
+            // double theta = doubleVector[5];
+
+            ContPose p(external_pose_id, render_states_path_parent,
+                        doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[4], doubleVector[5], doubleVector[6]);
             external_pose_id++;
+
             // cout << doubleVector[0];
             if (!IsValidPose(source_state, ii, p)) {
-              // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
-              continue;
+              // std::cout << "Not a valid pose for theta : " << doubleVector[0] << " " <<
+              // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
+
+              // std::stringstream ss1;
+              // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
+              // std::string image_path = ss1.str();
+              // // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+              //
+              // cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+              // cv::imshow("invalid image", cv_color_image);
+              // cv::waitKey(1);
+
+              // continue;
+            }
+            else {
+              // std::cout << "Valid pose for theta : " << doubleVector[0] << " " <<
+              // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
+              std::stringstream ss1;
+              ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
+              std::string image_path = ss1.str();
+              // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+
+              // cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+              // cv::imshow("valid image", cv_color_image);
+              // cv::waitKey(500);
             }
 
             GraphState s = source_state; // Can only add objects, not remove them
@@ -2930,6 +3102,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
               if (!IsValidPose(source_state, ii, p)) {
                 // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
+
                 continue;
               }
               // std::cout << "Valid pose for theta : " << theta << endl;

@@ -995,6 +995,34 @@ pcl::simulation::RangeLikelihood::getPointCloudFromBuffer (
 }
 
 void
+pcl::simulation::RangeLikelihood::getGlobalPointCV (int u, int v, float range,
+                                                  const Eigen::Isometry3d &pose, Eigen::Vector3f &world_point) {
+  pcl::PointXYZ p;
+  // range = -range;
+
+  float camera_fx_reciprocal_ = 1.0f / camera_fx_;
+  float camera_fy_reciprocal_ = 1.0f / camera_fy_;
+
+  p.z = range;
+  p.x = (static_cast<float> (u) - camera_cx_) * range * (camera_fx_reciprocal_);
+  p.y = (static_cast<float> (v) - camera_cy_) * range * (camera_fy_reciprocal_);
+
+  // Eigen::Matrix4f T;
+  // T <<  0, 0, -1, 0,
+  // -1, 0,  0, 0,
+  // 0, 1,  0, 0,
+  // 0, 0,  0, 1;
+  Eigen::Matrix4f transform = pose.matrix ().cast<float> ();
+  // transform = transform * T;
+  Eigen::Matrix<float, 3, 1> pt (p.x, p.y, p.z);
+
+  world_point = transform.block<3,3>(0,0) * pt;
+  world_point += transform.block<3,1>(0,3);
+
+}
+
+
+void
 pcl::simulation::RangeLikelihood::getGlobalPoint (int u, int v, float range,
                                                   const Eigen::Isometry3d &pose, Eigen::Vector3f &world_point) {
   pcl::PointXYZ p;

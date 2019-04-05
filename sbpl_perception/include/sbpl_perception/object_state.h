@@ -64,7 +64,7 @@ class ContPose {
   double pitch_ = 0.0;
   double yaw_ = 0.0;
   int external_pose_id_ = -1;
-  std::string external_render_path_= "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered/004_sugar_box";
+  std::string external_render_path_= "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered/";
 
   friend class boost::serialization::access;
   template <typename Ar> void serialize(Ar &ar, const unsigned int) {
