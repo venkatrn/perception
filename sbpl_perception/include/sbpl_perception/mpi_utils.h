@@ -16,7 +16,8 @@ struct CostComputationInput {
   int source_id;
   int child_id;
 
-  std::vector<unsigned short> source_depth_image;  
+  std::vector<unsigned short> source_depth_image;
+  std::vector<std::vector<unsigned short>> source_color_image;
   std::vector<int> source_counted_pixels;
 
   // This is optional: a non-empty vector should be used only when lazily
@@ -32,7 +33,9 @@ struct CostComputationOutput {
   GraphStateProperties state_properties;
   std::vector<int> child_counted_pixels;
   std::vector<unsigned short> depth_image;
+  std::vector<std::vector<unsigned short>> color_image;
   std::vector<unsigned short> unadjusted_depth_image;
+  std::vector<std::vector<unsigned short>> unadjusted_color_image;
 };
 
 namespace boost {
@@ -46,6 +49,7 @@ void serialize(Archive &ar, CostComputationInput &input,
     ar &input.source_id;
     ar &input.child_id;
     ar &input.source_depth_image;
+    ar &input.source_color_image;
     ar &input.source_counted_pixels;
     ar &input.unadjusted_last_object_depth_image;
     ar &input.adjusted_last_object_depth_image;
@@ -60,7 +64,9 @@ void serialize(Archive &ar, CostComputationOutput &output,
     ar &output.state_properties;
     ar &output.child_counted_pixels;
     ar &output.depth_image;
+    ar &output.color_image;
     ar &output.unadjusted_depth_image;
+    ar &output.unadjusted_color_image;
 }
 
 } // namespace serialization

@@ -131,14 +131,22 @@ def main(camera_params, env_params):
                 for x in np.arange(x_min, x_max, float(env_params['search_resolution_translation'])):
                     for y in np.arange(y_min, y_max, float(env_params['search_resolution_translation'])):
                         for theta in np.arange(0, 2 * np.pi, float(env_params['search_resolution_yaw'])):
-                            point = np.array([[x], [y], [table_height], [1]])
+                            if class_name == "004_sugar_box":
+                                point = np.array([[x], [y], [table_height+0.086], [1]])
+                            if class_name == "035_power_drill":
+                                point = np.array([[x], [y], [table_height], [1]])
+
 #                            transformed_point = np.matmul(np.linalg.inv(camera_pose), point)
 #                            transformed_rotation = np.matmul(np.linalg.inv(camera_pose[0:3, 0:3]), RT_transform.euler2mat(0,0,theta))
 #                            transformed_rotation = np.linalg.inv(camera_pose)[0:3, 0:3]
 #                            transformed_rotation = RT_transform.euler2mat(0,0,0)
 #                            print(transformed_point)
                             object_world_transform = np.zeros((4,4))
-                            object_world_transform[:3,:3] = RT_transform.euler2mat(0,0,theta)
+                            if class_name == "004_sugar_box":
+                                object_world_transform[:3,:3] = RT_transform.euler2mat(0,0,theta)
+                            if class_name == "035_power_drill":
+                                object_world_transform[:3,:3] = RT_transform.euler2mat(np.pi/2,0,theta)
+
                             object_world_transform[:4,3] = point.flatten()
 #                            print(world_object_transform)
                             

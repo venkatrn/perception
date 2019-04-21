@@ -149,10 +149,20 @@ class EnvObjectRecognition : public EnvironmentMHA {
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image, int* num_occluders_in_input_cloud);
   const float *GetDepthImage(GraphState s,
+                             std::vector<unsigned short> *depth_image,
+                             std::vector<std::vector<unsigned short>> *color_image, int* num_occluders_in_input_cloud);
+  const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image);
+  const float *GetDepthImage(GraphState s,
+                        std::vector<unsigned short> *depth_image,
+                        std::vector<std::vector<unsigned short>> *color_image);
 
-  void cvToShort(cv::Mat input_image,
-                                        vector<unsigned short> *depth_image);
+  void depthCVToShort(cv::Mat input_image, vector<unsigned short> *depth_image);
+  void colorCVToShort(cv::Mat input_image, vector<vector<unsigned short>> *color_image);
+  void CVToShort(cv::Mat input_color_image, 
+                 cv::Mat input_depth_image,
+                 vector<unsigned short> *depth_image, 
+                 vector<vector<unsigned short>> *color_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
 
@@ -265,8 +275,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
   PointCloudPtr GetGravityAlignedPointCloud(
     const vector<unsigned short> &depth_image, uint8_t rgb[3]);
 
-  PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short>
-                                            &depth_image);
+  PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image);
+                                          
+  PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image,
+                                            const std::vector<std::vector<unsigned short>> &color_image
+                                            );
   PointCloudPtr GetGravityAlignedOrganizedPointCloud(const
                                                      std::vector<unsigned short>
                                                      &depth_image);
@@ -356,6 +369,14 @@ class EnvObjectRecognition : public EnvironmentMHA {
   static bool GetComposedDepthImage(const std::vector<unsigned short>
                                     &source_depth_image, const std::vector<unsigned short>
                                     &last_object_depth_image, std::vector<unsigned short> *composed_depth_image);
+  
+  static bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image, 
+                                  const std::vector<std::vector<unsigned short>> &source_color_image, 
+                                  const std::vector<unsigned short> &last_object_depth_image, 
+                                  const std::vector<std::vector<unsigned short>> &last_object_color_image, 
+                                  std::vector<unsigned short> *composed_depth_image,
+                                  std::vector<std::vector<unsigned short>> *composed_color_image);
+                                    
   bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state,
                                  std::vector<unsigned short> *single_object_depth_image, bool after_refinement);
 
@@ -363,12 +384,15 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // of the last added object is adjusted using ICP and the computed state properties.
   int GetCost(const GraphState &source_state, const GraphState &child_state,
               const std::vector<unsigned short> &source_depth_image,
+              const std::vector<std::vector<unsigned short>> &source_color_image,
               const std::vector<int> &parent_counted_pixels,
               std::vector<int> *child_counted_pixels,
               GraphState *adjusted_child_state,
               GraphStateProperties *state_properties,
               std::vector<unsigned short> *adjusted_child_depth_image,
-              std::vector<unsigned short> *unadjusted_child_depth_image);
+              std::vector<std::vector<unsigned short>> *adjusted_child_color_image,
+              std::vector<unsigned short> *unadjusted_child_depth_image,
+              std::vector<std::vector<unsigned short>> *unadjusted_child_color_image);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr

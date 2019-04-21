@@ -394,9 +394,12 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       marker.action = visualization_msgs::Marker::ADD;
       marker.pose.position = msg.pose.position;
       marker.pose.orientation = msg.pose.orientation;
-      marker.scale.x = 0.01;
-      marker.scale.y = 0.01;
-      marker.scale.z = 0.01;
+      // marker.scale.x = 0.01;
+      // marker.scale.y = 0.01;
+      // marker.scale.z = 0.01;
+      marker.scale.x = 1;
+      marker.scale.y = 1;
+      marker.scale.z = 1;
       marker.color.a = 0.8; // Don't forget to set the alpha!
       marker.color.r = red;
       marker.color.g = green;

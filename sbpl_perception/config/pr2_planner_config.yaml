@@ -3,7 +3,7 @@
 inflation_epsilon: 3
 # Max time-limit for the planner. Used in conjunction with "first_solution"
 # param (refer below)/
-max_planning_time: 300.0 # seconds
+max_planning_time: 1000.0 # seconds
 # For non-anytime planners, if this is true, then planner will ignore time
 # limit and continue searching until a solution is found.
 # For anytime planners, the same as above holds, but in addition, if false,
@@ -11,4 +11,4 @@ max_planning_time: 300.0 # seconds
 first_solution: false
 # If true, planner will use lazy edge evaluations. Make sure that the
 # environment supports GetLazySuccs.
-use_lazy: true
+use_lazy: false
