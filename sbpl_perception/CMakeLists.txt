@@ -120,7 +120,11 @@ add_library(${PROJECT_NAME}
   src/object_recognizer.cpp
   src/utils/utils.cpp
   # src/utils/object_utils.cpp
-  src/utils/dataset_generator.cpp)
+  src/utils/dataset_generator.cpp
+  src/ColorSpace/ColorSpace.cpp
+  src/ColorSpace/Comparison.cpp
+  src/ColorSpace/Conversion.cpp
+)
 
 #set( MPI_CXX_LIBRARIES
 #        ${MPI_ROOT}/lib/libmpi.so)

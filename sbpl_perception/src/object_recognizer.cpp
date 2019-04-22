@@ -342,6 +342,9 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       for (const auto &pose : *detected_poses) {
         cout << pose.x() << " " << pose.y() << " " << env_obj_->GetTableHeight() << " "
              << pose.yaw() << endl;
+
+        cout << "external pose id : " << pose.external_pose_id() << endl;
+        
       }
 
       last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);

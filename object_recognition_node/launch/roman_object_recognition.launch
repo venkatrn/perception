@@ -1,6 +1,6 @@
 <launch>
   <master auto="start"/>
-  <param name="/use_sim_time" value="true"/>
+  <param name="/use_sim_time" value="false"/>
 
   <arg name="image_debug" default="true" />
   <arg name="urdf" default="true" />

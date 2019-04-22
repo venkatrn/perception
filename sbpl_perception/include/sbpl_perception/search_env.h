@@ -44,6 +44,9 @@
 #include <vector>
 
 #include <ros/ros.h>
+#include <ColorSpace/ColorSpace.h>
+#include <ColorSpace/Conversion.h>
+#include <ColorSpace/Comparison.h>
 
 namespace sbpl_perception {
 
@@ -148,20 +151,28 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // occludes a point in the rendered scene.
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image, int* num_occluders_in_input_cloud);
+
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image,
-                             std::vector<std::vector<unsigned short>> *color_image, int* num_occluders_in_input_cloud);
+                             std::vector<std::vector<unsigned short>> *color_image,
+                             cv::Mat *cv_depth_image,
+                             cv::Mat *cv_color_image,
+                             int* num_occluders_in_input_cloud);
+
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image);
+                             
   const float *GetDepthImage(GraphState s,
                         std::vector<unsigned short> *depth_image,
-                        std::vector<std::vector<unsigned short>> *color_image);
+                        std::vector<std::vector<unsigned short>> *color_image,
+                        cv::Mat *cv_depth_image,
+                        cv::Mat *cv_color_image);
 
   void depthCVToShort(cv::Mat input_image, vector<unsigned short> *depth_image);
   void colorCVToShort(cv::Mat input_image, vector<vector<unsigned short>> *color_image);
-  void CVToShort(cv::Mat input_color_image, 
-                 cv::Mat input_depth_image,
-                 vector<unsigned short> *depth_image, 
+  void CVToShort(cv::Mat *input_color_image,
+                 cv::Mat *input_depth_image,
+                 vector<unsigned short> *depth_image,
                  vector<vector<unsigned short>> *color_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
@@ -276,7 +287,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
     const vector<unsigned short> &depth_image, uint8_t rgb[3]);
 
   PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image);
-                                          
+
   PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image,
                                             const std::vector<std::vector<unsigned short>> &color_image
                                             );
@@ -360,6 +371,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   EnvStats env_stats_;
 
+  cv::Mat cv_color_image, cv_depth_image;
+
   void ResetEnvironmentState();
 
   void GenerateSuccessorStates(const GraphState &source_state,
@@ -369,14 +382,14 @@ class EnvObjectRecognition : public EnvironmentMHA {
   static bool GetComposedDepthImage(const std::vector<unsigned short>
                                     &source_depth_image, const std::vector<unsigned short>
                                     &last_object_depth_image, std::vector<unsigned short> *composed_depth_image);
-  
-  static bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image, 
-                                  const std::vector<std::vector<unsigned short>> &source_color_image, 
-                                  const std::vector<unsigned short> &last_object_depth_image, 
-                                  const std::vector<std::vector<unsigned short>> &last_object_color_image, 
+
+  static bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image,
+                                  const std::vector<std::vector<unsigned short>> &source_color_image,
+                                  const std::vector<unsigned short> &last_object_depth_image,
+                                  const std::vector<std::vector<unsigned short>> &last_object_color_image,
                                   std::vector<unsigned short> *composed_depth_image,
                                   std::vector<std::vector<unsigned short>> *composed_color_image);
-                                    
+
   bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state,
                                  std::vector<unsigned short> *single_object_depth_image, bool after_refinement);
 
@@ -393,6 +406,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
               std::vector<std::vector<unsigned short>> *adjusted_child_color_image,
               std::vector<unsigned short> *unadjusted_child_depth_image,
               std::vector<std::vector<unsigned short>> *unadjusted_child_color_image);
+
+  double getColorDistance(uint32_t rgb_1, uint32_t rgb_2);
+  int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud);
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr
