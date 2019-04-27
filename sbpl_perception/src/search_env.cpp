@@ -240,6 +240,8 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
 bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                        ContPose pose, bool after_refinement = false) const {
 
+
+
   vector<int> indices;
   vector<float> sqr_dists;
   PointT point;
@@ -1393,9 +1395,18 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // num_occluders is the number of valid pixels in the input depth image that
   // occlude the rendered scene corresponding to adjusted_child_state.
   int num_occluders = 0;
-  succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &color_image,
-                                    &cv_depth_image, &cv_color_image,
-                                    &num_occluders);
+
+  if (env_params_.use_external_render == 0)
+  {
+      succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &color_image,
+                                        &cv_depth_image, &cv_color_image,
+                                        &num_occluders);
+  }
+  else
+  {
+      succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &color_image,
+                                        &cv_depth_image, &cv_color_image);
+  }
   // All points
   succ_cloud = GetGravityAlignedPointCloud(depth_image, color_image);
 
@@ -2711,7 +2722,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   // when using dealing with real world data), then we will generate a point
   // cloud using the depth image.
   if (!original_input_cloud_->empty()) {
-    printf("Observed Point cloud from original_input_cloud_ of size : %f\n", original_input_cloud_->points.size());
+    printf("Observed Point cloud from original_input_cloud_ of size : %d\n", original_input_cloud_->points.size());
     *observed_cloud_ = *original_input_cloud_;
   } else {
     printf("Observed Point cloud from observed_depth_image_\n");
@@ -2734,7 +2745,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
 
   knn.reset(new pcl::search::KdTree<PointT>(true));
-  printf("Setting observed KNN with cloud of size : %f\n", observed_cloud_->points.size());
+  printf("Setting knn with cloud of size : %d\n", observed_cloud_->points.size());
   PrintPointCloud(observed_cloud_, 1);
   knn->setInputCloud(observed_cloud_);
 
@@ -2765,6 +2776,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     projected_constraint_cloud_->points[ii].z = env_params_.table_height;
   }
 
+  printf("Setting projected_knn_ with cloud of size : %d\n", projected_cloud_->points.size());
   projected_knn_.reset(new pcl::search::KdTree<PointT>(true));
   projected_knn_->setInputCloud(projected_cloud_);
 
@@ -3520,13 +3532,17 @@ bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short> &s
   for (size_t ii = 0; ii < source_depth_image.size(); ++ii) {
     composed_depth_image->at(ii) = std::min(source_depth_image[ii],
                                             last_object_depth_image[ii]);
-    if (source_depth_image[ii] <= last_object_depth_image[ii])
+
+    if (env_params_.use_external_render == 1)
     {
-        composed_color_image->at(ii) = source_color_image[ii];
-    }
-    else
-    {
-        composed_color_image->at(ii) = last_object_color_image[ii];
+      if (source_depth_image[ii] <= last_object_depth_image[ii])
+      {
+          composed_color_image->at(ii) = source_color_image[ii];
+      }
+      else
+      {
+          composed_color_image->at(ii) = last_object_color_image[ii];
+      }
     }
   }
 

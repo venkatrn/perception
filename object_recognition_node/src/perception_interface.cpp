@@ -232,9 +232,11 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setInputCloud(table_removed_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
-  // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.25);
+  pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
+  // pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.25);
   pt_filter.filter(*table_removed_cloud);
+
+  printf("table_removed_cloud size : %d\n", table_removed_cloud->size());
 
   sensor_msgs::PointCloud2 output;
   pcl::PCLPointCloud2 outputPCL;

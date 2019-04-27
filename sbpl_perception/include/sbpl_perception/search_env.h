@@ -161,7 +161,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image);
-                             
+
   const float *GetDepthImage(GraphState s,
                         std::vector<unsigned short> *depth_image,
                         std::vector<std::vector<unsigned short>> *color_image,
@@ -383,7 +383,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                                     &source_depth_image, const std::vector<unsigned short>
                                     &last_object_depth_image, std::vector<unsigned short> *composed_depth_image);
 
-  static bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image,
+  bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image,
                                   const std::vector<std::vector<unsigned short>> &source_color_image,
                                   const std::vector<unsigned short> &last_object_depth_image,
                                   const std::vector<std::vector<unsigned short>> &last_object_color_image,
