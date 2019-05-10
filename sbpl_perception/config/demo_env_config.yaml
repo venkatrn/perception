@@ -1,9 +1,9 @@
 search_resolution_translation: 0.08 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
-x_min : 0.96
+x_min : 0.25
 x_max : 1.0
-y_min : -0.20
-y_max : 0.20
+y_min : -0.35
+y_max : 0.35
 table_height : 0.00
 use_external_render : 0
 

@@ -216,6 +216,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   //
   PointCloudPtr table_removed_cloud(new PointCloud);
 
+  // table_removed_cloud = cloud;
   pcl::PassThrough<PointT> pt_filter;
   pt_filter.setInputCloud(original_cloud);
   pt_filter.setKeepOrganized (true);
@@ -232,8 +233,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setInputCloud(table_removed_cloud);
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
-  pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  // pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.25);
+  // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
+  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.5);
   pt_filter.filter(*table_removed_cloud);
 
   printf("table_removed_cloud size : %d\n", table_removed_cloud->size());
@@ -356,59 +357,69 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       ROS_INFO_STREAM("Object: " << req.object_ids[ii] << std::endl <<
                       object_transform.matrix() << std::endl << std::endl);
 
-      const string &model_name = req.object_ids[ii];
-      const string &model_file = model_bank_[model_name].file;
-      cout << model_file << endl;
-      pcl::PolygonMesh mesh;
-      pcl::io::loadPolygonFile(model_file, mesh);
-      pcl::PolygonMesh::Ptr mesh_ptr(new pcl::PolygonMesh(mesh));
-      ObjectModel::TransformPolyMesh(mesh_ptr, mesh_ptr,
-                                     object_transform.matrix().cast<float>());
-      viewer_->addPolygonMesh(*mesh_ptr, model_name);
-      viewer_->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, model_name);
-      double red = 0;
-      double green = 0;
-      double blue = 0;;
-      // pcl::visualization::getRandomColors(red, green, blue);
-
-      int rand_idx = rand() %  kColorPalette.size();
-      red = kColorPalette[rand_idx][0] / 255.0;
-      green = kColorPalette[rand_idx][1] / 255.0;
-      blue = kColorPalette[rand_idx][2] / 255.0;
-
-      viewer_->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
-
       geometry_msgs::PoseStamped msg;
       msg.header.frame_id = reference_frame_;
       msg.header.stamp = ros::Time::now();
       tf::poseEigenToMsg(object_transform, msg.pose);
       latest_object_poses_[ii] = msg.pose;
 
-      // Publish the mesh marker
-      visualization_msgs::Marker marker;
-      marker.header.frame_id = reference_frame_;
-      marker.header.stamp = ros::Time();
-      marker.ns = "perch";
-      marker.id = ii;
-      marker.type = visualization_msgs::Marker::MESH_RESOURCE;
-      marker.action = visualization_msgs::Marker::ADD;
-      marker.pose.position = msg.pose.position;
-      marker.pose.orientation = msg.pose.orientation;
-      // marker.scale.x = 0.01;
-      // marker.scale.y = 0.01;
-      // marker.scale.z = 0.01;
-      marker.scale.x = 1;
-      marker.scale.y = 1;
-      marker.scale.z = 1;
-      marker.color.a = 0.8; // Don't forget to set the alpha!
-      marker.color.r = red;
-      marker.color.g = green;
-      marker.color.b = blue;
-      //only if using a MESH_RESOURCE marker type:
-      marker.mesh_resource = std::string("file://") + model_file;
-      mesh_marker_pub_.publish(marker);
+      if (use_external_render == 0)
+      {
+          const string &model_name = req.object_ids[ii];
+          const string &model_file = model_bank_[model_name].file;
+          cout << model_file << endl;
+          pcl::PolygonMesh mesh;
+          pcl::io::loadPolygonFile(model_file, mesh);
+          pcl::PolygonMesh::Ptr mesh_ptr(new pcl::PolygonMesh(mesh));
+          ObjectModel::TransformPolyMesh(mesh_ptr, mesh_ptr,
+                                        object_transform.matrix().cast<float>());
+          
+          if (pcl_visualization_) {
+              viewer_->addPolygonMesh(*mesh_ptr, model_name);
+              viewer_->setPointCloudRenderingProperties(
+                pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, model_name);
+          }
+          double red = 0;
+          double green = 0;
+          double blue = 0;;
+          // pcl::visualization::getRandomColors(red, green, blue);
+
+          int rand_idx = rand() %  kColorPalette.size();
+          red = kColorPalette[rand_idx][0] / 255.0;
+          green = kColorPalette[rand_idx][1] / 255.0;
+          blue = kColorPalette[rand_idx][2] / 255.0;
+
+          if (pcl_visualization_) {
+              viewer_->setPointCloudRenderingProperties(
+                pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
+          }
+
+          
+
+          // Publish the mesh marker
+          visualization_msgs::Marker marker;
+          marker.header.frame_id = reference_frame_;
+          marker.header.stamp = ros::Time();
+          marker.ns = "perch";
+          marker.id = ii;
+          marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+          marker.action = visualization_msgs::Marker::ADD;
+          marker.pose.position = msg.pose.position;
+          marker.pose.orientation = msg.pose.orientation;
+          // marker.scale.x = 0.01;
+          // marker.scale.y = 0.01;
+          // marker.scale.z = 0.01;
+          marker.scale.x = 1;
+          marker.scale.y = 1;
+          marker.scale.z = 1;
+          marker.color.a = 0.8; // Don't forget to set the alpha!
+          marker.color.r = red;
+          marker.color.g = green;
+          marker.color.b = blue;
+          //only if using a MESH_RESOURCE marker type:
+          marker.mesh_resource = std::string("file://") + model_file;
+          mesh_marker_pub_.publish(marker);
+      }
 
       // TODO: generalize to mutliple objects
       if (ii == 0) {

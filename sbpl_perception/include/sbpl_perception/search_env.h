@@ -47,6 +47,7 @@
 #include <ColorSpace/ColorSpace.h>
 #include <ColorSpace/Conversion.h>
 #include <ColorSpace/Comparison.h>
+#include <chrono>
 
 namespace sbpl_perception {
 

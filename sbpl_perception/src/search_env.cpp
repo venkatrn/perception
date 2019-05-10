@@ -57,6 +57,8 @@ constexpr unsigned short kOcclusionThreshold = 50; // mm
 // Tolerance used when deciding the footprint of the object in a given pose is
 // out of bounds of the supporting place.
 constexpr double kFootprintTolerance = 0.02; // m
+
+constexpr double kColorDistanceThreshold = 15; // m
 }  // namespace
 
 namespace sbpl_perception {
@@ -274,9 +276,14 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                                  search_resolution / 2.0);
   }
 
-  const double search_rad = std::max(
+  double search_rad = std::max(
                               obj_models_[model_id].GetCircumscribedRadius(),
                               grid_cell_circumscribing_radius);
+
+  if (env_params_.use_external_render == 1) {
+      // Axis is different
+      search_rad = 2 * search_rad;
+  }
   // double search_rad = obj_models_[model_id].GetCircumscribedRadius();
   // int num_neighbors_found = knn->radiusSearch(point, search_rad,
   //                                             indices,
@@ -286,7 +293,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                                          sqr_dists, perch_params_.min_neighbor_points_for_valid_pose); //0.2
 
   if (num_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
-    // std::cout << "Invalid 1" << endl;
+    // printf("Invalid 1, neighbours found : %d, radius %f\n",num_neighbors_found, search_rad);
     return false;
   }
 
@@ -737,6 +744,7 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
   boost::mpi::scatter(*mpi_comm_, appended_input, &input_partition[0], recvcount,
                       kMasterRank);
 
+  printf("recvcount : %d\n", recvcount);
   for (int ii = 0; ii < recvcount; ++ii) {
     const auto &input_unit = input_partition[ii];
     auto &output_unit = output_partition[ii];
@@ -772,6 +780,8 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
                                        &output_unit.depth_image);
       }
     }
+    // input_unit.source_depth_image.clear();
+    // input_unit.source_depth_image.shrink_to_fit();
   }
 
   boost::mpi::gather(*mpi_comm_, &output_partition[0], recvcount, *output,
@@ -1469,10 +1479,13 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     total_cost += static_cast<int>(perch_params_.clutter_regularizer * num_occluders);
   }
 
-  final_depth_image->clear();
+
+  // final_depth_image->clear();
+  // final_depth_image->shrink_to_fit();
   *final_depth_image = depth_image;
 
-  final_color_image->clear();
+  // final_color_image->clear();
+  // final_color_image->shrink_to_fit();
   *final_color_image = color_image;
 
   child_properties->target_cost = target_cost;
@@ -1589,7 +1602,7 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
         // Find color matching points in observed point cloud
         uint32_t rgb_2 = *reinterpret_cast<int*>(&point_cloud->points[indices[i]].rgb);
         double color_distance = getColorDistance(rgb_1, rgb_2);
-        if (color_distance < 10) {
+        if (color_distance < kColorDistanceThreshold) {
           // If color is close then this is a valid neighbour
           num_color_neighbors_found++;
         }
@@ -2098,12 +2111,15 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   const vector<unsigned short> &depth_image,
   const vector<vector<unsigned short>> &color_image) {
+
+    using milli = std::chrono::milliseconds;
+    auto start = std::chrono::high_resolution_clock::now();
     printf("GetGravityAlignedPointCloud with depth and color\n");
     PointCloudPtr cloud(new PointCloud);
     // TODO
     for (int ii = 0; ii < kNumPixels; ++ii) {
       // Skip if empty pixel
-      if (depth_image[ii] == kKinectMaxDepth) {
+      if (depth_image[ii] >= kKinectMaxDepth) {
         continue;
       }
 
@@ -2149,6 +2165,12 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
     cloud->width = 1;
     cloud->height = cloud->points.size();
     cloud->is_dense = false;
+
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::cout << "GetGravityAlignedPointCloud() took "
+              << std::chrono::duration_cast<milli>(finish - start).count()
+              << " milliseconds\n";
+
     return cloud;
 }
 
@@ -2355,6 +2377,8 @@ void EnvObjectRecognition::CVToShort(cv::Mat *input_depth_image,
                                     cv::Mat *input_color_image,
                                     vector<unsigned short> *depth_image,
                                     vector<vector<unsigned short>> *color_image) {
+    using milli = std::chrono::milliseconds;
+    auto start = std::chrono::high_resolution_clock::now();
     printf("CVToShort()\n");
     assert(input_color_image->size() == input_depth_image->size());
 
@@ -2374,17 +2398,23 @@ void EnvObjectRecognition::CVToShort(cv::Mat *input_depth_image,
     for (int ii = 0; ii < s.height; ++ii) {
       for (int jj = 0; jj < s.width; ++jj) {
         int idx = ii * s.width + jj;
-        depth_image->at(idx) = (input_depth_image->at<unsigned short>(ii, jj));
+        if (input_depth_image->at<unsigned short>(ii, jj) < kKinectMaxDepth) {
+            depth_image->at(idx) = (input_depth_image->at<unsigned short>(ii, jj));
 
-        vector<unsigned short> color_vector{
-          (unsigned short)input_color_image->at<cv::Vec3b>(ii,jj)[2],
-          (unsigned short)input_color_image->at<cv::Vec3b>(ii,jj)[1],
-          (unsigned short)input_color_image->at<cv::Vec3b>(ii,jj)[0]
-        };
-        color_image->at(idx) = color_vector;
+            vector<unsigned short> color_vector{
+              (unsigned short)input_color_image->at<cv::Vec3b>(ii,jj)[2],
+              (unsigned short)input_color_image->at<cv::Vec3b>(ii,jj)[1],
+              (unsigned short)input_color_image->at<cv::Vec3b>(ii,jj)[0]
+            };
+            color_image->at(idx) = color_vector;
+        }
       }
     }
-    printf("CVToShort() Done\n");
+    // printf("CVToShort() Done\n");
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::cout << "CVToShort() took "
+              << std::chrono::duration_cast<milli>(finish - start).count()
+              << " milliseconds\n";
 }
 
 void EnvObjectRecognition::PrintImage(string fname,
@@ -2596,6 +2626,9 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
           // depthCVToShort(cv_depth_image, depth_image);
           // colorCVToShort(cv_color_image, color_image);
           CVToShort(cv_depth_image, cv_color_image, depth_image, color_image);
+
+          cv_depth_image->release();
+          cv_color_image->release();
           // if (object_states.size() > 1)
           // {
           //     // ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
@@ -2991,7 +3024,13 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
 
    printf("GetICPAdjustedPose()\n");
-  *pose_out = pose_in;
+
+
+   if (env_params_.use_external_render == 1)
+   {
+      *pose_out = pose_in;
+      return 100;
+   }
 
   pcl::IterativeClosestPointNonLinear<PointT, PointT> icp;
 
@@ -3332,7 +3371,7 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(
 void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                                                    &source_state, std::vector<GraphState> *succ_states) const {
 
-  printf("GenerateSuccessorStates()\n");
+  printf("GenerateSuccessorStates() \n");
   assert(succ_states != nullptr);
   succ_states->clear();
 
@@ -3425,7 +3464,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               // cv::imshow("invalid image", cv_color_image);
               // cv::waitKey(1);
 
-              // continue;
+              continue;
             }
             else {
               // std::cout << "Valid pose for theta : " << doubleVector[0] << " " <<
