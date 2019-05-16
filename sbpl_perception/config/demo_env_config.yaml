@@ -1,11 +1,12 @@
 search_resolution_translation: 0.08 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
-x_min : 0.25
+# x_min : 0.93
+# x_max : 1.0
+x_min : 0.6
 x_max : 1.0
 y_min : -0.35
 y_max : 0.35
 table_height : 0.00
-use_external_render : 0
 
 perch_params:
   sensor_resolution_radius: 0.003 #m

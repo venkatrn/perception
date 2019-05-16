@@ -13,7 +13,7 @@ namespace sbpl_perception {
 // A ROS service for localizing mutiple object instances in a scene. Details of
 // ther service request and response are available in srv/LocalizeObjects.srv.
 // Example usage:
-// roslaunch object_recognition_node object_localizer_service.launch 
+// roslaunch object_recognition_node object_localizer_service.launch
 // rosrun object_recognition_node object_localizer_client_example
 class ObjectLocalizerService {
  public:

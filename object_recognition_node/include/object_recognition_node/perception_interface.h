@@ -62,6 +62,7 @@ class PerceptionInterface
     ros::Subscriber requested_objects_sub_;
     std::string reference_frame_;
     std::string camera_frame_;
+    std::string camera_optical_frame_;
     tf::TransformListener tf_listener_;
     int use_external_render;
     bool capture_kinect_;

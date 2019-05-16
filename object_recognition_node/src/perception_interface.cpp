@@ -66,9 +66,11 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
                    0);
   private_nh.param("camera_frame", camera_frame_,
                    std::string("/head_mount_kinect_rgb_link"));
-
+  private_nh.param("camera_optical_frame", camera_optical_frame_,
+                   std::string("/head_mount_kinect_rgb_link"));
   std::string param_key;
   XmlRpc::XmlRpcValue model_bank_list;
+  printf("use_external_render : %d\n", use_external_render);
 
   if (private_nh.searchParam("model_bank", param_key)) {
     private_nh.getParam(param_key, model_bank_list);
@@ -245,7 +247,9 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 
   // Convert to ROS data type
   pcl_conversions::fromPCL(outputPCL, output);
-  filtered_point_cloud_pub_.publish(output);
+
+  for (int i = 0; i < 100; i++)
+    filtered_point_cloud_pub_.publish(output);
 
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
   // table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
@@ -279,8 +283,17 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   }
 
   tf::StampedTransform transform;
-  tf_listener_.lookupTransform(reference_frame_.c_str(),
-                               camera_frame_.c_str(), ros::Time(0.0), transform);
+
+  if (use_external_render == 0)
+  {
+      tf_listener_.lookupTransform(reference_frame_.c_str(),
+                                   camera_frame_.c_str(), ros::Time(0.0), transform);
+  }
+  else if (use_external_render == 1)
+  {
+    tf_listener_.lookupTransform(reference_frame_.c_str(),
+                                 camera_optical_frame_.c_str(), ros::Time(0.0), transform);
+  }
   Eigen::Isometry3d camera_pose;
   tf::transformTFToEigen(transform, camera_pose);
   std::cout << "Camera Pose" << endl;
@@ -373,7 +386,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
           pcl::PolygonMesh::Ptr mesh_ptr(new pcl::PolygonMesh(mesh));
           ObjectModel::TransformPolyMesh(mesh_ptr, mesh_ptr,
                                         object_transform.matrix().cast<float>());
-          
+
           if (pcl_visualization_) {
               viewer_->addPolygonMesh(*mesh_ptr, model_name);
               viewer_->setPointCloudRenderingProperties(
@@ -394,7 +407,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
                 pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
           }
 
-          
+
 
           // Publish the mesh marker
           visualization_msgs::Marker marker;

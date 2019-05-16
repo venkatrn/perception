@@ -21,6 +21,7 @@
 #include <sbpl_utils/hash_manager/hash_manager.h>
 
 #include <boost/mpi.hpp>
+#include <boost/filesystem.hpp>
 #include <Eigen/Dense>
 #include <opencv/cv.h>
 #include <opencv2/core/core.hpp>

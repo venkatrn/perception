@@ -42,7 +42,7 @@ idx2class = {
 #y_min = -0.3;
 #y_max = 0.3;
 #table_height = -0.075;
-  
+
 LM6d_root = os.path.join(cur_dir, "../../data/YCB_Video_Dataset/")
 #observed_set_root = os.path.join(LM6d_root, "image_set/observed")
 #rendered_pose_path = "%s/LM6d_{}_rendered_pose_{}.txt" % (
@@ -92,13 +92,13 @@ def main(camera_params, env_params):
                             [-0.00778635,   -0.776912,   -0.629561,    0.709281], \
                             [0,           0,           0,           1]])
 
-#    
+#
 #    camera_pose = np.array([  \
 #                            [0.778076,   6.3268e-06,     0.628171,      0.43785], \
 #                            [-4.92271e-06,            1, -3.97433e-06,    0.0174995], \
 #                            [   -0.628171,  2.70497e-11,     0.778076,     0.708856], \
 #                            [           0,            0,            0,            1]])
-    
+
 #    cam_to_body = np.array([[ 0, 0, 1, 0],
 #                            [-1, 0, 0, 0],
 #                            [0, -1, 0, 0],
@@ -118,7 +118,7 @@ def main(camera_params, env_params):
         for set_type in ["all"]:
 
             rendered_pose_list = []
-            
+
             # For reading in Perch
             rendered_pose_list_out = []
             if pose_from_file:
@@ -131,7 +131,9 @@ def main(camera_params, env_params):
                 for x in np.arange(x_min, x_max, float(env_params['search_resolution_translation'])):
                     for y in np.arange(y_min, y_max, float(env_params['search_resolution_translation'])):
                         for theta in np.arange(0, 2 * np.pi, float(env_params['search_resolution_yaw'])):
+                            original_point = np.array([[x], [y], [table_height], [1]])
                             if class_name == "004_sugar_box":
+                                # Add half the height of box to shift it up
                                 point = np.array([[x], [y], [table_height+0.086], [1]])
                             if class_name == "035_power_drill":
                                 point = np.array([[x], [y], [table_height], [1]])
@@ -149,18 +151,18 @@ def main(camera_params, env_params):
 
                             object_world_transform[:4,3] = point.flatten()
 #                            print(world_object_transform)
-                            
+
                             # First apply world to object transform on the object and then take it to camera frame
                             total_transform = np.matmul(np.linalg.inv(camera_pose), object_world_transform)
                             print(total_transform)
-                            
+
                             pose = RT_transform.mat2quat(total_transform[:3,:3]).tolist() + total_transform[:3,3].flatten().tolist()
 
 #                            pose = RT_transform.mat2quat(transformed_rotation).tolist() + transformed_point.flatten()[0:3].tolist()
                             print(pose)
                             rendered_pose_list.append(pose)
                             rendered_pose_list_out.append(point.flatten().tolist() + [0,0,theta])
-                            
+
             rendered_pose_list = np.array(rendered_pose_list)
             rendered_pose_list_out = np.array(rendered_pose_list_out)
             for idx, observed_pose in enumerate(tqdm(rendered_pose_list)):
@@ -269,7 +271,7 @@ if __name__ == "__main__":
 
     rospack = rospkg.RosPack()
     g_path2package = rospack.get_path('sbpl_perception')
-    
+
     env_params = None
     yaml_path = g_path2package + '/config/{}'.format(config_name)
     with open(yaml_path, 'r') as stream:
@@ -290,10 +292,10 @@ if __name__ == "__main__":
             rospy.logwarn('    Parameters loaded.')
         except yaml.YAMLError as exc:
             rospy.logerr(exc)
-            
+
 #    print(camera_params)
 #    print(env_params)
-    
+
 
     main(camera_params, env_params)
     # check_observed_rendered()

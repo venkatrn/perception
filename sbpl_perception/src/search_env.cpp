@@ -58,7 +58,8 @@ constexpr unsigned short kOcclusionThreshold = 50; // mm
 // out of bounds of the supporting place.
 constexpr double kFootprintTolerance = 0.02; // m
 
-constexpr double kColorDistanceThreshold = 15; // m
+// Max color distance for two points to be considered neighbours
+constexpr double kColorDistanceThreshold = 5; // m
 }  // namespace
 
 namespace sbpl_perception {
@@ -198,7 +199,11 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     const ModelMetaData &model_meta_data = model_bank_it->second;
 
     pcl::PolygonMesh mesh;
+    string extension = boost::filesystem::extension(model_meta_data.file);
+    // cout << "filename extension: " << extension << endl;
+
     pcl::io::loadPolygonFile (model_meta_data.file.c_str(), mesh);
+    // pcl::io::loadPolygonFileOBJ (model_meta_data.file.c_str(), mesh);
 
     // pcl::TextureMesh meshT;
     // pcl::io::loadPolygonFileOBJ("/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/models/004_sugar_box/textured.obj", meshT);
@@ -1408,9 +1413,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   if (env_params_.use_external_render == 0)
   {
-      succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &color_image,
-                                        &cv_depth_image, &cv_color_image,
-                                        &num_occluders);
+      succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &num_occluders);
   }
   else
   {
@@ -1487,6 +1490,10 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // final_color_image->clear();
   // final_color_image->shrink_to_fit();
   *final_color_image = color_image;
+
+  cloud_out.reset();
+  cloud_in.reset();
+  succ_cloud.reset();
 
   child_properties->target_cost = target_cost;
   child_properties->source_cost = source_cost;
