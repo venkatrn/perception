@@ -61,6 +61,7 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   Eigen::Affine3f flipping_transform = Eigen::Affine3f::Identity();
 
   if (flipped) {
+    std::cout << "Preprocessing Model - applying flipping transform" << endl;
     flipping_transform.matrix()(2, 2) = -1;
     transformPointCloud(*cloud_in, *cloud_in, flipping_transform);
   }
@@ -102,6 +103,8 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
 
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
+  std::cout << "Preprocess done" << endl;
+
   return transform * flipping_transform;
 }
 
@@ -208,11 +211,12 @@ cv::Point WorldPointToRasterPoint(double x, double y, double half_side) {
 ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name,
                          const bool symmetric, const bool flipped) {
   pcl::PolygonMesh::Ptr mesh_in(new pcl::PolygonMesh(mesh));
+  // pcl::PolygonMesh::Ptr mesh_out(new pcl::PolygonMesh(mesh));
   pcl::PolygonMesh::Ptr mesh_out(new pcl::PolygonMesh);
   preprocessing_transform_ = PreprocessModel(mesh_in, mesh_out,
                                              kMeshInMillimeters, flipped);
 
-  std::cout << "Preprocess done" << endl;
+  std::cout << "Preprocessing transform : " << preprocessing_transform_.matrix() << endl;
   mesh_ = *mesh_out;
   symmetric_ = symmetric;
   name_ = name;

@@ -161,7 +161,8 @@ def main(camera_params, env_params):
 #                            pose = RT_transform.mat2quat(transformed_rotation).tolist() + transformed_point.flatten()[0:3].tolist()
                             print(pose)
                             rendered_pose_list.append(pose)
-                            rendered_pose_list_out.append(point.flatten().tolist() + [0,0,theta])
+                            # rendered_pose_list_out.append(point.flatten().tolist() + [0,0,theta])
+                            rendered_pose_list_out.append(original_point.flatten().tolist() + [0,0,theta])
 
             rendered_pose_list = np.array(rendered_pose_list)
             rendered_pose_list_out = np.array(rendered_pose_list_out)

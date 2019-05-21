@@ -21,7 +21,6 @@
 #include <sbpl_utils/hash_manager/hash_manager.h>
 
 #include <boost/mpi.hpp>
-#include <boost/filesystem.hpp>
 #include <Eigen/Dense>
 #include <opencv/cv.h>
 #include <opencv2/core/core.hpp>
@@ -409,8 +408,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
               std::vector<unsigned short> *unadjusted_child_depth_image,
               std::vector<std::vector<unsigned short>> *unadjusted_child_color_image);
 
-  double getColorDistance(uint32_t rgb_1, uint32_t rgb_2);
-  int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud);
+  double getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const;
+  int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud) const;
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
   int GetTargetCost(const PointCloudPtr

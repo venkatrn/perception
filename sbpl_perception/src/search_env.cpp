@@ -59,7 +59,7 @@ constexpr unsigned short kOcclusionThreshold = 50; // mm
 constexpr double kFootprintTolerance = 0.02; // m
 
 // Max color distance for two points to be considered neighbours
-constexpr double kColorDistanceThreshold = 5; // m
+constexpr double kColorDistanceThreshold = 15; // m
 }  // namespace
 
 namespace sbpl_perception {
@@ -199,9 +199,6 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     const ModelMetaData &model_meta_data = model_bank_it->second;
 
     pcl::PolygonMesh mesh;
-    string extension = boost::filesystem::extension(model_meta_data.file);
-    // cout << "filename extension: " << extension << endl;
-
     pcl::io::loadPolygonFile (model_meta_data.file.c_str(), mesh);
     // pcl::io::loadPolygonFileOBJ (model_meta_data.file.c_str(), mesh);
 
@@ -255,6 +252,10 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
 
   point.x = pose.x();
   point.y = pose.y();
+
+  // if (env_params_.use_external_render == 1)
+  //   point.z = pose.z() - 0.086;
+  // else
   point.z = pose.z();
 
   // std::cout << "x:" << point.x << "y:" << point.y << "z:" << point.z << endl;
@@ -287,7 +288,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
 
   if (env_params_.use_external_render == 1) {
       // Axis is different
-      search_rad = 2 * search_rad;
+      search_rad = 0.5 * search_rad;
   }
   // double search_rad = obj_models_[model_id].GetCircumscribedRadius();
   // int num_neighbors_found = knn->radiusSearch(point, search_rad,
@@ -300,6 +301,19 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   if (num_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
     // printf("Invalid 1, neighbours found : %d, radius %f\n",num_neighbors_found, search_rad);
     return false;
+  }
+  else {
+    // if (env_params_.use_external_render == 1) {
+    //   int num_color_neighbors_found =
+    //       getNumColorNeighbours(point, indices, projected_cloud_);
+    //
+    //   printf("Color neighbours : %d\n", num_color_neighbors_found);
+    //
+    //   // if (num_color_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
+    //   if (num_color_neighbors_found == 0) {
+    //       return false;
+    //   }
+    // }
   }
 
   // TODO: revisit this and accomodate for collision model
@@ -582,6 +596,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   //--------------------------------------//
   int min_cost = 9999999999;
   PointCloudPtr min_cost_point_cloud;
+  printf("State number,     target_cost    source_cost    last_level_cost    candidate_costs    last_level_cost\n");
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
 
@@ -751,6 +766,7 @@ void EnvObjectRecognition::ComputeCostsInParallel(const
 
   printf("recvcount : %d\n", recvcount);
   for (int ii = 0; ii < recvcount; ++ii) {
+    printf("State number being processed : %d\n", ii);
     const auto &input_unit = input_partition[ii];
     auto &output_unit = output_partition[ii];
 
@@ -1363,6 +1379,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                  &succ_max_depth_unused)) {
     // final_depth_image->clear();
     // *final_depth_image = *unadjusted_depth_image;
+    printf("IsOccluded invalid\n");
     return -1;
   }
 
@@ -1403,7 +1420,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     // succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
     // final_depth_image->clear();
     // *final_depth_image = depth_image;
-    // return -1;
+    return -1;
     // Aditya
   }
 
@@ -1433,6 +1450,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                  &succ_max_depth)) {
     // final_depth_image->clear();
     // *final_depth_image = depth_image;
+    printf("IsOccluded invalid\n");
+
     return -1;
   }
 
@@ -1579,7 +1598,7 @@ bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
 
   return is_occluded;
 }
-double EnvObjectRecognition::getColorDistance(uint32_t rgb_1, uint32_t rgb_2)
+double EnvObjectRecognition::getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const
 {
     uint8_t r = (rgb_1 >> 16);
     uint8_t g = (rgb_1 >> 8);
@@ -1589,6 +1608,7 @@ double EnvObjectRecognition::getColorDistance(uint32_t rgb_1, uint32_t rgb_2)
     r = (rgb_2 >> 16);
     g = (rgb_2 >> 8);
     b = (rgb_2);
+    // printf("observed point color : %d,%d,%d\n", r,g,b);
     ColorSpace::Rgb point_2_color(r, g, b);
 
     double color_distance =
@@ -1600,7 +1620,7 @@ double EnvObjectRecognition::getColorDistance(uint32_t rgb_1, uint32_t rgb_2)
 
 int EnvObjectRecognition::getNumColorNeighbours(PointT point,
                                               vector<int> indices,
-                                              const PointCloudPtr point_cloud)
+                                              const PointCloudPtr point_cloud) const
 {
     uint32_t rgb_1 = *reinterpret_cast<int*>(&point.rgb);
     int num_color_neighbors_found = 0;
@@ -1620,11 +1640,13 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
 int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
                                         partial_rendered_cloud) {
   // Nearest-neighbor cost
-  // if (image_debug_) {
-  //   PrintPointCloud(partial_rendered_cloud, 1);
-  // }
+  if (image_debug_) {
+    // PrintPointCloud(partial_rendered_cloud, 1);
+  }
   double nn_score = 0;
   double nn_color_score = 0;
+  int total_color_neighbours = 0;
+
   for (size_t ii = 0; ii < partial_rendered_cloud->points.size(); ++ii) {
     // A rendered point will get cost as 1 if there are no points in neighbourhood or if
     // neighbourhoold points dont match the color of the point
@@ -1661,17 +1683,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
       {
         int num_color_neighbors_found =
             getNumColorNeighbours(point, indices, observed_cloud_);
-        // uint32_t rgb_1 = *reinterpret_cast<int*>(&point.rgb);
-        // for (int i = 0; i < indices.size(); i++)
-        // {
-        //     // Find color matching points in observed point cloud
-        //     uint32_t rgb_2 = *reinterpret_cast<int*>(&observed_cloud_->points[indices[i]].rgb);
-        //     double color_distance = getColorDistance(rgb_1, rgb_2);
-        //     if (color_distance < 10) {
-        //       // If color is close then this is a valid neighbour
-        //       num_color_neighbors_found++;
-        //     }
-        // }
+        total_color_neighbours += num_color_neighbors_found;
         if (num_color_neighbors_found == 0) {
           // If no color neighbours found then cost is 1.0
           color_cost = 1.0;
@@ -1691,7 +1703,8 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   }
 
   // distance score might be low but rgb score can still be high
-  printf("Color score for this state : %f with distance score : %f\n", nn_color_score, nn_score);
+  // color score tells how many points which were depth explained mismatched
+  printf("Color score for this state : %f with distance score : %f, color neighbours : %d\n", nn_color_score, nn_score, total_color_neighbours);
 
   int target_cost = 0;
   int target_color_cost = 0;
@@ -1863,17 +1876,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
         {
             int num_color_neighbors_found =
                 getNumColorNeighbours(point, indices, full_rendered_cloud);
-            // uint32_t rgb_1 = *reinterpret_cast<int*>(&point.rgb);
-            // for (int i = 0; i < indices.size(); i++)
-            // {
-            //     // Find color matching points in observed point cloud
-            //     uint32_t rgb_2 = *reinterpret_cast<int*>(&full_rendered_cloud->points[indices[i]].rgb);
-            //     double color_distance = getColorDistance(rgb_1, rgb_2);
-            //     if (color_distance < 10) {
-            //       // If color is close then this is a valid neighbour
-            //       num_color_neighbors_found++;
-            //     }
-            // }
+
             if (num_color_neighbors_found == 0) {
                 // If no color neighbours found then cost is 1.0
                 nn_score += 1.0;
@@ -1990,18 +1993,7 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
         {
             int num_color_neighbors_found =
                 getNumColorNeighbours(point, indices, full_rendered_cloud);
-            // uint32_t rgb_1 = *reinterpret_cast<int*>(&point.rgb);
-            // int num_color_neighbors_found = 0;
-            // for (int i = 0; i < indices.size(); i++)
-            // {
-            //     // Find color matching points in observed point cloud
-            //     uint32_t rgb_2 = *reinterpret_cast<int*>(&full_rendered_cloud->points[indices[i]].rgb);
-            //     double color_distance = getColorDistance(rgb_1, rgb_2);
-            //     if (color_distance < 10) {
-            //       // If color is close then this is a valid neighbour
-            //       num_color_neighbors_found++;
-            //     }
-            // }
+
             if (num_color_neighbors_found == 0) {
                 // If no color neighbours found then cost is 1.0
                 nn_score += 1.0;
@@ -3411,7 +3403,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
     if (env_params_.use_external_render == 1)
     {
-        // printf("States for model : %s\n", obj_models_[ii].name().c_str());
+        printf("States for model : %s\n", obj_models_[ii].name().c_str());
         string render_states_dir;
         string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
         string render_states_path_parent = render_states_path;
@@ -3477,13 +3469,14 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               // std::cout << "Valid pose for theta : " << doubleVector[0] << " " <<
               // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
               std::stringstream ss1;
-              ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
+              // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
+              ss1 << p.external_render_path() << "/" << obj_models_[ii].name() << "/" << p.external_pose_id() << "-color.png";
               std::string image_path = ss1.str();
-              // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+              printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), image_path.c_str());
 
-              // cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
-              // cv::imshow("valid image", cv_color_image);
-              // cv::waitKey(500);
+              cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+              cv::imshow("valid image", cv_color_image);
+              cv::waitKey(50);
             }
 
             GraphState s = source_state; // Can only add objects, not remove them
