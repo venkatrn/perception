@@ -296,7 +296,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                                                      std::vector<unsigned short>
                                                      &depth_image);
 
-  void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id);
+  void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
+  // void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
 
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
@@ -304,7 +305,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
  private:
 
   ros::Publisher render_point_cloud_topic;
-  // ros::Rate loop_rate;
+  ros::Publisher input_point_cloud_topic;
 
   std::vector<ObjectModel> obj_models_;
   pcl::simulation::Scene::Ptr scene_;

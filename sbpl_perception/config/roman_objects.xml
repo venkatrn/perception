@@ -1,5 +1,5 @@
 <launch>
-  <param name="mesh_in_mm" value="True"/>
+  <param name="mesh_in_mm" value="False"/>
   <rosparam param="model_bank" subst_value="True">
 
     [
@@ -31,6 +31,16 @@
       035_power_drill,
       <!-- $(find sbpl_perception)/data/ycb_models/035_power_drill.ply, -->
       $(find sbpl_perception)/data/YCB_Video_Dataset/models/035_power_drill/textured.obj,
+      false,
+      false,
+      1,
+      0.06,
+      1
+      ],
+      [
+      006_mustard_bottle,
+      <!-- $(find sbpl_perception)/data/ycb_models/035_power_drill.ply, -->
+      $(find sbpl_perception)/data/YCB_Video_Dataset/models/006_mustard_bottle/textured.obj,
       false,
       false,
       1,

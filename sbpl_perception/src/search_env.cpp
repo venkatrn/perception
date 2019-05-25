@@ -77,6 +77,12 @@ EnvObjectRecognition::EnvObjectRecognition(const
   argv[1] = new char[1];
   argv[0] = const_cast<char *>("0");
   argv[1] = const_cast<char *>("1");
+
+  // printf("Making simulator camera and input camera dimensions equal\n");
+  // kDepthImageHeight = kCameraHeight;
+  // kDepthImageWidth = kCameraWidth;
+  // kNumPixels = kDepthImageWidth * kDepthImageHeight;
+
   kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
                                                      kDepthImageHeight, kDepthImageWidth));
   scene_ = kinect_simulator_->scene_;
@@ -106,34 +112,36 @@ EnvObjectRecognition::EnvObjectRecognition(const
       exit(1);
     }
 
-    ros::NodeHandle private_nh("~perch_params");
+    ros::NodeHandle private_nh("~");
 
 
     // ros::NodeHandle nh_;
+    input_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/input_point_cloud", 1);
+
     render_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/rendered_point_cloud", 1);
 
-    private_nh.param("sensor_resolution_radius", perch_params_.sensor_resolution,
+    private_nh.param("/perch_params/sensor_resolution_radius", perch_params_.sensor_resolution,
                      0.003);
-    private_nh.param("min_neighbor_points_for_valid_pose",
+    private_nh.param("/perch_params/min_neighbor_points_for_valid_pose",
                      perch_params_.min_neighbor_points_for_valid_pose, 50);
-    private_nh.param("min_points_for_constraint_cloud",
+    private_nh.param("/perch_params/min_points_for_constraint_cloud",
                      perch_params_.min_points_for_constraint_cloud, 50);
-    private_nh.param("max_icp_iterations", perch_params_.max_icp_iterations, 10);
-    private_nh.param("icp_max_correspondence",
+    private_nh.param("/perch_params/max_icp_iterations", perch_params_.max_icp_iterations, 10);
+    private_nh.param("/perch_params/icp_max_correspondence",
                      perch_params_.icp_max_correspondence, 0.05);
-    private_nh.param("use_adaptive_resolution",
+    private_nh.param("/perch_params/use_adaptive_resolution",
                      perch_params_.use_adaptive_resolution, false);
-    private_nh.param("use_rcnn_heuristic", perch_params_.use_rcnn_heuristic, true);
-    private_nh.param("use_model_specific_search_resolution",
+    private_nh.param("/perch_params/use_rcnn_heuristic", perch_params_.use_rcnn_heuristic, false);
+    private_nh.param("/perch_params/use_model_specific_search_resolution",
                      perch_params_.use_model_specific_search_resolution, false);
-    private_nh.param("use_clutter_mode", perch_params_.use_clutter_mode, false);
-    private_nh.param("clutter_regularizer", perch_params_.clutter_regularizer, 1.0);
+    private_nh.param("/perch_params/use_clutter_mode", perch_params_.use_clutter_mode, false);
+    private_nh.param("/perch_params/clutter_regularizer", perch_params_.clutter_regularizer, 1.0);
 
-    private_nh.param("visualize_expanded_states",
+    private_nh.param("/perch_params/visualize_expanded_states",
                      perch_params_.vis_expanded_states, false);
-    private_nh.param("print_expanded_states", perch_params_.print_expanded_states,
+    private_nh.param("/perch_params/print_expanded_states", perch_params_.print_expanded_states,
                      false);
-    private_nh.param("debug_verbose", perch_params_.debug_verbose, false);
+    private_nh.param("/perch_params/debug_verbose", perch_params_.debug_verbose, false);
     perch_params_.initialized = true;
 
     printf("----------PERCH Config-------------\n");
@@ -623,7 +631,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       // uint8_t rgb[3] = {255,0,0};
       auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
                                            output_unit.depth_image, output_unit.color_image);
-      PrintPointCloud(gravity_aligned_point_cloud, candidate_succ_ids[ii]);
+      PrintPointCloud(gravity_aligned_point_cloud, candidate_succ_ids[ii], render_point_cloud_topic);
 
       printf("State %d,       %d      %d      %d      %d      %d\n",
              candidate_succ_ids[ii],
@@ -686,7 +694,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   // PrintState(source_state_id, fname);
 }
 
-void EnvObjectRecognition::PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id)
+void EnvObjectRecognition::PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic)
 {
     printf("Print File Cloud Size : %d\n", gravity_aligned_point_cloud->points.size());
     std::stringstream cloud_ss;
@@ -709,7 +717,7 @@ void EnvObjectRecognition::PrintPointCloud(PointCloudPtr gravity_aligned_point_c
     pcl_conversions::fromPCL(outputPCL, output);
     output.header.frame_id = env_params_.reference_frame_;
 
-    render_point_cloud_topic.publish(output);
+    point_cloud_topic.publish(output);
     // ros::spinOnce();
     // ros::Rate loop_rate(5);
     // loop_rate.sleep();
@@ -1641,7 +1649,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
                                         partial_rendered_cloud) {
   // Nearest-neighbor cost
   if (image_debug_) {
-    // PrintPointCloud(partial_rendered_cloud, 1);
+    PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
   }
   double nn_score = 0;
   double nn_color_score = 0;
@@ -2018,6 +2026,15 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
 
   // std::cout<<cam_to_world_.matrix()<<endl;
 
+  // Rotate camera frame by 90 to optical frame because we are creating point cloud from images
+  Eigen::Isometry3d cam_to_body;
+  cam_to_body.matrix() << 0, 0, 1, 0,
+                    -1, 0, 0, 0,
+                    0, -1, 0, 0,
+                    0, 0, 0, 1;
+  Eigen::Isometry3d transform;
+  transform = cam_to_world_ * cam_to_body;
+  
   for (int u = 0; u < s.width; u++) {
     for (int v = 0; v < s.height; v++) {
       vector<int> indices;
@@ -2028,17 +2045,9 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       uint32_t rgbc = ((uint32_t)color_image.at<cv::Vec3b>(v,u)[2] << 16 | (uint32_t)color_image.at<cv::Vec3b>(v,u)[1]<< 8 | (uint32_t)color_image.at<cv::Vec3b>(v,u)[0]);
       point.rgb = *reinterpret_cast<float*>(&rgbc);
 
-      // int u = kDepthImageWidth - ii % kDepthImageWidth;
-      // int u = ii % kDepthImageWidth;
-      // int v = ii / kDepthImageWidth;
-      // v = kDepthImageHeight - 1 - v;
-      // int idx = y * camera_width_ + x;
-      //         int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
-      // point = observed_organized_cloud_->at(v, u);
-
       Eigen::Vector3f point_eig;
       kinect_simulator_->rl_->getGlobalPointCV(u, v,
-                                             static_cast<float>(depth_image.at<unsigned short>(v,u)) / 1000.0, cam_to_world_,
+                                             static_cast<float>(depth_image.at<unsigned short>(v,u)) / 10000.0, transform,
                                              point_eig);
       point.x = point_eig[0];
       point.y = point_eig[1];
@@ -2110,6 +2119,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   const vector<unsigned short> &depth_image,
   const vector<vector<unsigned short>> &color_image) {
+    printf("kDepthImageWidth : %d\n", kDepthImageWidth);
 
     using milli = std::chrono::milliseconds;
     auto start = std::chrono::high_resolution_clock::now();
@@ -2778,7 +2788,7 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   knn.reset(new pcl::search::KdTree<PointT>(true));
   printf("Setting knn with cloud of size : %d\n", observed_cloud_->points.size());
-  PrintPointCloud(observed_cloud_, 1);
+  PrintPointCloud(observed_cloud_, 1, render_point_cloud_topic);
   knn->setInputCloud(observed_cloud_);
 
   if (mpi_comm_->rank() == kMasterRank) {
@@ -2945,10 +2955,11 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   SetTableHeight(input.table_height);
   SetCameraPose(input.camera_pose);
   ResetEnvironmentState();
-  *original_input_cloud_ = input.cloud;
   *constraint_cloud_ = input.constraint_cloud;
   env_params_.use_external_render = input.use_external_render;
   env_params_.reference_frame_ = input.reference_frame_;
+
+  
 
   printf("External Render : %d\n", env_params_.use_external_render);
   // If #repetitions is not set, we will assume every unique model appears
@@ -2956,26 +2967,43 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   // if (input.model_repetitions.empty()) {
   //   input.model_repetitions.resize(input.model_names.size(), 1);
   // }
-
-  std::cout << "Set Input Camera Pose" << endl;
-  Eigen::Affine3f cam_to_body;
-  // Rotate things by 90 to put in camera optical frame
-  cam_to_body.matrix() << 0, 0, 1, 0,
-                     -1, 0, 0, 0,
-                     0, -1, 0, 0,
-                     0, 0, 0, 1;
   PointCloudPtr depth_img_cloud(new PointCloud);
-  Eigen::Affine3f transform;
-  transform.matrix() = input.camera_pose.matrix().cast<float>();
-  transform = cam_to_body.inverse() * transform.inverse();
 
-  // transforming to camera frame to get depth image
-  transformPointCloud(input.cloud, *depth_img_cloud,
-                      transform);
+  if (input.use_input_images) 
+  {
+    printf("Using input images instead of cloud\n");
+    cv::Mat cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
+    cv::Mat cv_color_image = cv::imread(input.input_color_image, CV_LOAD_IMAGE_COLOR);
+    depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_color_image);
+    original_input_cloud_ = depth_img_cloud;
+    PrintPointCloud(original_input_cloud_, 1, input_point_cloud_topic);
+  }
+  else {
+    *original_input_cloud_ = input.cloud;
+    std::cout << "Set Input Camera Pose" << endl;
+    Eigen::Affine3f cam_to_body;
+    // Rotate things by 90 to put in camera optical frame
+    cam_to_body.matrix() << 0, 0, 1, 0,
+                      -1, 0, 0, 0,
+                      0, -1, 0, 0,
+                      0, 0, 0, 1;
+    // PointCloudPtr depth_img_cloud(new PointCloud);
+    Eigen::Affine3f transform;
+    transform.matrix() = input.camera_pose.matrix().cast<float>();
+    transform = cam_to_body.inverse() * transform.inverse();
 
+    // transforming to camera frame to get depth image
+    transformPointCloud(input.cloud, *depth_img_cloud,
+                        transform);
+
+    // vector<unsigned short> depth_image =
+    //   sbpl_perception::OrganizedPointCloudToKinectDepthImage(depth_img_cloud);
+
+    // *observed_organized_cloud_ = *depth_img_cloud;
+  }
   vector<unsigned short> depth_image =
-    sbpl_perception::OrganizedPointCloudToKinectDepthImage(depth_img_cloud);
-
+      sbpl_perception::OrganizedPointCloudToKinectDepthImage(depth_img_cloud);
+  
   *observed_organized_cloud_ = *depth_img_cloud;
 
   if (mpi_comm_->rank() == kMasterRank && perch_params_.print_expanded_states) {
@@ -2990,7 +3018,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   SetObservation(input.model_names.size(), depth_image);
 
   // Precompute RCNN heuristics.
-  rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input,
+  rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input, original_input_cloud_,
                                                          kinect_simulator_));
   rcnn_heuristic_factory_->SetDebugDir(debug_dir_);
 

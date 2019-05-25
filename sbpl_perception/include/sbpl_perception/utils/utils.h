@@ -21,8 +21,8 @@ namespace sbpl_perception {
 
 // Depth image parameters (TODO: read in from config file).
 // 424 x 512 for Kinect V2.0.
-constexpr int kDepthImageHeight = 480;
-constexpr int kDepthImageWidth = 640;
+constexpr int kDepthImageHeight = 540;
+constexpr int kDepthImageWidth = 960;
 constexpr int kNumPixels = kDepthImageWidth * kDepthImageHeight;
 
 // The max-range (no return) value in a depth image produced by
@@ -66,6 +66,12 @@ struct RecognitionInput {
   int use_external_render;
 
   std::string reference_frame_;
+
+  std::string input_color_image;
+
+  std::string input_depth_image;
+
+  int use_input_images;
 };
 
 // A container for the holding the meta-data associated with a 3D model.

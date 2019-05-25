@@ -29,6 +29,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib
   sbpl
+  eigen_conversions
+  visualization_msgs
   rospy
   sbpl_utils)
 
@@ -96,6 +98,8 @@ catkin_package(
     sbpl
     sbpl_utils
     rospy
+    eigen_conversions
+    visualization_msgs
   DEPENDS
     # OpenCV
     #MPI
@@ -183,6 +187,10 @@ target_link_libraries(heuristic_test ${PROJECT_NAME})
 add_executable(perch
   experiments/src/perch.cpp)
 target_link_libraries(perch ${PROJECT_NAME})
+
+add_executable(perch_fat
+  experiments/src/perch_fat.cpp)
+target_link_libraries(perch_fat ${PROJECT_NAME})
 
 add_executable(perch_single_object
   experiments/src/perch_single_object.cpp)
