@@ -155,7 +155,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image,
-                             std::vector<std::vector<unsigned short>> *color_image,
+                             std::vector<std::vector<unsigned char>> *color_image,
                              cv::Mat *cv_depth_image,
                              cv::Mat *cv_color_image,
                              int* num_occluders_in_input_cloud);
@@ -165,16 +165,16 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   const float *GetDepthImage(GraphState s,
                         std::vector<unsigned short> *depth_image,
-                        std::vector<std::vector<unsigned short>> *color_image,
+                        std::vector<std::vector<unsigned char>> *color_image,
                         cv::Mat *cv_depth_image,
                         cv::Mat *cv_color_image);
 
   void depthCVToShort(cv::Mat input_image, vector<unsigned short> *depth_image);
-  void colorCVToShort(cv::Mat input_image, vector<vector<unsigned short>> *color_image);
+  void colorCVToShort(cv::Mat input_image, vector<vector<unsigned char>> *color_image);
   void CVToShort(cv::Mat *input_color_image,
                  cv::Mat *input_depth_image,
                  vector<unsigned short> *depth_image,
-                 vector<vector<unsigned short>> *color_image);
+                 vector<vector<unsigned char>> *color_image);
 
   pcl::simulation::SimExample::Ptr kinect_simulator_;
 
@@ -259,7 +259,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   // Compute costs of successor states in parallel using MPI. This method must
   // be called by all processors.
-  void ComputeCostsInParallel(const std::vector<CostComputationInput> &input,
+  void ComputeCostsInParallel(std::vector<CostComputationInput> &input,
                               std::vector<CostComputationOutput> *output, bool lazy);
 
 
@@ -290,7 +290,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image);
 
   PointCloudPtr GetGravityAlignedPointCloud(const std::vector<unsigned short> &depth_image,
-                                            const std::vector<std::vector<unsigned short>> &color_image
+                                            const std::vector<std::vector<unsigned char>> &color_image
                                             );
   PointCloudPtr GetGravityAlignedOrganizedPointCloud(const
                                                      std::vector<unsigned short>
@@ -386,11 +386,11 @@ class EnvObjectRecognition : public EnvironmentMHA {
                                     &last_object_depth_image, std::vector<unsigned short> *composed_depth_image);
 
   bool GetComposedDepthImage(const std::vector<unsigned short> &source_depth_image,
-                                  const std::vector<std::vector<unsigned short>> &source_color_image,
+                                  const std::vector<std::vector<unsigned char>> &source_color_image,
                                   const std::vector<unsigned short> &last_object_depth_image,
-                                  const std::vector<std::vector<unsigned short>> &last_object_color_image,
+                                  const std::vector<std::vector<unsigned char>> &last_object_color_image,
                                   std::vector<unsigned short> *composed_depth_image,
-                                  std::vector<std::vector<unsigned short>> *composed_color_image);
+                                  std::vector<std::vector<unsigned char>> *composed_color_image);
 
   bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state,
                                  std::vector<unsigned short> *single_object_depth_image, bool after_refinement);
@@ -399,15 +399,15 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // of the last added object is adjusted using ICP and the computed state properties.
   int GetCost(const GraphState &source_state, const GraphState &child_state,
               const std::vector<unsigned short> &source_depth_image,
-              const std::vector<std::vector<unsigned short>> &source_color_image,
+              const std::vector<std::vector<unsigned char>> &source_color_image,
               const std::vector<int> &parent_counted_pixels,
               std::vector<int> *child_counted_pixels,
               GraphState *adjusted_child_state,
               GraphStateProperties *state_properties,
               std::vector<unsigned short> *adjusted_child_depth_image,
-              std::vector<std::vector<unsigned short>> *adjusted_child_color_image,
+              std::vector<std::vector<unsigned char>> *adjusted_child_color_image,
               std::vector<unsigned short> *unadjusted_child_depth_image,
-              std::vector<std::vector<unsigned short>> *unadjusted_child_color_image);
+              std::vector<std::vector<unsigned char>> *unadjusted_child_color_image);
 
   double getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const;
   int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud) const;

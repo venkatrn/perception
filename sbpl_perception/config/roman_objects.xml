@@ -47,6 +47,16 @@
       0.06,
       1
       ],
+      [
+      007_tuna_fish_can,
+      <!-- $(find sbpl_perception)/data/ycb_models/035_power_drill.ply, -->
+      $(find sbpl_perception)/data/YCB_Video_Dataset/models/007_tuna_fish_can/textured.obj,
+      false,
+      false,
+      1,
+      0.06,
+      1
+      ],
     ]
   </rosparam>
 </launch>

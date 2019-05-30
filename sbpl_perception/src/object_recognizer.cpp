@@ -192,7 +192,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   env_obj_->SetDebugOptions(image_debug);
 
 }
-
+// This is used Aditya in perch fat
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
                                        std::vector<Eigen::Affine3f> *object_transforms) const {
   object_transforms->clear();
@@ -219,7 +219,6 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
   return plan_success;
 }
 
-// This is used Aditya
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
                                        std::vector<ContPose> *detected_poses) const {
   printf("Object recognizer received request to localize %zu objects: \n",

@@ -17,7 +17,7 @@ struct CostComputationInput {
   int child_id;
 
   std::vector<unsigned short> source_depth_image;
-  std::vector<std::vector<unsigned short>> source_color_image;
+  std::vector<std::vector<unsigned char>> source_color_image;
   std::vector<int> source_counted_pixels;
 
   // This is optional: a non-empty vector should be used only when lazily
@@ -33,9 +33,9 @@ struct CostComputationOutput {
   GraphStateProperties state_properties;
   std::vector<int> child_counted_pixels;
   std::vector<unsigned short> depth_image;
-  std::vector<std::vector<unsigned short>> color_image;
+  std::vector<std::vector<unsigned char>> color_image;
   std::vector<unsigned short> unadjusted_depth_image;
-  std::vector<std::vector<unsigned short>> unadjusted_color_image;
+  std::vector<std::vector<unsigned char>> unadjusted_color_image;
 };
 
 namespace boost {

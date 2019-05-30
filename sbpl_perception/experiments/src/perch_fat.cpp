@@ -92,72 +92,70 @@ int main(int argc, char **argv) {
   // Wait until all processes are ready for the planning phase.
   world->barrier();
 
-  RecognitionInput input;
-  ros::NodeHandle nh("~");
-  nh.getParam("/x_min", input.x_min);
-  nh.getParam("/x_max", input.x_max);
-  nh.getParam("/y_min", input.y_min);
-  nh.getParam("/y_max", input.y_max);
-  nh.getParam("/table_height", input.table_height);
-  nh.getParam("/use_external_render", input.use_external_render);
-  nh.getParam("/input_color_image", input.input_color_image);
-  nh.getParam("/input_depth_image", input.input_depth_image);
-  nh.getParam("/reference_frame_", input.reference_frame_);
-  std::string required_object;
-  nh.getParam("/required_object", required_object);
-  std::vector<double> camera_pose_list;
-  nh.getParam("/camera_pose", camera_pose_list);
-
-  std::cout << "required_object  " << required_object << endl;
-  std::cout << "input_color_image  " << input.input_color_image << endl;
-  std::cout << "input_depth_image  " << input.input_depth_image << endl;
-  // std::cout << "camera_pose" << camera_pose_list << endl;
-  input.use_input_images = 1;
-
-  Eigen::Isometry3d camera_pose;
-  for (int i = 0; i < 4; i++){
-    for (int j = 0; j < 4; j++){
-      camera_pose(i, j) = camera_pose_list[j + 4 * i];
-    }
-  }
-  std::cout << "camera_pose  " << camera_pose.matrix() << endl;
-  // camera_pose.matrix() <<
-  //                         0.868216,  0.000109327,     0.496186,     0.436202,
-  //                       -9.49191e-05,            1, -5.42467e-05,    0.0174911,
-  //                        -0.496186,  4.05831e-10,     0.868216,     0.709983,
-  //                                0,            0,            0,            1;
-  input.camera_pose = camera_pose;
-  input.model_names = vector<string>();
-  input.model_names.push_back(required_object);
-  // input.model_names = vector<string>({"004_sugar_box"});
-
-
+  RecognitionInput input_global;
   std::vector<Eigen::Affine3f> object_transforms;
 
+  if (IsMaster(world)) {
+      RecognitionInput input;
+      ros::NodeHandle nh("~");
+      nh.getParam("/x_min", input.x_min);
+      nh.getParam("/x_max", input.x_max);
+      nh.getParam("/y_min", input.y_min);
+      nh.getParam("/y_max", input.y_max);
+      nh.getParam("/table_height", input.table_height);
+      nh.getParam("/use_external_render", input.use_external_render);
+      nh.getParam("/input_color_image", input.input_color_image);
+      nh.getParam("/input_depth_image", input.input_depth_image);
+      nh.getParam("/reference_frame_", input.reference_frame_);
+      std::string required_object;
+      nh.getParam("/required_object", required_object);
+      std::vector<double> camera_pose_list;
+      nh.getParam("/camera_pose", camera_pose_list);
 
-  XmlRpc::XmlRpcValue model_bank_list;
-  std::string param_key;
+      std::cout << "required_object  " << required_object << endl;
+      std::cout << "input_color_image  " << input.input_color_image << endl;
+      std::cout << "input_depth_image  " << input.input_depth_image << endl;
+      // std::cout << "camera_pose" << camera_pose_list << endl;
+      input.use_input_images = 1;
 
-  if (nh.searchParam("/model_bank", param_key)) {
-    nh.getParam(param_key, model_bank_list);
+      Eigen::Isometry3d camera_pose;
+      for (int i = 0; i < 4; i++){
+        for (int j = 0; j < 4; j++){
+          camera_pose(i, j) = camera_pose_list[j + 4 * i];
+        }
+      }
+      std::cout << "camera_pose  " << camera_pose.matrix() << endl;
+      // camera_pose.matrix() <<
+      //                         0.868216,  0.000109327,     0.496186,     0.436202,
+      //                       -9.49191e-05,            1, -5.42467e-05,    0.0174911,
+      //                        -0.496186,  4.05831e-10,     0.868216,     0.709983,
+      //                                0,            0,            0,            1;
+      input.camera_pose = camera_pose;
+      input.model_names = vector<string>();
+      input.model_names.push_back(required_object);
+      // input.model_names = vector<string>({"004_sugar_box"});
+      input_global = input;
   }
-
-  ModelBank model_bank_ = ModelBankFromList(model_bank_list);
-
-
   world->barrier();
-
-  // input.cloud = *cloud_in;
+  broadcast(*world, input_global, kMasterRank);
 
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
 
-  object_recognizer.LocalizeObjects(input, &object_transforms);
+  object_recognizer.LocalizeObjects(input_global, &object_transforms);
 
- 
 
   // // Write output and statistics to file.
   if (IsMaster(world)) {
+    ros::NodeHandle nh("~");
+    std::string param_key;
+    XmlRpc::XmlRpcValue model_bank_list;
+
+    if (nh.searchParam("/model_bank", param_key)) {
+      nh.getParam(param_key, model_bank_list);
+    }
+    ModelBank model_bank_ = ModelBankFromList(model_bank_list);
+
     vector<std_msgs::Float64MultiArray> rosmsg_object_transforms(
       object_transforms.size()
     );
@@ -187,24 +185,24 @@ int main(int argc, char **argv) {
 
     // fs_poses << input_id << endl;
     // fs_stats << input_id << endl;
-     for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
+     for (size_t ii = 0; ii < input_global.model_names.size(); ++ii) {
 
         Eigen::Matrix4d eigen_pose(rosmsg_object_transforms[ii].data.data());
         Eigen::Affine3d object_transform;
         // // Transpose to convert column-major raw data initialization to row-major.
         object_transform.matrix() = eigen_pose.transpose();
 
-        std::cout << "Pose for Object: " << input.model_names[ii] << std::endl <<
+        std::cout << "Pose for Object: " << input_global.model_names[ii] << std::endl <<
                         object_transform.matrix() << std::endl << std::endl;
 
         geometry_msgs::PoseStamped msg;
-        msg.header.frame_id = input.reference_frame_;
+        msg.header.frame_id = input_global.reference_frame_;
         msg.header.stamp = ros::Time::now();
         tf::poseEigenToMsg(object_transform, msg.pose);
         pose_pub_.publish(msg);
         // latest_object_poses_[ii] = msg.pose;
 
-        const string &model_name = input.model_names[ii];
+        const string &model_name = input_global.model_names[ii];
         const string &model_file = model_bank_[model_name].file;
         cout << model_file << endl;
         pcl::PolygonMesh mesh;
@@ -213,7 +211,7 @@ int main(int argc, char **argv) {
         ObjectModel::TransformPolyMesh(mesh_ptr, mesh_ptr,
                                       object_transform.matrix().cast<float>());
         visualization_msgs::Marker marker;
-        marker.header.frame_id = input.reference_frame_;
+        marker.header.frame_id = input_global.reference_frame_;
         marker.header.stamp = ros::Time();
         marker.ns = "perch";
         marker.id = ii;
