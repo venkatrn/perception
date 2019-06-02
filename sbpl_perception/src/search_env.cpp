@@ -547,8 +547,9 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   cv::Mat source_cv_depth_image;
   cv::Mat source_cv_color_image;
 
-  GetDepthImage(source_state, &source_depth_image, &source_color_image,
-                &source_cv_depth_image, &source_cv_color_image);
+  // Commented by Aditya, do this in computecost only once to prevent multiple copies of the same source image vectors
+  // GetDepthImage(source_state, &source_depth_image, &source_color_image,
+  //               &source_cv_depth_image, &source_cv_color_image);
 
   candidate_costs.resize(candidate_succ_ids.size());
 
@@ -792,6 +793,7 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
     original_count = count = input.size();
 
     if (count % num_processors != 0) {
+      printf("resizing input\n");
       count += num_processors - count % num_processors;
       CostComputationInput dummy_input;
       dummy_input.source_id = -1;
@@ -818,6 +820,15 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
   boost::mpi::scatter(*mpi_comm_, input, &input_partition[0], recvcount,
                       kMasterRank);
 
+  vector<unsigned short> source_depth_image;
+  vector<vector<unsigned char>> source_color_image;
+  cv::Mat source_cv_depth_image;
+  cv::Mat source_cv_color_image;
+
+  GetDepthImage(input_partition[0].source_state, 
+                &source_depth_image, &source_color_image,
+                &source_cv_depth_image, &source_cv_color_image);
+
   printf("recvcount : %d\n", recvcount);
   for (int ii = 0; ii < recvcount; ++ii) {
     printf("State number being processed : %d\n", ii);
@@ -832,8 +843,8 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
 
     if (!lazy) {
       output_unit.cost = GetCost(input_unit.source_state, input_unit.child_state,
-                                 input_unit.source_depth_image,
-                                 input_unit.source_color_image,
+                                 source_depth_image,
+                                 source_color_image,
                                  input_unit.source_counted_pixels,
                                  &output_unit.child_counted_pixels, &output_unit.adjusted_state,
                                  &output_unit.state_properties, &output_unit.depth_image,

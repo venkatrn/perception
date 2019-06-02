@@ -183,6 +183,11 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
   ar &input.table_height;
   ar &input.heuristics_dir;
   ar &input.constraint_cloud;
+  ar &input.use_external_render;
+  ar &input.reference_frame_;
+  ar &input.input_color_image;
+  ar &input.input_depth_image;
+  ar &input.use_input_images;
 }
 
 template<class Archive>

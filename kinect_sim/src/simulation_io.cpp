@@ -481,8 +481,8 @@ pcl::simulation::SimExample::get_rgb_image_uchar(const uint8_t *rgb_buffer,
                                               std::vector<std::vector<uchar>>* color_image_uchar) {
   int npixels = rl_->getWidth() * rl_->getHeight();
   color_image_uchar->clear();
-  std::vector<unsigned char> color_vector{'0','0','0'};
-  color_image_uchar->resize(npixels, color_vector);
+  // std::vector<unsigned char> color_vector{'0','0','0'};
+  color_image_uchar->resize(npixels);
   for (int y = 0; y <  height_; ++y) {
     for (int x = 0; x < width_; ++x) {
       int px = y * width_ + x ;
