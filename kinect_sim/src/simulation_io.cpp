@@ -483,16 +483,16 @@ pcl::simulation::SimExample::get_rgb_image_uchar(const uint8_t *rgb_buffer,
   color_image_uchar->clear();
   std::vector<unsigned char> color_vector{'0','0','0'};
   color_image_uchar->resize(npixels, color_vector);
-  // for (int y = 0; y <  height_; ++y) {
-  //   for (int x = 0; x < width_; ++x) {
-  //     int px = y * width_ + x ;
-  //     int px_in = (height_ - 1 - y) * width_ + x ; // flip up down
-  //     std::vector<unsigned char> color_vector{
-  //       rgb_buffer[3 * px_in + 0],
-  //       rgb_buffer[3 * px_in + 1],
-  //       rgb_buffer[3 * px_in + 2]
-  //     };
-  //     color_image_uchar->at((px)) = color_vector;
-  //   }
-  // }
+  for (int y = 0; y <  height_; ++y) {
+    for (int x = 0; x < width_; ++x) {
+      int px = y * width_ + x ;
+      int px_in = (height_ - 1 - y) * width_ + x ; // flip up down
+      std::vector<unsigned char> color_vector{
+        rgb_buffer[3 * px_in + 0],
+        rgb_buffer[3 * px_in + 1],
+        rgb_buffer[3 * px_in + 2]
+      };
+      color_image_uchar->at((px)) = color_vector;
+    }
+  }
 }
