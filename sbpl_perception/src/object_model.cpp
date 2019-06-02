@@ -226,10 +226,10 @@ ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name,
 
 void ObjectModel::TransformPolyMesh(const pcl::PolygonMesh::Ptr
                                     &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform) {
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in (new
-                                                pcl::PointCloud<pcl::PointXYZ>);
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_out (new
-                                                 pcl::PointCloud<pcl::PointXYZ>);
+  pcl::PointCloud<PointT>::Ptr cloud_in (new
+                                                pcl::PointCloud<PointT>);
+  pcl::PointCloud<PointT>::Ptr cloud_out (new
+                                                 pcl::PointCloud<PointT>);
   pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
 
   transformPointCloud(*cloud_in, *cloud_out, transform);

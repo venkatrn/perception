@@ -40,7 +40,8 @@
       [
       006_mustard_bottle,
       <!-- $(find sbpl_perception)/data/ycb_models/035_power_drill.ply, -->
-      $(find sbpl_perception)/data/YCB_Video_Dataset/models/006_mustard_bottle/textured.obj,
+      /home/aditya/Desktop/006_mustard_bottle/textured_binary.ply,
+      <!-- $(find sbpl_perception)/data/YCB_Video_Dataset/models/006_mustard_bottle/textured_binary.ply, -->
       false,
       false,
       1,

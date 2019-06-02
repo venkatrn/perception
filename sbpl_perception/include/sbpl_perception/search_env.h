@@ -28,6 +28,7 @@
 #include <pcl/registration/icp.h>
 #include <pcl/registration/icp_nl.h>
 #include <pcl/registration/transformation_estimation_2D.h>
+#include <pcl/surface/texture_mapping.h>
 // #include <pcl/registration/transformation_estimation_lm.h>
 // #include <pcl/registration/transformation_estimation_svd.h>
 // #include <pcl/registration/warp_point_rigid_3d.h>
@@ -151,7 +152,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // "occluders" in the input scene, i.e, any point in the input cloud which
   // occludes a point in the rendered scene.
   const float *GetDepthImage(GraphState s,
-                             std::vector<unsigned short> *depth_image, int* num_occluders_in_input_cloud);
+                             std::vector<unsigned short> *depth_image, 
+                             std::vector<std::vector<unsigned char>> *color_image,
+                             int* num_occluders_in_input_cloud);
 
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image,
