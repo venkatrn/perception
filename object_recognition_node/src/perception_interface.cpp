@@ -301,7 +301,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 
 
   tf_listener_.lookupTransform(reference_frame_.c_str(),
-                               "/camera_color_optical_frame", ros::Time(0.0), transform);
+                                camera_optical_frame_.c_str(), ros::Time(0.0), transform);
   printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
       transform.getOrigin().y(), transform.getOrigin().z());
   Eigen::Isometry3d camera_to_world_pose;
@@ -469,8 +469,8 @@ void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
        << endl;
   // latest_requested_objects_ = vector<string>({object_name.data});
   // latest_requested_objects_ = {"004_sugar_box", "035_power_drill"};
-  latest_requested_objects_ = {"004_sugar_box"};
-  // latest_requested_objects_ = {"crate"};
+  // latest_requested_objects_ = {"004_sugar_box"};
+  latest_requested_objects_ = {"crate"};
   capture_kinect_ = true;
   recent_observations_.clear();
   return;

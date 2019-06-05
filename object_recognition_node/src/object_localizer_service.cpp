@@ -103,7 +103,7 @@ bool ObjectLocalizerService::LocalizerHelper(const
   if (IsMaster(mpi_world)) {
     recognition_input = input;
   }
-  recognition_input.use_external_render = 1;
+  recognition_input.use_external_render = 0;
   // Wait for master input to be set
   mpi_world->barrier();
   broadcast(*mpi_world, recognition_input, kMasterRank);

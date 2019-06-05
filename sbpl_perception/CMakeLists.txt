@@ -9,7 +9,7 @@ project(sbpl_perception)
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
 # set(ROS_BUILD_TYPE RelWithDebInfo)
 # set(ROS_BUILD_TYPE Debug)
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
@@ -29,26 +29,26 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib
   sbpl
-  rospy
   sbpl_utils)
 
 
 
 #find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
 
-set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
-set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
-set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
-set (BOOST_LIBRARYDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/lib")
-set (Boost_NO_SYSTEM_PATHS ON)
-set(Boost_USE_STATIC_LIBS OFF)
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_USE_STATIC_RUNTIME OFF)
-#find_package(Boost 1.67.0 REQUIRED mpi serialization system)
+#set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+#set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+#set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
+#set (BOOST_LIBRARYDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/lib")
+#set (Boost_NO_SYSTEM_PATHS ON)
+#set(Boost_USE_STATIC_LIBS OFF)
+#set(Boost_USE_MULTITHREADED ON)
+#set(Boost_USE_STATIC_RUNTIME OFF)
 include_directories(${Boost_INCLUDE_DIRS})
-set( Boost_LIBRARIES
-        ${BOOST_LIBRARYDIR}/libboost_serialization.so
-        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
+#set( Boost_LIBRARIES
+#        ${BOOST_LIBRARYDIR}/libboost_serialization.so
+#        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
+
+find_package(Boost 1.58.0 REQUIRED mpi serialization system)
 
 # find_package(OpenCV REQUIRED)
 #find_package(MPI REQUIRED)
@@ -80,10 +80,13 @@ include_directories(include ${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${FCL_INCLUDE_DIRS})
 
 # include_directories(${MPI_INCLUDE_PATH})
-set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
-include_directories(${MPI_ROOT}/include)
+# set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
+set (MPI_ROOT /usr/include/openmpi/)
+# include_directories(${MPI_ROOT}/include)
+include_directories(${MPI_ROOT})
 
 
+include_directories(${catkin_INCLUDE_DIRS})
 
 catkin_package(
   CATKIN_DEPENDS
@@ -95,7 +98,6 @@ catkin_package(
     roslib
     sbpl
     sbpl_utils
-    rospy
   DEPENDS
     # OpenCV
     #MPI
@@ -104,7 +106,8 @@ catkin_package(
     #Boost
   INCLUDE_DIRS
     include
-    ${MPI_ROOT}/include/
+    # ${MPI_ROOT}/include/
+    ${MPI_ROOT}/
   LIBRARIES
     ${PROJECT_NAME}
   )
@@ -149,7 +152,8 @@ target_link_libraries(demo ${PROJECT_NAME})
   include(CMakeForceCompiler)
   #CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
 
-  CMAKE_FORCE_CXX_COMPILER(/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
+  # CMAKE_FORCE_CXX_COMPILER(/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
+  CMAKE_FORCE_CXX_COMPILER(/usr/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
 
 #catkin_add_gtest(${PROJECT_NAME}_states_test tests/states_test.cpp)
 #target_link_libraries(${PROJECT_NAME}_states_test ${PROJECT_NAME})
@@ -214,8 +218,19 @@ target_link_libraries(perch_single_object ${PROJECT_NAME})
 install(DIRECTORY include/${PROJECT_NAME}/
         DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 
+#install(DIRECTORY include/ColorSpace/
+#        DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+
 install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  PATTERN ".svn" EXCLUDE)
+
+install(DIRECTORY data/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/data
+  PATTERN ".svn" EXCLUDE)
+
+install(DIRECTORY visualization/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/visualization
   PATTERN ".svn" EXCLUDE)
 
 install(DIRECTORY config/

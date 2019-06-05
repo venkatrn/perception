@@ -11,26 +11,7 @@
       symmetric (rotationally symmetric about Z-axis)]
       -->
       [crate,
-      $(find sbpl_perception)/data/crate/crate_full.ply,
-      false,
-      false,
-      1,
-      0.06,
-      1
-      ],
-      [004_sugar_box,
-      <!-- $(find sbpl_perception)/data/ycb_models/004_sugar_box.ply, -->
-      $(find sbpl_perception)/data/YCB_Video_Dataset/models/004_sugar_box/textured.obj,
-      false,
-      false,
-      1,
-      0.06,
-      1
-      ],
-      [
-      035_power_drill,
-      <!-- $(find sbpl_perception)/data/ycb_models/035_power_drill.ply, -->
-      $(find sbpl_perception)/data/YCB_Video_Dataset/models/035_power_drill/textured.obj,
+      $(find sbpl_perception)/data/crate/crate_new.ply,
       false,
       false,
       1,

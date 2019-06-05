@@ -1620,9 +1620,11 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
 int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
                                         partial_rendered_cloud) {
   // Nearest-neighbor cost
-  // if (image_debug_) {
-  //   PrintPointCloud(partial_rendered_cloud, 1);
-  // }
+  if (IsMaster(mpi_comm_)) {
+    if (image_debug_) {
+      PrintPointCloud(partial_rendered_cloud, 1);
+    }
+  }
   double nn_score = 0;
   double nn_color_score = 0;
   for (size_t ii = 0; ii < partial_rendered_cloud->points.size(); ++ii) {
@@ -2786,7 +2788,9 @@ void EnvObjectRecognition::SetObservation(int num_objects,
 
   knn.reset(new pcl::search::KdTree<PointT>(true));
   printf("Setting knn with cloud of size : %d\n", observed_cloud_->points.size());
-  PrintPointCloud(observed_cloud_, 1);
+  if (mpi_comm_->rank() == kMasterRank) {
+    PrintPointCloud(observed_cloud_, 1);
+  }
   knn->setInputCloud(observed_cloud_);
 
   if (mpi_comm_->rank() == kMasterRank) {

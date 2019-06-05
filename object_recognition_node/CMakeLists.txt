@@ -15,10 +15,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #include(CMakeForceCompiler)
 #CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
 
-set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
+set (MPI_ROOT /usr/include/openmpi/)
+include_directories(${MPI_ROOT})
+
+#set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
 include(CMakeForceCompiler)
-CMAKE_FORCE_CXX_COMPILER(${MPI_ROOT}/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
-include_directories(${MPI_ROOT}/include)
+#CMAKE_FORCE_CXX_COMPILER(${MPI_ROOT}/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
+CMAKE_FORCE_CXX_COMPILER(/usr/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
+#include_directories(${MPI_ROOT}/include)
+
+
 
 find_package(catkin REQUIRED genmsg actionlib_msgs actionlib
   COMPONENTS roscpp sensor_msgs perception_utils
@@ -26,20 +32,21 @@ find_package(catkin REQUIRED genmsg actionlib_msgs actionlib
 #find_package(Boost COMPONENTS mpi REQUIRED)
 #find_package(MPI REQUIRED)
 
-set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
-set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
-set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
-set (BOOST_LIBRARYDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/lib")
-set (Boost_NO_SYSTEM_PATHS ON)
-set(Boost_USE_STATIC_LIBS OFF)
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_USE_STATIC_RUNTIME OFF)
-#find_package(Boost 1.67.0 REQUIRED mpi serialization system)
+#set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+#set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+#set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
+#set (BOOST_LIBRARYDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/lib")
+#set (Boost_NO_SYSTEM_PATHS ON)
+#set(Boost_USE_STATIC_LIBS OFF)
+#set(Boost_USE_MULTITHREADED ON)
+#set(Boost_USE_STATIC_RUNTIME OFF)
 include_directories(${Boost_INCLUDE_DIRS})
-set( Boost_LIBRARIES
-        ${BOOST_LIBRARYDIR}/libboost_serialization.so
-        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
+#set( Boost_LIBRARIES
+#        ${BOOST_LIBRARYDIR}/libboost_serialization.so
+#        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
 
+
+find_package(Boost 1.58.0 REQUIRED mpi serialization system)
 
 # find_package(catkin REQUIRED genmsg actionlib_msgs actionlib)
 add_action_files(DIRECTORY action FILES DoPerch.action)
@@ -95,4 +102,20 @@ add_executable(object_localizer_client_example
 target_link_libraries(object_localizer_client_example ${catkin_LIBRARIES} ${PROJECT_NAME}
   #libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   #libvtkGraphics.so
+  )
+
+  install(DIRECTORY launch/
+    DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+    PATTERN ".svn" EXCLUDE)
+
+  install(TARGETS object_localizer
+    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+  )
+
+  install(TARGETS obj_rec_node
+    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
   )
