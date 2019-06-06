@@ -20,7 +20,7 @@
       ],
       [004_sugar_box,
       <!-- $(find sbpl_perception)/data/ycb_models/004_sugar_box.ply, -->
-      $(find sbpl_perception)/data/YCB_Video_Dataset/models/004_sugar_box/textured.obj,
+      $(find sbpl_perception)/data/YCB_Video_Dataset/models/004_sugar_box/textured.ply,
       false,
       false,
       1,
@@ -30,7 +30,7 @@
       [
       035_power_drill,
       <!-- $(find sbpl_perception)/data/ycb_models/035_power_drill.ply, -->
-      $(find sbpl_perception)/data/YCB_Video_Dataset/models/035_power_drill/textured.obj,
+      $(find sbpl_perception)/data/YCB_Video_Dataset/models/035_power_drill/textured.ply,
       false,
       false,
       1,
@@ -40,8 +40,8 @@
       [
       006_mustard_bottle,
       <!-- $(find sbpl_perception)/data/ycb_models/035_power_drill.ply, -->
-      /home/aditya/Desktop/006_mustard_bottle/textured_binary.ply,
-      <!-- $(find sbpl_perception)/data/YCB_Video_Dataset/models/006_mustard_bottle/textured_binary.ply, -->
+      <!-- /home/aditya/Desktop/006_mustard_bottle/textured_binary.ply, -->
+      $(find sbpl_perception)/data/YCB_Video_Dataset/models/006_mustard_bottle/textured.ply,
       false,
       false,
       1,
@@ -51,7 +51,8 @@
       [
       007_tuna_fish_can,
       <!-- $(find sbpl_perception)/data/ycb_models/035_power_drill.ply, -->
-      $(find sbpl_perception)/data/YCB_Video_Dataset/models/007_tuna_fish_can/textured.obj,
+      <!-- $(find sbpl_perception)/data/YCB_Video_Dataset/models/007_tuna_fish_can/textured.obj, -->
+      $(find sbpl_perception)/data/YCB_Video_Dataset/models/007_tuna_fish_can/textured.ply,
       false,
       false,
       1,

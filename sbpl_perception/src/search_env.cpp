@@ -61,7 +61,7 @@ constexpr double kFootprintTolerance = 0.02; // m
 // Max color distance for two points to be considered neighbours
 constexpr double kColorDistanceThreshold = 15; // m
 
-constexpr bool kUseColorCost = true;
+constexpr bool kUseColorCost = false;
 
 }  // namespace
 
@@ -216,7 +216,7 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     // pcl::PolygonMesh meshT;
     // std::string pcd_file = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/models/006_mustard_bottle/textured.pcd";
     // // pcl::io::loadPolygonFileOBJ (pcd_file.c_str(), meshT);
-    pcl::PointCloud<PointT>::Ptr cloud_in (new pcl::PointCloud<PointT>);
+    // pcl::PointCloud<PointT>::Ptr cloud_in (new pcl::PointCloud<PointT>);
 
 
     // // pcl::PointCloud<PointT>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
@@ -239,8 +239,8 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     // std::vector<pcl::TexMaterial> tex_materials;
     // tex_materials.push_back(texture_material);
     // meshT.tex_materials = tex_materials;
-    pcl::fromPCLPointCloud2(mesh.cloud, *cloud_in);
-    printf("PCD cloud size : %d\n", cloud_in->points.size());
+    // pcl::fromPCLPointCloud2(mesh.cloud, *cloud_in);
+    // printf("PCD cloud size : %d\n", cloud_in->points.size());
 
     // sensor_msgs::PointCloud2 output;
     // pcl_conversions::fromPCL(meshT.cloud, output);
@@ -566,7 +566,6 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     input_unit.source_color_image = source_color_image;
     input_unit.source_counted_pixels = counted_pixels_map_[source_state_id];
   }
-
   vector<CostComputationOutput> cost_computation_output;
   ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
                          false);
@@ -1708,11 +1707,11 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
 int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
                                         partial_rendered_cloud) {
   // Nearest-neighbor cost
-  if (IsMaster(mpi_comm_)) {
-    if (image_debug_) {
-      PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
-    }
-  }
+  // if (IsMaster(mpi_comm_)) {
+  //   if (image_debug_) {
+  //     PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
+  //   }
+  // }
   double nn_score = 0;
   double nn_color_score = 0;
   int total_color_neighbours = 0;

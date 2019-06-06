@@ -107,12 +107,12 @@ int main(int argc, char **argv) {
       nh.getParam("/input_color_image", input.input_color_image);
       nh.getParam("/input_depth_image", input.input_depth_image);
       nh.getParam("/reference_frame_", input.reference_frame_);
-      std::string required_object;
-      nh.getParam("/required_object", required_object);
+      // std::string required_object;
+      // nh.getParam("/required_object", required_object);
       std::vector<double> camera_pose_list;
       nh.getParam("/camera_pose", camera_pose_list);
 
-      std::cout << "required_object  " << required_object << endl;
+      // std::cout << "required_object  " << required_object << endl;
       std::cout << "input_color_image  " << input.input_color_image << endl;
       std::cout << "input_depth_image  " << input.input_depth_image << endl;
       // std::cout << "camera_pose" << camera_pose_list << endl;
@@ -131,8 +131,9 @@ int main(int argc, char **argv) {
       //                        -0.496186,  4.05831e-10,     0.868216,     0.709983,
       //                                0,            0,            0,            1;
       input.camera_pose = camera_pose;
-      input.model_names = vector<string>();
-      input.model_names.push_back(required_object);
+      nh.getParam("/required_object", input.model_names);
+      // input.model_names = vector<string>();
+      // input.model_names.push_back(required_object);
       // input.model_names = vector<string>({"004_sugar_box"});
       input_global = input;
   }
@@ -162,6 +163,7 @@ int main(int argc, char **argv) {
 
     for (size_t ii = 0; ii < object_transforms.size(); ++ii) {
       auto object_transform_t = object_transforms[ii];
+      std:cout << "test" <<  object_transform_t.matrix();
       tf::matrixEigenToMsg(object_transform_t.matrix(), rosmsg_object_transforms[ii]);
     }
 
@@ -186,7 +188,7 @@ int main(int argc, char **argv) {
     // fs_poses << input_id << endl;
     // fs_stats << input_id << endl;
      for (size_t ii = 0; ii < input_global.model_names.size(); ++ii) {
-
+        std::cout << ii;
         Eigen::Matrix4d eigen_pose(rosmsg_object_transforms[ii].data.data());
         Eigen::Affine3d object_transform;
         // // Transpose to convert column-major raw data initialization to row-major.
