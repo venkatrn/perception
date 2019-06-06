@@ -11,7 +11,7 @@
       symmetric (rotationally symmetric about Z-axis)]
       -->
       [crate,
-      $(find sbpl_perception)/data/crate/crate_new.ply,
+      $(find sbpl_perception)/data/crate/crate_test.ply,
       false,
       false,
       1,
