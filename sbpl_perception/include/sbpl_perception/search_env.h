@@ -69,6 +69,7 @@ struct EnvParams {
   int num_models; // This is the number of models available (can be more or less than number of objects on table
   int use_external_render;
   std::string reference_frame_;
+  int use_external_pose_list;
 };
 
 struct PERCHParams {

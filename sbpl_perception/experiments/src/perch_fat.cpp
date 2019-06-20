@@ -44,37 +44,38 @@ int main(int argc, char **argv) {
   }
   ObjectRecognizer object_recognizer(world);
 
-  if (argc < 3) {
-    cerr << "Usage: ./perch_fat <path_output_file_poses> <path_output_file_stats>"
+  if (argc < 2) {
+    cerr << "Usage: ./perch_fat <output_dir_name>"
          << endl;
     return -1;
   }
 
   // boost::filesystem::path config_file_path = argv[1];
-  boost::filesystem::path output_file_poses = argv[1];
-  boost::filesystem::path output_file_stats = argv[2];
+  boost::filesystem::path output_dir_name = argv[1];
+  // boost::filesystem::path output_file_stats = argv[2];
 
-  // if (!boost::filesystem::is_regular_file(config_file_path)) {
-  //   cerr << "Invalid config file" << endl;
-  //   return -1;
-  // }
+
 
   ofstream fs_poses, fs_stats;
-
-  if (IsMaster(world)) {
-    fs_poses.open (output_file_poses.string().c_str(),
-                   std::ofstream::out | std::ofstream::app);
-    fs_stats.open (output_file_stats.string().c_str(),
-                   std::ofstream::out | std::ofstream::app);
-  }
 
   // string config_file = config_file_path.string();
   // cout << config_file << endl;
 
   bool image_debug = true;
-  string experiment_dir = kDebugDir + output_file_poses.stem().string() + "/";
-  // string debug_dir = experiment_dir + config_file_path.stem().string() + "/";
-  string debug_dir = experiment_dir + output_file_poses.stem().string() + "/";
+
+  string experiment_dir = kDebugDir + output_dir_name.stem().string() + "/";
+  string debug_dir = kDebugDir + output_dir_name.stem().string() + "/";
+
+  string pose_file = experiment_dir + "output_poses.txt";
+  string stats_file = experiment_dir + "output_stats.txt";
+
+  if (IsMaster(world)) {
+    fs_poses.open (pose_file.c_str(),
+                   std::ofstream::out | std::ofstream::trunc);
+    fs_stats.open (stats_file.c_str(),
+                   std::ofstream::out | std::ofstream::trunc);
+  }
+
 
   if (IsMaster(world) &&
       !boost::filesystem::is_directory(experiment_dir)) {
@@ -104,6 +105,7 @@ int main(int argc, char **argv) {
       nh.getParam("/y_max", input.y_max);
       nh.getParam("/table_height", input.table_height);
       nh.getParam("/use_external_render", input.use_external_render);
+      nh.getParam("/use_external_pose_list", input.use_external_pose_list);
       nh.getParam("/input_color_image", input.input_color_image);
       nh.getParam("/input_depth_image", input.input_depth_image);
       nh.getParam("/reference_frame_", input.reference_frame_);
@@ -163,31 +165,14 @@ int main(int argc, char **argv) {
 
     for (size_t ii = 0; ii < object_transforms.size(); ++ii) {
       auto object_transform_t = object_transforms[ii];
-      std:cout << "test" <<  object_transform_t.matrix();
+      // std:cout << "test" <<  object_transform_t.matrix();
       tf::matrixEigenToMsg(object_transform_t.matrix(), rosmsg_object_transforms[ii]);
     }
 
 
     auto stats_vector = object_recognizer.GetLastPlanningEpisodeStats();
     EnvStats env_stats = object_recognizer.GetLastEnvStats();
-
-    // cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
-    // cout << pcd_file_path << endl;
-    // cout << succs_rendered << " " << succs_valid << " "  << stats_vector[0].expands
-    //      << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
-    //
-    // for (const auto &pose : object_poses) {
-    //   cout << pose.x() << " " << pose.y() << " " << env_obj->GetTableHeight() << " "
-    //        << pose.yaw() << endl;
-    // }
-    //
-    // Now write to file
-    // boost::filesystem::path pcd_file(parser.pcd_file_path);
-    // string input_id = pcd_file.stem().native();
-
-    // fs_poses << input_id << endl;
-    // fs_stats << input_id << endl;
-     for (size_t ii = 0; ii < input_global.model_names.size(); ++ii) {
+    for (size_t ii = 0; ii < input_global.model_names.size(); ++ii) {
         std::cout << ii;
         Eigen::Matrix4d eigen_pose(rosmsg_object_transforms[ii].data.data());
         Eigen::Affine3d object_transform;
@@ -231,19 +216,24 @@ int main(int argc, char **argv) {
         //only if using a MESH_RESOURCE marker type:
         marker.mesh_resource = std::string("file://") + model_file;
         mesh_marker_pub_.publish(marker);
+
+        fs_poses << input_global.model_names[ii] << endl;
+        fs_poses << msg.pose.position.x << " " << msg.pose.position.y << " " << msg.pose.position.z << endl; 
+        fs_poses << msg.pose.orientation.x << " " << msg.pose.orientation.y 
+          << " " << msg.pose.orientation.z << " " << msg.pose.orientation.w << " " << endl;
     }
-    // fs_stats << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
-    //          <<
-    //          stats_vector[0].expands
-    //          << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
+    fs_stats << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
+             <<
+             stats_vector[0].expands
+             << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
 
     // for (const auto &pose : detected_poses) {
     //   fs_poses << pose.x() << " " << pose.y() << " " << input.table_height <<
     //            " " << pose.yaw() << endl;
     // }
 
-    // fs_poses.close();
-    // fs_stats.close();
+    fs_poses.close();
+    fs_stats.close();
   }
 
   return 0;

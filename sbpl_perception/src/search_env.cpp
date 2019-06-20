@@ -344,6 +344,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
       // Axis is different
       search_rad = 0.5 * search_rad;
   }
+  
   // double search_rad = obj_models_[model_id].GetCircumscribedRadius();
   // int num_neighbors_found = knn->radiusSearch(point, search_rad,
   //                                             indices,
@@ -352,22 +353,24 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                                          indices,
                                                          sqr_dists, perch_params_.min_neighbor_points_for_valid_pose); //0.2
 
-  if (num_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
-    // printf("Invalid 1, neighbours found : %d, radius %f\n",num_neighbors_found, search_rad);
-    return false;
-  }
-  else {
-    // if (env_params_.use_external_render == 1) {
-    //   int num_color_neighbors_found =
-    //       getNumColorNeighbours(point, indices, projected_cloud_);
-    //
-    //   printf("Color neighbours : %d\n", num_color_neighbors_found);
-    //
-    //   // if (num_color_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
-    //   if (num_color_neighbors_found == 0) {
-    //       return false;
-    //   }
-    // }
+  if (env_params_.use_external_pose_list != 1) {
+    if (num_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
+      printf("Invalid 1, neighbours found : %d, radius %f\n",num_neighbors_found, search_rad);
+      return false;
+    }
+    else {
+      // if (env_params_.use_external_render == 1) {
+      //   int num_color_neighbors_found =
+      //       getNumColorNeighbours(point, indices, projected_cloud_);
+      //
+      //   printf("Color neighbours : %d\n", num_color_neighbors_found);
+      //
+      //   // if (num_color_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
+      //   if (num_color_neighbors_found == 0) {
+      //       return false;
+      //   }
+      // }
+    }
   }
 
   // TODO: revisit this and accomodate for collision model
@@ -384,7 +387,7 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
     if ((pose.x() - obj_pose.x()) * (pose.x() - obj_pose.x()) +
         (pose.y() - obj_pose.y()) *
         (pose.y() - obj_pose.y()) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
-      // std::cout << "Invalid 2" << endl;
+      std::cout << "Invalid 2" << endl;
       return false;
     }
   }
@@ -397,16 +400,20 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   //   }
   // }
 
-  // Check if the footprint is contained with the support surface bounds.
-  auto footprint = obj_models_[model_id].GetFootprint(pose);
+  if (env_params_.use_external_pose_list != 1) {
+    // Check if the footprint is contained with the support surface bounds.
+    auto footprint = obj_models_[model_id].GetFootprint(pose);
 
-  for (const auto &point : footprint->points) {
-    if (point.x < env_params_.x_min - kFootprintTolerance ||
-        point.x > env_params_.x_max + kFootprintTolerance ||
-        point.y < env_params_.y_min - kFootprintTolerance ||
-        point.y > env_params_.y_max + kFootprintTolerance) {
-      // std::cout << "Invalid 3" << endl;
-      return false;
+    for (const auto &point : footprint->points) {
+      if (point.x < env_params_.x_min - kFootprintTolerance ||
+          point.x > env_params_.x_max + kFootprintTolerance ||
+          point.y < env_params_.y_min - kFootprintTolerance ||
+          point.y > env_params_.y_max + kFootprintTolerance) {
+        
+        printf("Bounds (x,y) : %f, %f, %f, %f\n", env_params_.x_min, env_params_.x_max, env_params_.y_min, env_params_.y_max);
+        std::cout << "Invalid 3" << endl;
+        return false;
+      }
     }
   }
 
@@ -1707,11 +1714,11 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
 int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
                                         partial_rendered_cloud) {
   // Nearest-neighbor cost
-  // if (IsMaster(mpi_comm_)) {
-  //   if (image_debug_) {
-  //     PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
-  //   }
-  // }
+  if (IsMaster(mpi_comm_)) {
+    if (image_debug_) {
+      PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
+    }
+  }
   double nn_score = 0;
   double nn_color_score = 0;
   int total_color_neighbours = 0;
@@ -2629,7 +2636,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
       const auto &object_state = object_states[ii];
       ObjectModel obj_model = obj_models_[object_state.id()];
       ContPose p = object_state.cont_pose();
-      // std::cout << "Object model in pose : " << p << endl;
+      std::cout << "Object model in pose : " << p << endl;
       auto transformed_mesh = obj_model.GetTransformedMesh(p);
 
       PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
@@ -3060,10 +3067,11 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   *constraint_cloud_ = input.constraint_cloud;
   env_params_.use_external_render = input.use_external_render;
   env_params_.reference_frame_ = input.reference_frame_;
-
+  env_params_.use_external_pose_list = input.use_external_pose_list;
   
 
   printf("External Render : %d\n", env_params_.use_external_render);
+  printf("External Pose List : %d\n", env_params_.use_external_pose_list);
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
   // if (input.model_repetitions.empty()) {
@@ -3078,7 +3086,8 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     cv::Mat cv_color_image = cv::imread(input.input_color_image, CV_LOAD_IMAGE_COLOR);
     depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_color_image);
     original_input_cloud_ = depth_img_cloud;
-    PrintPointCloud(original_input_cloud_, 1, input_point_cloud_topic);
+    for (int i = 0; i < 10; i++)
+      PrintPointCloud(original_input_cloud_, 1, input_point_cloud_topic);
   }
   else {
     *original_input_cloud_ = input.cloud;
@@ -3216,18 +3225,36 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   if (icp.hasConverged()) {
     score = icp.getFitnessScore();
     Eigen::Matrix4f transformation = icp.getFinalTransformation();
-    Eigen::Vector4f vec_in, vec_out;
-    vec_in << pose_in.x(), pose_in.y(), pose_in.z(), 1.0;
-    vec_out = transformation * vec_in;
-    double yaw = atan2(transformation(1, 0), transformation(0, 0));
+    Eigen::Matrix4f transformation_old = pose_in.GetTransform().matrix().cast<float>();
+    Eigen::Matrix4f transformation_new = transformation * transformation_old;
+    Eigen::Vector4f vec_out;
+    // Eigen::Vector4f vec_in, vec_out;
+    // vec_in << pose_in.x(), pose_in.y(), pose_in.z(), 1.0;
+    // vec_out = transformation * vec_in;
+    // double yaw = atan2(transformation(1, 0), transformation(0, 0));
 
-    double yaw1 = pose_in.yaw();
-    double yaw2 = yaw;
-    double cos_term = cos(yaw1 + yaw2);
-    double sin_term = sin(yaw1 + yaw2);
-    double total_yaw = atan2(sin_term, cos_term);
+    // double yaw1 = pose_in.yaw();
+    // double yaw2 = yaw;
+    // double cos_term = cos(yaw1 + yaw2);
+    // double sin_term = sin(yaw1 + yaw2);
+    // double total_yaw = atan2(sin_term, cos_term);
 
-    *pose_out = ContPose(pose_in.external_pose_id(), pose_in.external_render_path(), vec_out[0], vec_out[1], vec_out[2], 0.0, 0.0, total_yaw);
+    vec_out << transformation_new(0,3), transformation_new(1,3), transformation_new(2,3), 1.0;
+    Matrix3f rotation_new(3,3);
+    for (int i = 0; i < 3; i++){
+      for (int j = 0; j < 3; j++){
+        rotation_new(i, j) = transformation_new(i, j);
+      }     
+    }
+    auto euler = rotation_new.eulerAngles(2,1,0);
+    double roll_ = euler[0];
+    double pitch_ = euler[1];
+    double yaw_ = euler[2];
+
+    *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], roll_, pitch_, yaw_);
+    // *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], pose_in.roll(), pose_in.pitch(), total_yaw);
+    // *pose_out = ContPose(pose_in.external_pose_id(), pose_in.external_render_path(), vec_in[0], vec_in[1], vec_in[2], pose_in.roll(), pose_in.pitch(), pose_in.yaw());
+
     // printf("Old yaw: %f, New yaw: %f\n", pose_in.theta, pose_out->theta);
     // printf("Old xy: %f %f, New xy: %f %f\n", pose_in.x, pose_in.y, pose_out->x, pose_out->y);
 
@@ -3531,7 +3558,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     const double res = perch_params_.use_adaptive_resolution ?
                        obj_models_[ii].GetInscribedRadius() : search_resolution;
 
-    if (env_params_.use_external_render == 1)
+    if (env_params_.use_external_render == 1 || env_params_.use_external_pose_list == 1)
     {
         printf("States for model : %s\n", obj_models_[ii].name().c_str());
         string render_states_dir;
@@ -3575,12 +3602,19 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
             });
             // double theta = doubleVector[5];
 
-            ContPose p(external_pose_id, render_states_path_parent,
-                        doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[4], doubleVector[5], doubleVector[6]);
+            // ContPose p(external_pose_id, render_states_path_parent,
+                        // doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[4], doubleVector[5], doubleVector[6]);
+            // ContPose p(doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], doubleVector[5]);
+            ContPose p(doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], doubleVector[5], doubleVector[6]);
             external_pose_id++;
+            // std::cout << "File Pose : " << doubleVector[0] << " " <<
+            //   doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[3] <<  " " << doubleVector[4] << " " << doubleVector[5] << " " << endl;
+
+            std::cout << "Cont Pose : " << p << endl;
 
             // cout << doubleVector[0];
             if (!IsValidPose(source_state, ii, p)) {
+              std::cout << "Invalid pose " << p << endl;
               // std::cout << "Not a valid pose for theta : " << doubleVector[0] << " " <<
               // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
 
@@ -3596,17 +3630,17 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               continue;
             }
             else {
-              // std::cout << "Valid pose for theta : " << doubleVector[0] << " " <<
-              // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
-              std::stringstream ss1;
-              // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
-              ss1 << p.external_render_path() << "/" << obj_models_[ii].name() << "/" << p.external_pose_id() << "-color.png";
-              std::string image_path = ss1.str();
-              printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), image_path.c_str());
+              // // std::cout << "Valid pose for theta : " << doubleVector[0] << " " <<
+              // // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
+              // std::stringstream ss1;
+              // // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
+              // ss1 << p.external_render_path() << "/" << obj_models_[ii].name() << "/" << p.external_pose_id() << "-color.png";
+              // std::string image_path = ss1.str();
+              // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), image_path.c_str());
 
-              cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
-              cv::imshow("valid image", cv_color_image);
-              cv::waitKey(50);
+              // cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+              // cv::imshow("valid image", cv_color_image);
+              // cv::waitKey(50);
             }
 
             GraphState s = source_state; // Can only add objects, not remove them

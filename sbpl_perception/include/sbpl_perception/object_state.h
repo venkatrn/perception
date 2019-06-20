@@ -15,6 +15,7 @@ class ContPose {
   ContPose() = default;
   ContPose(const ContPose& other) = default;
   ContPose(double x, double y, double z, double roll, double pitch, double yaw);
+  ContPose(double x, double y, double z, double qx, double qy, double qz, double qw);
   ContPose(const DiscPose &disc_pose);
   ContPose(int external_pose_id, std::string external_render_path, double x, double y, double z, double roll, double pitch, double yaw);
 
@@ -44,6 +45,18 @@ class ContPose {
   const double &yaw() const {
     return yaw_;
   }
+  const double &qx() const {
+    return qx_;
+  }
+  const double &qy() const {
+    return qy_;
+  }
+  const double &qz() const {
+    return qz_;
+  }
+  const double &qw() const {
+    return qw_;
+  }
   Eigen::Isometry3d GetTransform() const;
 
   bool operator==(const ContPose &other) const;
@@ -63,6 +76,10 @@ class ContPose {
   double roll_ = 0.0;
   double pitch_ = 0.0;
   double yaw_ = 0.0;
+  double qx_ = 0.0;
+  double qy_ = 0.0;
+  double qz_ = 0.0;
+  double qw_ = 0.0;
   int external_pose_id_ = -1;
   std::string external_render_path_= "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered/";
 
@@ -76,6 +93,10 @@ class ContPose {
     ar &roll_;
     ar &pitch_;
     ar &yaw_;
+    ar &qx_;
+    ar &qy_;
+    ar &qz_;
+    ar &qw_;
   }
 };
 
