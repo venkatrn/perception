@@ -50,13 +50,15 @@ constexpr bool kUseDepthSensitiveCost = false;
 constexpr double kDepthSensitiveCostMultiplier = 100.0;
 // If true, we will use a normalized outlier cost function.
 constexpr bool kNormalizeCost = true;
+
+constexpr double kNormalizeCostBase = 10000.0;
 // When use_clutter is true, we will treat every pixel that is not within
 // the object volume as an extraneous occluder if its depth is less than
 // depth(rendered pixel) - kOcclusionThreshold.
 constexpr unsigned short kOcclusionThreshold = 50; // mm
 // Tolerance used when deciding the footprint of the object in a given pose is
 // out of bounds of the supporting place.
-constexpr double kFootprintTolerance = 0.02; // m
+constexpr double kFootprintTolerance = 0.05; // m
 
 // Max color distance for two points to be considered neighbours
 constexpr double kColorDistanceThreshold = 5; // m
@@ -1452,6 +1454,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   child_properties->last_max_depth = succ_max_depth;
 
   // Compute costs
+  using milli = std::chrono::milliseconds;
+  auto start = std::chrono::high_resolution_clock::now();
+
   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
                           env_params_.num_objects;
   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
@@ -1475,6 +1480,11 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     // *child_counted_pixels = updated_counted_pixels;
     *child_counted_pixels = updated_counted_pixels;
   }
+
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "Get Costs() took "
+            << std::chrono::duration_cast<milli>(finish - start).count()
+            << " milliseconds\n";
 
   total_cost = source_cost + target_cost + last_level_cost;
 
@@ -1622,7 +1632,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   // Nearest-neighbor cost
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
-      PrintPointCloud(partial_rendered_cloud, 1);
+      // PrintPointCloud(partial_rendered_cloud, 1);
     }
   }
   double nn_score = 0;
@@ -1705,7 +1715,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
       return 100;
     }
 
-    target_cost = static_cast<int>(nn_score * 100 /
+    target_cost = static_cast<int>(nn_score * kNormalizeCostBase /
                                    partial_rendered_cloud->points.size());
   } else {
     target_cost = static_cast<int>(nn_score);
@@ -1915,7 +1925,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       return 100;
     }
 
-    source_cost = static_cast<int>(nn_score * 100 / indices_to_consider.size());
+    source_cost = static_cast<int>(nn_score * kNormalizeCostBase / indices_to_consider.size());
   } else {
     source_cost = static_cast<int>(nn_score);
   }
@@ -2519,10 +2529,14 @@ cv::Mat rotate(cv::Mat src, double angle)
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image, int* num_occluders_in_input_cloud) {
 
+  using milli = std::chrono::milliseconds;
+  auto start = std::chrono::high_resolution_clock::now();
+
   *num_occluders_in_input_cloud = 0;
   if (scene_ == NULL) {
     printf("ERROR: Scene is not set\n");
   }
+
 
   scene_->clear();
 
@@ -2568,6 +2582,10 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
       }
     }
 
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::cout << "GetDepthImage() took "
+              << std::chrono::duration_cast<milli>(finish - start).count()
+              << " milliseconds\n";
     return depth_buffer;
 
 };
@@ -3035,7 +3053,8 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
 
    printf("GetICPAdjustedPose()\n");
-
+   using milli = std::chrono::milliseconds;
+   auto start = std::chrono::high_resolution_clock::now();
 
    if (env_params_.use_external_render == 1)
    {
@@ -3128,7 +3147,10 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     cloud_out = cloud_in;
     *pose_out = pose_in;
   }
-
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "GetICPAdjustedPose() took "
+            << std::chrono::duration_cast<milli>(finish - start).count()
+            << " milliseconds\n";
   return score;
 }
 
@@ -3565,6 +3587,8 @@ bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short> &s
                                                  vector<vector<unsigned short>> *composed_color_image) {
 
   printf("GetComposedDepthImage() with color and depth\n");
+  using milli = std::chrono::milliseconds;
+  auto start = std::chrono::high_resolution_clock::now();
   // printf("source_depth_image : %f\n", source_depth_image.size());
 
   composed_depth_image->clear();
@@ -3595,8 +3619,11 @@ bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short> &s
       }
     }
   }
-
-  printf("GetComposedDepthImage() Done\n");
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "GetComposedDepthImage() took "
+            << std::chrono::duration_cast<milli>(finish - start).count()
+            << " milliseconds\n";
+  // printf("GetComposedDepthImage() Done\n");
   return true;
 }
 

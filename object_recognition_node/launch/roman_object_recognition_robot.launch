@@ -2,7 +2,7 @@
   <!-- <master auto="start"/> -->
   <param name="/use_sim_time" value="false"/>
 
-  <arg name="image_debug" default="false" />
+  <arg name="image_debug" default="true" />
   <arg name="urdf" default="false" />
 
   <arg name="debug" default="false" />
@@ -12,10 +12,13 @@
   <include file="$(find sbpl_perception)/config/roman_objects.xml"/>
 
 
+  <group if="$(arg urdf)">
+      <include file="$(find roman_model)/robots/upload_rcta_roman.launch" />
+  </group>
 
   <node name="rviz" pkg="rviz" type="rviz" args="-d $(find roman_model)/robots/realsense_camera_robot.rviz" required="true" />
 
-  <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch-prefix="mpirun -n 7 --mca mpi_yield_when_idle 1" respawn="false">
+  <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch-prefix="mpirun -n 1 --mca mpi_yield_when_idle 1" respawn="false">
       <rosparam command="load" file="$(find sbpl_perception)/config/pr2_env_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/pr2_planner_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/roman_camera_config.yaml" />
@@ -42,8 +45,8 @@
     <!--  Crate -->
     <param name="xmin" value="0.6"/> <!--1.13-->
     <param name="xmax" value="1.5"/> <!--1.13-->
-    <param name="ymin" value="-0.35"/> <!--1.13-->
-    <param name="ymax" value="0.35"/> <!--1.13-->
+    <param name="ymin" value="-0.30"/> <!--1.13-->
+    <param name="ymax" value="0.30"/> <!--1.13-->
 
     <param name="reference_frame" value="/roman1/map"/>
     <param name="camera_optical_frame" value="/roman1/center_realsense_color_optical_frame"/>
