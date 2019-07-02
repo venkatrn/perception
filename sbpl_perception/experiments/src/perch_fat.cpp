@@ -16,6 +16,7 @@
 
 #include <std_msgs/Float64MultiArray.h>
 #include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -23,6 +24,7 @@
 #include <eigen_conversions/eigen_msg.h>
 #include <tf_conversions/tf_eigen.h>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 
 using namespace std;
 using namespace sbpl_perception;
@@ -35,12 +37,14 @@ int main(int argc, char **argv) {
   boost::mpi::environment env(argc, argv);
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
-  ros::Publisher pose_pub_, mesh_marker_pub_;
+  ros::Publisher pose_pub_, pose_array_pub_, mesh_marker_pub_, mesh_marker_array_pub_;
   if (IsMaster(world)) {
     ros::init(argc, argv, "perch_fat_experiments");
     ros::NodeHandle nh("~");
     pose_pub_ = nh.advertise<geometry_msgs::PoseStamped>("perch_pose", 1);
+    pose_array_pub_ = nh.advertise<geometry_msgs::PoseArray>("perch_pose_array", 1);
     mesh_marker_pub_ = nh.advertise<visualization_msgs::Marker>("perch_marker", 1);
+    mesh_marker_array_pub_ = nh.advertise<visualization_msgs::MarkerArray>("perch_marker_array", 1);
   }
   ObjectRecognizer object_recognizer(world);
 
@@ -109,6 +113,7 @@ int main(int argc, char **argv) {
       nh.getParam("/input_color_image", input.input_color_image);
       nh.getParam("/input_depth_image", input.input_depth_image);
       nh.getParam("/reference_frame_", input.reference_frame_);
+      nh.getParam("/depth_factor", input.depth_factor);
       // std::string required_object;
       // nh.getParam("/required_object", required_object);
       std::vector<double> camera_pose_list;
@@ -147,6 +152,8 @@ int main(int argc, char **argv) {
 
   object_recognizer.LocalizeObjects(input_global, &object_transforms);
 
+  world->barrier();
+
 
   // // Write output and statistics to file.
   if (IsMaster(world)) {
@@ -172,8 +179,12 @@ int main(int argc, char **argv) {
 
     auto stats_vector = object_recognizer.GetLastPlanningEpisodeStats();
     EnvStats env_stats = object_recognizer.GetLastEnvStats();
+    visualization_msgs::MarkerArray marker_array;
+    geometry_msgs::PoseArray pose_msg_array;
+
+
     for (size_t ii = 0; ii < input_global.model_names.size(); ++ii) {
-        std::cout << ii;
+        // std::cout << ii;
         Eigen::Matrix4d eigen_pose(rosmsg_object_transforms[ii].data.data());
         Eigen::Affine3d object_transform;
         // // Transpose to convert column-major raw data initialization to row-major.
@@ -182,12 +193,14 @@ int main(int argc, char **argv) {
         std::cout << "Pose for Object: " << input_global.model_names[ii] << std::endl <<
                         object_transform.matrix() << std::endl << std::endl;
 
-        geometry_msgs::PoseStamped msg;
-        msg.header.frame_id = input_global.reference_frame_;
-        msg.header.stamp = ros::Time::now();
-        tf::poseEigenToMsg(object_transform, msg.pose);
-        pose_pub_.publish(msg);
-        // latest_object_poses_[ii] = msg.pose;
+        geometry_msgs::PoseStamped pose_msg;
+        pose_msg.header.frame_id = input_global.reference_frame_;
+        pose_msg.header.stamp = ros::Time::now();
+        tf::poseEigenToMsg(object_transform, pose_msg.pose);
+        pose_pub_.publish(pose_msg);
+
+        pose_msg_array.header = pose_msg.header;
+        pose_msg_array.poses.push_back(pose_msg.pose);
 
         const string &model_name = input_global.model_names[ii];
         const string &model_file = model_bank_[model_name].file;
@@ -204,8 +217,8 @@ int main(int argc, char **argv) {
         marker.id = ii;
         marker.type = visualization_msgs::Marker::MESH_RESOURCE;
         marker.action = visualization_msgs::Marker::ADD;
-        marker.pose.position = msg.pose.position;
-        marker.pose.orientation = msg.pose.orientation;
+        marker.pose.position = pose_msg.pose.position;
+        marker.pose.orientation = pose_msg.pose.orientation;
         marker.scale.x = 1;
         marker.scale.y = 1;
         marker.scale.z = 1;
@@ -216,12 +229,15 @@ int main(int argc, char **argv) {
         //only if using a MESH_RESOURCE marker type:
         marker.mesh_resource = std::string("file://") + model_file;
         mesh_marker_pub_.publish(marker);
+        marker_array.markers.push_back(marker);
 
         fs_poses << input_global.model_names[ii] << endl;
-        fs_poses << msg.pose.position.x << " " << msg.pose.position.y << " " << msg.pose.position.z << endl; 
-        fs_poses << msg.pose.orientation.x << " " << msg.pose.orientation.y 
-          << " " << msg.pose.orientation.z << " " << msg.pose.orientation.w << " " << endl;
+        fs_poses << pose_msg.pose.position.x << " " << pose_msg.pose.position.y << " " << pose_msg.pose.position.z << endl; 
+        fs_poses << pose_msg.pose.orientation.x << " " << pose_msg.pose.orientation.y 
+          << " " << pose_msg.pose.orientation.z << " " << pose_msg.pose.orientation.w << " " << endl;
     }
+    mesh_marker_array_pub_.publish(marker_array);
+    pose_array_pub_.publish(pose_msg_array);
     fs_stats << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
              <<
              stats_vector[0].expands

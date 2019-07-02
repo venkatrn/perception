@@ -345,7 +345,7 @@ pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const ContPose &p) const {
   pcl::PolygonMeshPtr transformed_mesh(new pcl::PolygonMesh);
   Eigen::Matrix4f transform;
   transform = p.GetTransform().matrix().cast<float>();
-  std::cout << "matrix " << transform << endl;
+  // std::cout << "matrix " << transform << endl;
   TransformPolyMesh(mesh_in, transformed_mesh, transform);
   return transformed_mesh;
 }

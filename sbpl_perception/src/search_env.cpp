@@ -61,7 +61,7 @@ constexpr double kFootprintTolerance = 0.02; // m
 // Max color distance for two points to be considered neighbours
 constexpr double kColorDistanceThreshold = 15; // m
 
-constexpr bool kUseColorCost = false;
+constexpr bool kUseColorCost = true;
 
 }  // namespace
 
@@ -678,12 +678,18 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     if (image_debug_) {
       std::stringstream ss;
       ss.precision(20);
-      ss << debug_dir_ + "succ_" << candidate_succ_ids[ii] << ".png";
+      ss << debug_dir_ + "succ_depth_" << candidate_succ_ids[ii] << ".png";
+      std::stringstream ssc;
+      ssc.precision(20);
+      ssc << debug_dir_ + "succ_color_" << candidate_succ_ids[ii] << ".png";
       PrintImage(ss.str(), output_unit.depth_image);
+      // PrintState(output_unit.adjusted_state , ss.str(), ssc.str());
 
-      // uint8_t rgb[3] = {255,0,0};
+      uint8_t rgb[3] = {255,0,0};
+      // auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
+      //                                      output_unit.depth_image, output_unit.color_image);
       auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
-                                           output_unit.depth_image, output_unit.color_image);
+          output_unit.depth_image, rgb);
       PrintPointCloud(gravity_aligned_point_cloud, candidate_succ_ids[ii], render_point_cloud_topic);
 
       printf("State %d,       %d      %d      %d      %d      %d\n",
@@ -694,15 +700,17 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
              candidate_costs[ii],
              g_value_map_[candidate_succ_ids[ii]]);
 
-      if (candidate_costs[ii] < min_cost)
-      {
-         min_cost = candidate_costs[ii];
-        //  rgb[0] = 0;
-        //  rgb[1] = 255;
-        //  rgb[2] = 0;
-         min_cost_point_cloud = GetGravityAlignedPointCloud(
-                                              output_unit.depth_image, output_unit.color_image);
-      }
+      // if (candidate_costs[ii] < min_cost)
+      // {
+      //    min_cost = candidate_costs[ii];
+      //    rgb[0] = 0;
+      //    rgb[1] = 255;
+      //    rgb[2] = 0;
+      //   //  min_cost_point_cloud = GetGravityAlignedPointCloud(
+      //   //                                       output_unit.depth_image, output_unit.color_image);
+      //    min_cost_point_cloud = GetGravityAlignedPointCloud(
+      //                                         output_unit.depth_image, rgb);
+      // }
       // std::stringstream cloud_ss;
       // cloud_ss.precision(20);
       // cloud_ss << debug_dir_ + "cloud_" << candidate_succ_ids[ii] << ".pcd";
@@ -749,7 +757,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
 void EnvObjectRecognition::PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic)
 {
-    printf("Print File Cloud Size : %d\n", gravity_aligned_point_cloud->points.size());
+    // printf("Print File Cloud Size : %d\n", gravity_aligned_point_cloud->points.size());
     std::stringstream cloud_ss;
     cloud_ss.precision(20);
     cloud_ss << debug_dir_ + "cloud_" << state_id << ".pcd";
@@ -795,6 +803,7 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
   // auto appended_input = input;
   const int num_processors = static_cast<int>(mpi_comm_->size());
   printf("num_processors : %d\n", num_processors);
+
   if (mpi_comm_->rank() == kMasterRank) {
     original_count = count = input.size();
 
@@ -809,6 +818,7 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
 
     assert(output != nullptr);
     output->clear();
+    if (count > 0)
     output->resize(count);
   }
 
@@ -1575,14 +1585,14 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   unadjusted_color_image->clear();
   unadjusted_color_image->shrink_to_fit();
-  unadjusted_depth_image->clear();
-  unadjusted_depth_image->shrink_to_fit();
+  // unadjusted_depth_image->clear();
+  // unadjusted_depth_image->shrink_to_fit();
 
   *final_depth_image = depth_image;
 
   // final_color_image->clear();
   // final_color_image->shrink_to_fit();
-  *final_color_image = color_image;
+  // *final_color_image = color_image;
 
   cloud_out.reset();
   cloud_in.reset();
@@ -1716,7 +1726,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   // Nearest-neighbor cost
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
-      PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
+      // PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
     }
   }
   double nn_score = 0;
@@ -2085,13 +2095,13 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
 }
 
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
-  cv::Mat depth_image, cv::Mat color_image) {
+  cv::Mat depth_image, cv::Mat color_image, double depth_factor) {
 
   PointCloudPtr cloud(new PointCloud);
 
   printf("GetGravityAlignedPointCloudCV()\n");
   cv::Size s = depth_image.size();
-
+  std::cout << "depth_image size " << s << endl;
   // std::cout<<cam_to_world_.matrix()<<endl;
   Eigen::Isometry3d transform;
   if (env_params_.use_external_render == 1) {
@@ -2115,16 +2125,30 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       // https://stackoverflow.com/questions/8932893/accessing-certain-pixel-rgb-value-in-opencv
       uint32_t rgbc = ((uint32_t)color_image.at<cv::Vec3b>(v,u)[2] << 16 | (uint32_t)color_image.at<cv::Vec3b>(v,u)[1]<< 8 | (uint32_t)color_image.at<cv::Vec3b>(v,u)[0]);
       point.rgb = *reinterpret_cast<float*>(&rgbc);
-
+      // printf("depth data : %f\n", static_cast<float>(depth_image.at<uchar>(v,u)));
+      // 255.0 * 10.0
       Eigen::Vector3f point_eig;
-      kinect_simulator_->rl_->getGlobalPointCV(u, v,
-                                             static_cast<float>(depth_image.at<unsigned short>(v,u)) / 10000.0, transform,
-                                             point_eig);
+      if (env_params_.use_external_pose_list == 1)
+      {
+        // When using FAT dataset with model
+        kinect_simulator_->rl_->getGlobalPointCV(u, v,
+                                                  static_cast<float>(depth_image.at<unsigned short>(v,u)/depth_factor), transform,
+                                                  point_eig);
+      }
+      else {
+        kinect_simulator_->rl_->getGlobalPointCV(u, v,
+                                                  static_cast<float>(depth_image.at<uchar>(v,u)/depth_factor), transform,
+                                                  point_eig);
+      }
+      
       point.x = point_eig[0];
       point.y = point_eig[1];
       point.z = point_eig[2];
 
-      cloud->points.push_back(point);
+      if (point.z >= env_params_.table_height 
+          && point.x <= env_params_.x_max && point.x >= env_params_.x_min
+          && point.y <= env_params_.y_max && point.y >= env_params_.y_min)
+        cloud->points.push_back(point);
     }
   }
 
@@ -2191,7 +2215,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   const vector<unsigned short> &depth_image,
   const vector<vector<unsigned char>> &color_image) {
 
-    printf("kDepthImageWidth : %d\n", kDepthImageWidth);
+    // printf("kDepthImageWidth : %d\n", kDepthImageWidth);
 
     using milli = std::chrono::milliseconds;
     auto start = std::chrono::high_resolution_clock::now();
@@ -2404,6 +2428,28 @@ void EnvObjectRecognition::PrintState(GraphState s, string fname) {
   vector<unsigned short> depth_image;
   GetDepthImage(s, &depth_image);
   PrintImage(fname, depth_image);
+  return;
+}
+
+void EnvObjectRecognition::PrintState(GraphState s, string fname, string cfname) {
+
+  printf("Num objects: %zu\n", s.NumObjects());
+  std::cout << s << std::endl;
+
+  if (kUseColorCost == false) {
+    vector<unsigned short> depth_image;
+    GetDepthImage(s, &depth_image);
+    PrintImage(fname, depth_image);
+  }
+  else {
+    vector<unsigned short> depth_image;
+    cv::Mat cv_depth_image, cv_color_image;
+    vector<vector<unsigned char>> color_image;
+    GetDepthImage(s, &depth_image, &color_image,
+                  &cv_depth_image, &cv_color_image);
+    PrintImage(fname, depth_image);
+    // PrintImage(cfname, color_image);    
+  }
   return;
 }
 
@@ -2636,7 +2682,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
       const auto &object_state = object_states[ii];
       ObjectModel obj_model = obj_models_[object_state.id()];
       ContPose p = object_state.cont_pose();
-      std::cout << "Object model in pose : " << p << endl;
+      // std::cout << "Object model in pose : " << p << endl;
       auto transformed_mesh = obj_model.GetTransformedMesh(p);
 
       PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
@@ -2647,13 +2693,15 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
     kinect_simulator_->doSim(env_params_.camera_pose);
     const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
     kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
-    // kinect_simulator_->write_rgb_image(color_buffer, "test.png");
+    kinect_simulator_->write_depth_image_uint(depth_buffer, "test_depth.png");
+    
     if (kUseColorCost) {
       const uint8_t *color_buffer = kinect_simulator_->rl_->getColorBuffer();
       kinect_simulator_->get_rgb_image_uchar(color_buffer, color_image);
+      kinect_simulator_->write_rgb_image(color_buffer, "test_color.png");
     }
-    printf("depth vector max size :%d\n", (int) depth_image->max_size());
-    printf("color vector max size :%d\n", (int) color_image->max_size());
+    // printf("depth vector max size :%d\n", (int) depth_image->max_size());
+    // printf("color vector max size :%d\n", (int) color_image->max_size());
 
     // kinect_simulator_->get_depth_image_cv(depth_buffer, depth_image);
     // cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
@@ -3072,6 +3120,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
 
   printf("External Render : %d\n", env_params_.use_external_render);
   printf("External Pose List : %d\n", env_params_.use_external_pose_list);
+  printf("Depth Factor : %f\n", input.depth_factor);
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
   // if (input.model_repetitions.empty()) {
@@ -3082,9 +3131,17 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   if (input.use_input_images) 
   {
     printf("Using input images instead of cloud\n");
-    cv::Mat cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
+    // Using CV_LOAD_IMAGE_UNCHANGED to use exact conversion from NDDS documentation /255 * 1000 gives actual distance in cm
+    cv::Mat cv_depth_image;
+    if (env_params_.use_external_pose_list == 1) {
+      // For FAT dataset, we have 16bit images
+      cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
+    }
+    else {
+      cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_UNCHANGED);
+    }
     cv::Mat cv_color_image = cv::imread(input.input_color_image, CV_LOAD_IMAGE_COLOR);
-    depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_color_image);
+    depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_color_image, input.depth_factor);
     original_input_cloud_ = depth_img_cloud;
     for (int i = 0; i < 10; i++)
       PrintPointCloud(original_input_cloud_, 1, input_point_cloud_topic);
@@ -3228,30 +3285,37 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     Eigen::Matrix4f transformation_old = pose_in.GetTransform().matrix().cast<float>();
     Eigen::Matrix4f transformation_new = transformation * transformation_old;
     Eigen::Vector4f vec_out;
-    // Eigen::Vector4f vec_in, vec_out;
-    // vec_in << pose_in.x(), pose_in.y(), pose_in.z(), 1.0;
-    // vec_out = transformation * vec_in;
-    // double yaw = atan2(transformation(1, 0), transformation(0, 0));
 
-    // double yaw1 = pose_in.yaw();
-    // double yaw2 = yaw;
-    // double cos_term = cos(yaw1 + yaw2);
-    // double sin_term = sin(yaw1 + yaw2);
-    // double total_yaw = atan2(sin_term, cos_term);
+    if (env_params_.use_external_pose_list == 0)
+    {
+      Eigen::Vector4f vec_in;
+      vec_in << pose_in.x(), pose_in.y(), pose_in.z(), 1.0;
+      vec_out = transformation * vec_in;
+      double yaw = atan2(transformation(1, 0), transformation(0, 0));
 
-    vec_out << transformation_new(0,3), transformation_new(1,3), transformation_new(2,3), 1.0;
-    Matrix3f rotation_new(3,3);
-    for (int i = 0; i < 3; i++){
-      for (int j = 0; j < 3; j++){
-        rotation_new(i, j) = transformation_new(i, j);
-      }     
+      double yaw1 = pose_in.yaw();
+      double yaw2 = yaw;
+      double cos_term = cos(yaw1 + yaw2);
+      double sin_term = sin(yaw1 + yaw2);
+      double total_yaw = atan2(sin_term, cos_term);
+      *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], pose_in.roll(), pose_in.pitch(), total_yaw);
     }
-    auto euler = rotation_new.eulerAngles(2,1,0);
-    double roll_ = euler[0];
-    double pitch_ = euler[1];
-    double yaw_ = euler[2];
+    else
+    {
+      vec_out << transformation_new(0,3), transformation_new(1,3), transformation_new(2,3), 1.0;
+      Matrix3f rotation_new(3,3);
+      for (int i = 0; i < 3; i++){
+        for (int j = 0; j < 3; j++){
+          rotation_new(i, j) = transformation_new(i, j);
+        }     
+      }
+      auto euler = rotation_new.eulerAngles(2,1,0);
+      double roll_ = euler[0];
+      double pitch_ = euler[1];
+      double yaw_ = euler[2];
 
-    *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], roll_, pitch_, yaw_);
+      *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], roll_, pitch_, yaw_);
+    }
     // *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], pose_in.roll(), pose_in.pitch(), total_yaw);
     // *pose_out = ContPose(pose_in.external_pose_id(), pose_in.external_render_path(), vec_in[0], vec_in[1], vec_in[2], pose_in.roll(), pose_in.pitch(), pose_in.yaw());
 

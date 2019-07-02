@@ -143,6 +143,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   void PrintState(int state_id, std::string fname);
   void PrintState(GraphState s, std::string fname);
+  void PrintState(GraphState s, std::string fname, std::string cfname);
   void PrintImage(std::string fname,
                   const std::vector<unsigned short> &depth_image);
 
@@ -286,7 +287,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unique_ptr<RCNNHeuristicFactory> rcnn_heuristic_factory_;
   Heuristics rcnn_heuristics_;
 
-  PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image);
+  PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, double depth_factor);
 
   PointCloudPtr GetGravityAlignedPointCloud(
     const vector<unsigned short> &depth_image, uint8_t rgb[3]);

@@ -199,21 +199,22 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
   vector<ContPose> detected_poses;
   const bool plan_success = LocalizeObjects(input, &detected_poses);
-
   if (!plan_success) {
     return false;
   }
 
-  assert(detected_poses.size() == input.model_names.size());
+  if (IsMaster(mpi_world_)) {
+    assert(detected_poses.size() == input.model_names.size());
 
 
-  const auto &models = env_obj_->obj_models_;
-  object_transforms->resize(input.model_names.size());
+    const auto &models = env_obj_->obj_models_;
+    object_transforms->resize(input.model_names.size());
 
-  for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
-    const auto &obj_model = models[ii];
-    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
-                                  detected_poses[ii]);
+    for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
+      const auto &obj_model = models[ii];
+      object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
+                                    detected_poses[ii]);
+    }
   }
 
   return plan_success;
@@ -371,6 +372,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       bool lazy;
       env_obj_->ComputeCostsInParallel(input, &output, lazy);
     }
+
   } else {
     while (!planning_finished) {
       vector<CostComputationInput> input;
@@ -380,13 +382,15 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       // If master is done, exit loop.
       mpi_world_->irecv(kMasterRank, kPlanningFinishedTag, planning_finished);
     }
+    
   }
 
   mpi_world_->barrier();
   broadcast(*mpi_world_, plan_success, kMasterRank);
 
   if (plan_success) {
-    broadcast(*mpi_world_, *detected_poses, kMasterRank);
+    // Commented by Aditya to prevent seg fault in case of multiple objects
+    // broadcast(*mpi_world_, *detected_poses, kMasterRank);
   }
 
   mpi_world_->barrier();
