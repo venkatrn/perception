@@ -156,6 +156,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image, 
                              std::vector<std::vector<unsigned char>> *color_image,
+                             cv::Mat &cv_depth_image,
                              int* num_occluders_in_input_cloud);
 
   const float *GetDepthImage(GraphState s,

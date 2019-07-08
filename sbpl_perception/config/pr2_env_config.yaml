@@ -16,9 +16,9 @@ perch_params:
   ## Clutter mode
   use_clutter_mode: false
   # Should be in [0,1]
-  clutter_regularizer: 0
+  clutter_regularizer: 0.1
 
   ## Visualization and Debugging
-  visualize_expanded_states: true
+  visualize_expanded_states: false
   print_expanded_states: true
   debug_verbose: false # unused

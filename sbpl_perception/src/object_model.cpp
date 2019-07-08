@@ -341,10 +341,12 @@ double ObjectModel::GetCircumscribedRadius() const {
 
 
 pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const ContPose &p) const {
+  // Called from getdepthimage
   pcl::PolygonMeshPtr mesh_in(new pcl::PolygonMesh(mesh_));
   pcl::PolygonMeshPtr transformed_mesh(new pcl::PolygonMesh);
   Eigen::Matrix4f transform;
   transform = p.GetTransform().matrix().cast<float>();
+  // transform = p.GetTransformMatrix();
   // std::cout << "matrix " << transform << endl;
   TransformPolyMesh(mesh_in, transformed_mesh, transform);
   return transformed_mesh;

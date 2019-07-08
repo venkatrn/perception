@@ -203,6 +203,27 @@ vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
   return depth_image;
 }
 
+vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
+  const PointCloudPtr depth_img_cloud, double depth_factor) {
+  // TODO: check input cloud is organized and matches dimensions.
+  vector<unsigned short> depth_image(kNumPixels);
+
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      PointT p = depth_img_cloud->at(jj, ii);
+
+      if (isnan(p.z) || isinf(p.z)) {
+        depth_image[ii * kDepthImageWidth + jj] = kKinectMaxDepth;
+      } else {
+        depth_image[ii * kDepthImageWidth + jj] = static_cast<unsigned short>
+                                                  (p.z * depth_factor);
+      }
+    }
+  }
+
+  return depth_image;
+}
+
 vector<cv::Point> GetValidPointsInBoundingBox(const cv::Mat &depth_image,
                                               const cv::Rect &bbox) {
   vector<cv::Point> valid_points;

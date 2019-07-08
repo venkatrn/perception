@@ -148,7 +148,11 @@ int GetNumValidPixels(const std::vector<unsigned short> &depth_image);
 // Converts an organized point cloud (assumed to be in meters) to a kinect depth image in the UINT16
 // format (millimeters), using the special value of kKinectMaxDepth for no-returns.
 std::vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
+  const PointCloudPtr depth_img_cloud, double depth_factor);
+
+std::vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
   const PointCloudPtr depth_img_cloud);
+
 
 // Various index conversions.
 // Vectorized depth image and PCL organized cloud share the same index.

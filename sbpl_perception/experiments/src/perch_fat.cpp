@@ -73,12 +73,7 @@ int main(int argc, char **argv) {
   string pose_file = experiment_dir + "output_poses.txt";
   string stats_file = experiment_dir + "output_stats.txt";
 
-  if (IsMaster(world)) {
-    fs_poses.open (pose_file.c_str(),
-                   std::ofstream::out | std::ofstream::trunc);
-    fs_stats.open (stats_file.c_str(),
-                   std::ofstream::out | std::ofstream::trunc);
-  }
+
 
 
   if (IsMaster(world) &&
@@ -89,6 +84,13 @@ int main(int argc, char **argv) {
   if (IsMaster(world) &&
       !boost::filesystem::is_directory(debug_dir)) {
     boost::filesystem::create_directory(debug_dir);
+  }
+
+  if (IsMaster(world)) {
+    fs_poses.open (pose_file.c_str(),
+                   std::ofstream::out | std::ofstream::trunc);
+    fs_stats.open (stats_file.c_str(),
+                   std::ofstream::out | std::ofstream::trunc);
   }
 
   object_recognizer.GetMutableEnvironment()->SetDebugDir(debug_dir);
