@@ -37,6 +37,16 @@ float kCameraCY = 238.717f;
 float kZNear = 0.1f;
 float kZFar = 20.0f;
 
+// FAT/NDDS Camera
+// int kCameraWidth = 960;
+// int kCameraHeight = 540;
+// float kCameraFX = 768.160583f;
+// float kCameraFY = 768.160583f;
+// float kCameraCX = 480.000000f;
+// float kCameraCY = 270.000000f;
+// float kZNear = 0.1f;
+// float kZFar = 20.0f;
+
 void
 pcl::simulation::Camera::move (double vx, double vy, double vz)
 {

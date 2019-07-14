@@ -50,6 +50,8 @@
 #include <ColorSpace/Comparison.h>
 #include <chrono>
 
+#include "ICP/ICPOdometry.h"
+
 namespace sbpl_perception {
 
 struct EnvConfig {
@@ -70,6 +72,8 @@ struct EnvParams {
   int use_external_render;
   std::string reference_frame_;
   int use_external_pose_list;
+  int use_icp;
+  int shift_pose_centroid;
 };
 
 struct PERCHParams {
@@ -153,7 +157,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // If kClutterMode is true, then the rendered scene will account for
   // "occluders" in the input scene, i.e, any point in the input cloud which
   // occludes a point in the rendered scene.
-  const float *GetDepthImage(GraphState s,
+  const float *GetDepthImage(GraphState &s,
                              std::vector<unsigned short> *depth_image, 
                              std::vector<std::vector<unsigned char>> *color_image,
                              cv::Mat &cv_depth_image,
@@ -196,6 +200,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetTableHeight(double height);
   double GetTableHeight();
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
+
+  double GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in,
+                            const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
+                            const std::vector<int> counted_indices = std::vector<int>(0));
 
   double GetICPAdjustedPose(const PointCloudPtr cloud_in,
                             const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,

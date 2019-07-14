@@ -35,6 +35,8 @@ class ObjectModel {
 
   pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p) const;
 
+  pcl::PolygonMeshPtr GetTransformedMeshWithShift(ContPose & p) const;
+
   pcl::PolygonMeshPtr GetTransformedMesh(const Eigen::Matrix4f &transform) const;
 
   // Returns true if point is within the mesh model, where the model has been
@@ -52,6 +54,10 @@ class ObjectModel {
 
   static void TransformPolyMesh(const pcl::PolygonMesh::Ptr
                        &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform);
+
+  static void TransformPolyMeshWithShift(const pcl::PolygonMesh::Ptr
+                       &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f &transform);
+
   // Accessors
   const pcl::PolygonMesh &mesh() const {
     return mesh_;

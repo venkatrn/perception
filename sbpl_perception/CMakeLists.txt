@@ -19,8 +19,11 @@ SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
 
 
 find_package(ZLIB)
+
 include_directories(${ZLIB_INCLUDE_DIRS})
 # Load catkin and all dependencies required for this package
+find_package(CUDA REQUIRED)
+
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   kinect_sim
@@ -32,9 +35,12 @@ find_package(catkin REQUIRED COMPONENTS
   eigen_conversions
   visualization_msgs
   rospy
-  sbpl_utils)
+  sbpl_utils
+  ICP
+)
 
 
+include_directories(${CUDA_INCLUDE_DIRS})
 
 #find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
 
@@ -63,6 +69,7 @@ set( Boost_LIBRARIES
 find_package(OpenMP)
 # find_package(fcl REQUIRED)
 find_package(octomap REQUIRED)
+find_package(Pangolin REQUIRED)
 
 find_package(PkgConfig QUIET)
 # pkg_check_modules(FCL REQUIRED fcl)
@@ -84,6 +91,7 @@ include_directories(include ${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS}
 # include_directories(${MPI_INCLUDE_PATH})
 set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
 include_directories(${MPI_ROOT}/include)
+include_directories(${Pangolin_INCLUDE_DIRS})
 
 
 
@@ -100,6 +108,7 @@ catkin_package(
     rospy
     eigen_conversions
     visualization_msgs
+    ICP
   DEPENDS
     # OpenCV
     #MPI
@@ -134,7 +143,7 @@ add_library(${PROJECT_NAME}
 #        ${MPI_ROOT}/lib/libmpi.so)
 #message(WARNING ${catkin_LIBRARIES})
 
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES}
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES} ${CUDA_LIBRARIES} ${Pangolin_LIBRARIES}
   #${MPI_CXX_LIBRARIES}
   #${PCL_LIBRARIES} ${OpenCV_LIBRARIES} /usr/lib/libvtkCommon.so.5.10 /usr/lib/libvtkFiltering.so.5.10 /usr/lib/libvtkRendering.so.5.10 /usr/lib/libvtkIO.so.5.10
   # ${MPI_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so

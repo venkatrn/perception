@@ -27,6 +27,7 @@
   <build_depend>rospy</build_depend>
   <build_depend>eigen_conversions</build_depend>
   <build_depend>visualization_msgs</build_depend>
+  <build_depend>ICP</build_depend>
   
   <!-- <build_depend>libfcl&#45;dev</build_depend> -->
   <!-- <build_depend>libccd&#45;dev</build_depend> -->
@@ -45,6 +46,7 @@
   <run_depend>rospy</run_depend>
   <run_depend>eigen_conversions</run_depend>
   <run_depend>visualization_msgs</run_depend>
+  <run_depend>ICP</run_depend>
   <!-- <run_depend>libfcl&#45;dev</run_depend> -->
   <!-- <run_depend>libccd&#45;dev</run_depend> -->
 

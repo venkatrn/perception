@@ -233,6 +233,41 @@ void ObjectModel::TransformPolyMesh(const pcl::PolygonMesh::Ptr
   pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
 
   transformPointCloud(*cloud_in, *cloud_out, transform);
+  Eigen::Vector4f centroid;
+  pcl::compute3DCentroid(*cloud_out, centroid);
+  std::cout << "centroid " << centroid << std::endl;
+  std::cout << "centroid old " << transform << std::endl;
+
+  *mesh_out = *mesh_in;
+  pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
+  return;
+}
+
+void ObjectModel::TransformPolyMeshWithShift(const pcl::PolygonMesh::Ptr
+                                    &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f &transform) {
+  pcl::PointCloud<PointT>::Ptr cloud_in (new
+                                                pcl::PointCloud<PointT>);
+  pcl::PointCloud<PointT>::Ptr cloud_out (new
+                                                 pcl::PointCloud<PointT>);
+  pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
+
+  transformPointCloud(*cloud_in, *cloud_out, transform);
+  Eigen::Vector4f centroid;
+  pcl::compute3DCentroid(*cloud_out, centroid);
+  std::cout << "centroid " << centroid << std::endl;
+  Eigen::Vector4f vec_out;
+  vec_out << transform(0,3), transform(1,3), transform(2,3);
+  std::cout << "centroid old " << vec_out << std::endl;
+  std::cout << "centroid difference  " << vec_out-centroid << std::endl;
+  Eigen::Vector4f shift = vec_out-centroid;
+
+  Eigen::Affine3f transform_2 = Eigen::Affine3f::Identity();
+  transform_2.translation() << shift[0], shift[1], shift[2];
+  transform(0,3) += shift[0];
+  transform(1,3) += shift[1];
+  transform(2,3) += shift[2];
+  // transform = transform_2.matrix();
+  transformPointCloud(*cloud_out, *cloud_out, transform_2);
 
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
@@ -349,6 +384,19 @@ pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const ContPose &p) const {
   // transform = p.GetTransformMatrix();
   // std::cout << "matrix " << transform << endl;
   TransformPolyMesh(mesh_in, transformed_mesh, transform);
+  return transformed_mesh;
+}
+
+pcl::PolygonMeshPtr ObjectModel::GetTransformedMeshWithShift(ContPose &p) const {
+  // Called from getdepthimage
+  pcl::PolygonMeshPtr mesh_in(new pcl::PolygonMesh(mesh_));
+  pcl::PolygonMeshPtr transformed_mesh(new pcl::PolygonMesh);
+  Eigen::Matrix4f transform;
+  transform = p.GetTransform().matrix().cast<float>();
+  // transform = p.GetTransformMatrix();
+  // std::cout << "matrix " << transform << endl;
+  TransformPolyMeshWithShift(mesh_in, transformed_mesh, transform);
+  p = ContPose(transform(0,3), transform(1,3), transform(2,3), p.qx(), p.qy(), p.qz(), p.qw());
   return transformed_mesh;
 }
 

@@ -76,6 +76,10 @@ struct RecognitionInput {
   int use_external_pose_list;
 
   double depth_factor;
+
+  int use_icp;
+
+  int shift_pose_centroid;
 };
 
 // A container for the holding the meta-data associated with a 3D model.
@@ -198,6 +202,8 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
   ar &input.use_input_images;
   ar &input.use_external_pose_list;
   ar &input.depth_factor;
+  ar &input.use_icp;
+  ar &input.shift_pose_centroid;
 }
 
 template<class Archive>

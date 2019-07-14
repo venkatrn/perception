@@ -116,6 +116,8 @@ int main(int argc, char **argv) {
       nh.getParam("/input_depth_image", input.input_depth_image);
       nh.getParam("/reference_frame_", input.reference_frame_);
       nh.getParam("/depth_factor", input.depth_factor);
+      nh.getParam("/use_icp", input.use_icp);
+      nh.getParam("/shift_pose_centroid", input.shift_pose_centroid);
       // std::string required_object;
       // nh.getParam("/required_object", required_object);
       std::vector<double> camera_pose_list;

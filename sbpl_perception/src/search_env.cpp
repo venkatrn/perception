@@ -1485,7 +1485,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
-      PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+      // PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
     }
   }
   // Align with ICP
@@ -1493,6 +1493,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out,
                      parent_counted_pixels);
+  
+  // GetICPAdjustedPoseCUDA(cloud_in, pose_in, cloud_out, &pose_out,
+  //                   parent_counted_pixels);
   // icp_cost = static_cast<int>(kICPCostMultiplier * icp_fitness_score);
   int last_idx = child_state.NumObjects() - 1;
 
@@ -1557,7 +1560,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
-      // PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
+      PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
     }
   }
   // Cache the min and max depths
@@ -2700,7 +2703,7 @@ cv::Mat rotate(cv::Mat src, double angle)
     return dst;
 }
 
-const float *EnvObjectRecognition::GetDepthImage(GraphState s,
+const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
                                                 std::vector<unsigned short> *depth_image, 
                                                 std::vector<std::vector<unsigned char>> *color_image,
                                                 cv::Mat &cv_depth_image,
@@ -2713,7 +2716,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
 
   scene_->clear();
 
-  const auto &object_states = s.object_states();
+  auto &object_states = s.mutable_object_states();
   printf("GetDepthImage() for number of objects : %d\n", object_states.size());
 
   // cout << "External Render :" << env_params_.use_external_render;
@@ -2723,7 +2726,15 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
       ObjectModel obj_model = obj_models_[object_state.id()];
       ContPose p = object_state.cont_pose();
       // std::cout << "Object model in pose : " << p << endl;
-      auto transformed_mesh = obj_model.GetTransformedMesh(p);
+      
+      // std::cout << "Object model in pose after shift: " << p << endl;
+      pcl::PolygonMeshPtr transformed_mesh;
+      if (env_params_.shift_pose_centroid == 1) {
+        transformed_mesh = obj_model.GetTransformedMeshWithShift(p);
+        object_states[ii] = ObjectState(object_state.id(), object_state.symmetric(), p);
+      } else {
+        transformed_mesh = obj_model.GetTransformedMesh(p);
+      }
 
       PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
                                                              GL_POLYGON, transformed_mesh));
@@ -3158,11 +3169,15 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   env_params_.use_external_render = input.use_external_render;
   env_params_.reference_frame_ = input.reference_frame_;
   env_params_.use_external_pose_list = input.use_external_pose_list;
+  env_params_.use_icp = input.use_icp;
+  env_params_.shift_pose_centroid = input.shift_pose_centroid;
   
 
   printf("External Render : %d\n", env_params_.use_external_render);
   printf("External Pose List : %d\n", env_params_.use_external_pose_list);
   printf("Depth Factor : %f\n", input.depth_factor);
+  printf("ICP : %d\n", env_params_.use_icp);
+  printf("Shift Pose Centroid : %d\n", env_params_.shift_pose_centroid);
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
   // if (input.model_repetitions.empty()) {
@@ -3268,6 +3283,54 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
   }
 }
 
+double EnvObjectRecognition::GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in,
+                                                const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
+                                                const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
+
+  printf("GetICPAdjustedPoseCUDA()\n");
+  auto start = std::chrono::high_resolution_clock::now();
+
+  ICPOdometry icpOdom(kDepthImageWidth, kDepthImageHeight, kCameraCX, kCameraCY, kCameraFX, kCameraFY, 0.00, 0.0);
+  const PointCloudPtr remaining_observed_cloud = perception_utils::IndexFilter(
+                                                   observed_cloud_, counted_indices, true);
+  const PointCloudPtr remaining_downsampled_observed_cloud =
+    DownsamplePointCloud(remaining_observed_cloud);
+
+  vector<unsigned short> rendered_depth_image = sbpl_perception::OrganizedPointCloudToKinectDepthImage(cloud_in);
+  vector<unsigned short> target_depth_image = sbpl_perception::OrganizedPointCloudToKinectDepthImage(remaining_observed_cloud);
+  Eigen::Matrix4f outputPose;
+  Eigen::Matrix4d inputPose = pose_in.GetTransform().matrix().cast<double>();
+
+  icpOdom.doICP(inputPose, rendered_depth_image, target_depth_image, outputPose);
+
+  // std::string test_file = "test.png";
+  // PrintImage(test_file, target_depth_image);
+
+  Eigen::Vector4f vec_out;
+  vec_out << outputPose(0,3), outputPose(1,3), outputPose(2,3), 1.0;
+  Matrix3f rotation_new(3,3);
+  for (int i = 0; i < 3; i++){
+    for (int j = 0; j < 3; j++){
+      rotation_new(i, j) = outputPose(i, j);
+    }     
+  }
+  auto euler = rotation_new.eulerAngles(2,1,0);
+  double roll_ = euler[0];
+  double pitch_ = euler[1];
+  double yaw_ = euler[2];
+
+  Quaternionf quaternion(rotation_new.cast<float>());
+  // *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], roll_, pitch_, yaw_);
+  *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], quaternion.x(), quaternion.y(), quaternion.z(), quaternion.w());
+
+  transformPointCloud(*cloud_in, *cloud_out, outputPose);
+
+
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "GetICPAdjustedPoseCUDA() took "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()
+            << " milliseconds\n";
+}
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
                                                 const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
@@ -3276,7 +3339,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   auto start = std::chrono::high_resolution_clock::now();
 
 
-  if (env_params_.use_external_render == 1)
+  if (env_params_.use_icp == 1)
   {
     printf("No ICP done\n");
     cloud_out = cloud_in;
