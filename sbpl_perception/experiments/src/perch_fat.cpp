@@ -73,9 +73,18 @@ int main(int argc, char **argv) {
   string pose_file = experiment_dir + "output_poses.txt";
   string stats_file = experiment_dir + "output_stats.txt";
 
+  // Delete directories if they exist
+  if (IsMaster(world) &&
+      boost::filesystem::is_directory(experiment_dir)) {
+    boost::filesystem::remove_all(experiment_dir);
+  }
 
+  if (IsMaster(world) &&
+      boost::filesystem::is_directory(debug_dir)) {
+    boost::filesystem::remove_all(debug_dir);
+  }
 
-
+  // Create directories
   if (IsMaster(world) &&
       !boost::filesystem::is_directory(experiment_dir)) {
     boost::filesystem::create_directory(experiment_dir);
@@ -114,6 +123,7 @@ int main(int argc, char **argv) {
       nh.getParam("/use_external_pose_list", input.use_external_pose_list);
       nh.getParam("/input_color_image", input.input_color_image);
       nh.getParam("/input_depth_image", input.input_depth_image);
+      nh.getParam("/predicted_mask_image", input.predicted_mask_image);
       nh.getParam("/reference_frame_", input.reference_frame_);
       nh.getParam("/depth_factor", input.depth_factor);
       nh.getParam("/use_icp", input.use_icp);

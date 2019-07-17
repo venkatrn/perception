@@ -146,6 +146,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     const std::vector<std::string> &model_names);
 
   void PrintState(int state_id, std::string fname);
+  void PrintState(int state_id, std::string fname, std::string cname);
   void PrintState(GraphState s, std::string fname);
   void PrintState(GraphState s, std::string fname, std::string cfname);
   void PrintImage(std::string fname,
@@ -161,7 +162,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
                              std::vector<unsigned short> *depth_image, 
                              std::vector<std::vector<unsigned char>> *color_image,
                              cv::Mat &cv_depth_image,
-                             int* num_occluders_in_input_cloud);
+                             cv::Mat &cv_color_image,
+                             int* num_occluders_in_input_cloud,
+                             bool shift_centroid);
 
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image,
@@ -296,7 +299,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unique_ptr<RCNNHeuristicFactory> rcnn_heuristic_factory_;
   Heuristics rcnn_heuristics_;
 
-  PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, double depth_factor);
+  PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, cv::Mat predicted_mask_image, double depth_factor);
 
   PointCloudPtr GetGravityAlignedPointCloud(
     const vector<unsigned short> &depth_image, uint8_t rgb[3]);
@@ -392,7 +395,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void ResetEnvironmentState();
 
   void GenerateSuccessorStates(const GraphState &source_state,
-                               std::vector<GraphState> *succ_states) const;
+                               std::vector<GraphState> *succ_states);
 
   // Returns true if a valid depth image was composed.
   static bool GetComposedDepthImage(const std::vector<unsigned short>

@@ -233,10 +233,10 @@ void ObjectModel::TransformPolyMesh(const pcl::PolygonMesh::Ptr
   pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
 
   transformPointCloud(*cloud_in, *cloud_out, transform);
-  Eigen::Vector4f centroid;
-  pcl::compute3DCentroid(*cloud_out, centroid);
-  std::cout << "centroid " << centroid << std::endl;
-  std::cout << "centroid old " << transform << std::endl;
+  // Eigen::Vector4f centroid;
+  // pcl::compute3DCentroid(*cloud_out, centroid);
+  // std::cout << "centroid " << centroid << std::endl;
+  // std::cout << "centroid old " << transform << std::endl;
 
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
