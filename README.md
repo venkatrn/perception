@@ -35,3 +35,18 @@ conda create --name maskrcnn_benchmark
 conda activate maskrcnn_benchmark
 ```
 3. Install dependencies in requirements file
+ ```
+ pip install pycocotools
+ pip install pillow
+ pip install scikit-image
+ pip install git+git://github.com/waspinator/coco.git@2.1.0
+ pip install dipy
+ pip install glumpy
+ conda install pyopengl
+ pip install scikit-build
+ pip install rospkg
+ pip install python-pcl
+ pip install defusedxml
+ ```
+ 
+
