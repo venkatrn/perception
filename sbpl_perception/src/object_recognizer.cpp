@@ -335,7 +335,8 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
                             solution_state_ids[solution_state_ids.size() - 2]);
       printf("Goal state ID is %d\n", goal_state_id);
       env_obj_->PrintState(goal_state_id,
-                           env_obj_->GetDebugDir() + string("output_depth_image.png"));
+                           env_obj_->GetDebugDir() + string("output_depth_image.png"),
+                           env_obj_->GetDebugDir() + string("output_color_image.png"));
       env_obj_->GetGoalPoses(goal_state_id, detected_poses);
 
       cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;

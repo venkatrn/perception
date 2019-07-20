@@ -502,7 +502,7 @@ void
 pcl::simulation::SimExample::get_rgb_image_cv(const uint8_t *rgb_buffer,
                                               cv::Mat &color_image) {
   int npixels = rl_->getWidth() * rl_->getHeight();
-  color_image.create(height_, width_, CV_16UC3);
+  color_image.create(height_, width_, CV_8UC3);
 
   for (int y = 0; y <  height_; ++y) {
     for (int x = 0; x < width_; ++x) {
