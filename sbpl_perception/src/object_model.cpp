@@ -33,6 +33,7 @@ using namespace std;
 
 // TODO: use config manager.
 bool kMeshInMillimeters = false;
+double kMeshScalingFactor = 0.01;
 
 namespace {
 // Inflate inscribed (and circumscribed) radius of mesh by the following
@@ -45,7 +46,7 @@ const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
 
 Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
-                                pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, bool flipped) {
+                                pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, double kMeshScalingFactor, bool flipped) {
   pcl::PointCloud<PointT>::Ptr cloud_in (new
                                          pcl::PointCloud<PointT>);
   pcl::PointCloud<PointT>::Ptr cloud_out (new
@@ -79,7 +80,7 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
 
   // By default, assume cad models are in mm.
   if (mesh_in_mm) {
-    const double kScale = 0.01;
+    const double kScale = kMeshScalingFactor;
     // const double kScale = 0.001 * 0.7; // UGH, chess piece models are
     // off-scale. TODO: add scaling paramater for models in config file.
     transform.scale(kScale);
@@ -214,7 +215,7 @@ ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name,
   // pcl::PolygonMesh::Ptr mesh_out(new pcl::PolygonMesh(mesh));
   pcl::PolygonMesh::Ptr mesh_out(new pcl::PolygonMesh);
   preprocessing_transform_ = PreprocessModel(mesh_in, mesh_out,
-                                             kMeshInMillimeters, flipped);
+                                             kMeshInMillimeters, kMeshScalingFactor, flipped);
 
   std::cout << "Preprocessing transform : " << preprocessing_transform_.matrix() << endl;
   mesh_ = *mesh_out;

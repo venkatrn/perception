@@ -3341,6 +3341,7 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
     printf("Translation resolution: %f\n", env_params_.res);
     printf("Rotation resolution: %f\n", env_params_.theta_res);
     printf("Mesh in millimeters: %d\n", kMeshInMillimeters);
+    printf("Mesh scaling factor: %d\n", kMeshScalingFactor);
   }
 }
 

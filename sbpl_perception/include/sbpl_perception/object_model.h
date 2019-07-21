@@ -23,6 +23,7 @@
 // TODO: use config manager.
 // If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
 extern bool kMeshInMillimeters;
+extern double kMeshScalingFactor;
 
 class ObjectModel {
  public:

@@ -37,6 +37,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   float camera_znear = 0.0;
   float camera_zfar = 0.0;
   bool mesh_in_mm = false;
+  double mesh_scaling_factor = 1.0;
   bool image_debug = true;
 
   if (IsMaster(mpi_world_)) {
@@ -83,6 +84,10 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
     if (private_nh.searchParam("mesh_in_mm", param_key)) {
       private_nh.getParam(param_key, mesh_in_mm);
+    }
+
+    if (private_nh.searchParam("mesh_scaling_factor", param_key)) {
+      private_nh.getParam(param_key, mesh_scaling_factor);
     }
 
     if (private_nh.searchParam("model_bank", param_key)) {
@@ -156,6 +161,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   broadcast(*mpi_world_, search_resolution_translation, kMasterRank);
   broadcast(*mpi_world_, search_resolution_yaw, kMasterRank);
   broadcast(*mpi_world_, mesh_in_mm, kMasterRank);
+  broadcast(*mpi_world_, mesh_scaling_factor, kMasterRank);
   broadcast(*mpi_world_, camera_width, kMasterRank);
   broadcast(*mpi_world_, camera_height, kMasterRank);
   broadcast(*mpi_world_, camera_fx, kMasterRank);
@@ -167,6 +173,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
   // TODO: use config manager.
   kMeshInMillimeters = mesh_in_mm;
+  kMeshScalingFactor = mesh_scaling_factor;
   kCameraWidth = camera_width;
   kCameraHeight = camera_height;
   kCameraFX = camera_fx;
@@ -349,7 +356,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
         
       }
 
-      last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
+      // last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
 
       cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
       cout << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "

@@ -174,9 +174,17 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh("~");
     std::string param_key;
     XmlRpc::XmlRpcValue model_bank_list;
+    double mesh_scaling_factor = 1.0;
+    bool mesh_in_mm = false;
 
     if (nh.searchParam("/model_bank", param_key)) {
       nh.getParam(param_key, model_bank_list);
+    }
+    if (nh.searchParam("/mesh_in_mm", param_key)) {
+      nh.getParam(param_key, mesh_in_mm);
+    }
+    if (nh.searchParam("/mesh_scaling_factor", param_key)) {
+      nh.getParam(param_key, mesh_scaling_factor);
     }
     ModelBank model_bank_ = ModelBankFromList(model_bank_list);
 
@@ -233,9 +241,16 @@ int main(int argc, char **argv) {
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose.position = pose_msg.pose.position;
         marker.pose.orientation = pose_msg.pose.orientation;
-        marker.scale.x = 1;
-        marker.scale.y = 1;
-        marker.scale.z = 1;
+        if (mesh_in_mm) {
+          marker.scale.x = mesh_scaling_factor;
+          marker.scale.y = mesh_scaling_factor;
+          marker.scale.z = mesh_scaling_factor;
+        }
+        else {
+          marker.scale.x = 1;
+          marker.scale.y = 1;
+          marker.scale.z = 1;
+        }
         marker.color.a = 0.8; // Don't forget to set the alpha!
         marker.color.r = 255;
         marker.color.g = 255;
