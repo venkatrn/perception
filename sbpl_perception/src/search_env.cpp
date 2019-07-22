@@ -1579,7 +1579,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
-      // PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
+      PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
     }
   }
   // Cache the min and max depths
@@ -3352,14 +3352,15 @@ double EnvObjectRecognition::GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in
   printf("GetICPAdjustedPoseCUDA()\n");
   auto start = std::chrono::high_resolution_clock::now();
 
-  ICPOdometry icpOdom(kDepthImageWidth, kDepthImageHeight, kCameraCX, kCameraCY, kCameraFX, kCameraFY, 0.00, 0.0);
+  ICPOdometry icpOdom(kDepthImageWidth, kDepthImageHeight, kCameraCX, kCameraCY, kCameraFX, kCameraFY, 0.05, 0.3);
   const PointCloudPtr remaining_observed_cloud = perception_utils::IndexFilter(
                                                    observed_cloud_, counted_indices, true);
-  const PointCloudPtr remaining_downsampled_observed_cloud =
-    DownsamplePointCloud(remaining_observed_cloud);
-
-  vector<unsigned short> rendered_depth_image = sbpl_perception::OrganizedPointCloudToKinectDepthImage(cloud_in);
-  vector<unsigned short> target_depth_image = sbpl_perception::OrganizedPointCloudToKinectDepthImage(remaining_observed_cloud);
+  vector<unsigned short> rendered_depth_image = GetDepthImageFromPointCloud(cloud_in);
+  std::string fname = "test_cuda_render.png";
+  PrintImage(fname, rendered_depth_image);
+  vector<unsigned short> target_depth_image = GetDepthImageFromPointCloud(observed_cloud_);
+  fname = "test_cuda_target.png";
+  PrintImage(fname, target_depth_image);
   Eigen::Matrix4f outputPose;
   Eigen::Matrix4d inputPose = pose_in.GetTransform().matrix().cast<double>();
 
@@ -3369,23 +3370,35 @@ double EnvObjectRecognition::GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in
   // PrintImage(test_file, target_depth_image);
 
   Eigen::Vector4f vec_out;
-  vec_out << outputPose(0,3), outputPose(1,3), outputPose(2,3), 1.0;
-  Matrix3f rotation_new(3,3);
-  for (int i = 0; i < 3; i++){
-    for (int j = 0; j < 3; j++){
-      rotation_new(i, j) = outputPose(i, j);
-    }     
-  }
-  auto euler = rotation_new.eulerAngles(2,1,0);
-  double roll_ = euler[0];
-  double pitch_ = euler[1];
-  double yaw_ = euler[2];
+  // vec_out << outputPose(0,3), outputPose(1,3), outputPose(2,3), 1.0;
+  Eigen::Vector4f vec_in;
+  vec_in << pose_in.x(), pose_in.y(), pose_in.z(), 1.0;
+  vec_out = outputPose * vec_in;
+  // Matrix3f rotation_new(3,3);
+  // for (int i = 0; i < 3; i++){
+  //   for (int j = 0; j < 3; j++){
+  //     rotation_new(i, j) = outputPose(i, j);
+  //   }     
+  // }
+  // auto euler = rotation_new.eulerAngles(2,1,0);
+  // double roll_ = euler[0];
+  // double pitch_ = euler[1];
+  // double yaw_ = euler[2];
 
-  Quaternionf quaternion(rotation_new.cast<float>());
-  // *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], roll_, pitch_, yaw_);
-  *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], quaternion.x(), quaternion.y(), quaternion.z(), quaternion.w());
+  // Quaternionf quaternion(rotation_new.cast<float>());
+  // *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], quaternion.x(), quaternion.y(), quaternion.z(), quaternion.w());
 
-  transformPointCloud(*cloud_in, *cloud_out, outputPose);
+  double yaw = atan2(outputPose(1, 0), outputPose(0, 0));
+
+  double yaw1 = pose_in.yaw();
+  double yaw2 = yaw;
+  double cos_term = cos(yaw1 + yaw2);
+  double sin_term = sin(yaw1 + yaw2);
+  double total_yaw = atan2(sin_term, cos_term);
+  *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], pose_in.roll(), pose_in.pitch(), total_yaw);
+  
+
+  // transformPointCloud(*cloud_in, *cloud_out, outputPose);
 
 
   auto finish = std::chrono::high_resolution_clock::now();
