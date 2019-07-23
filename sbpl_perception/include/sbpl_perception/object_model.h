@@ -19,6 +19,11 @@
 #include <opencv2/imgproc.hpp>
 
 #include <pcl/PolygonMesh.h>
+#include <pcl/filters/voxel_grid.h>
+#include <algorithm> 
+#include <ColorSpace/ColorSpace.h>
+#include <ColorSpace/Conversion.h>
+#include <ColorSpace/Comparison.h>
 
 // TODO: use config manager.
 // If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
@@ -62,6 +67,9 @@ class ObjectModel {
   // Accessors
   const pcl::PolygonMesh &mesh() const {
     return mesh_;
+  }
+  const PointCloudPtr &downsampled_mesh_cloud() const {
+    return downsampled_mesh_cloud_;
   }
   std::string name() const {
     return name_;
@@ -108,6 +116,7 @@ class ObjectModel {
   // A point cloud of the object (not just the vertices of the mesh!)
   // corresponding to mesh_
   PointCloudPtr cloud_;
+  PointCloudPtr downsampled_mesh_cloud_;
   bool symmetric_;
   std::string name_;
   double min_x_, min_y_, min_z_; // Bounding box in default orientation
@@ -123,4 +132,5 @@ class ObjectModel {
   void SetObjectProperties();
   // Check if world point is within rasterizred footprint.
   bool PointInsideRasterizedFootprint(double x, double y) const;
+  // static bool getColorEquivalence(uint32_t rgb_1, uint32_t rgb_2);
 };

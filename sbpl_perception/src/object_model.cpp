@@ -28,6 +28,7 @@
 #include <vtkPointData.h>
 #include <vtkSmartPointer.h>
 #include <vtkSelectEnclosedPoints.h>
+#include <perception_utils/perception_utils.h>
 
 using namespace std;
 
@@ -222,6 +223,7 @@ ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name,
   symmetric_ = symmetric;
   name_ = name;
   cloud_.reset(new PointCloud);
+  downsampled_mesh_cloud_.reset(new PointCloud);
   SetObjectProperties();
 }
 
@@ -273,6 +275,29 @@ void ObjectModel::TransformPolyMeshWithShift(const pcl::PolygonMesh::Ptr
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
   return;
+}
+
+bool getColorEquivalence(uint32_t rgb_1, uint32_t rgb_2)
+{
+    uint8_t r = (rgb_1 >> 16);
+    uint8_t g = (rgb_1 >> 8);
+    uint8_t b = (rgb_1);
+    ColorSpace::Rgb point_1_color(r, g, b);
+
+    r = (rgb_2 >> 16);
+    g = (rgb_2 >> 8);
+    b = (rgb_2);
+    ColorSpace::Rgb point_2_color(r, g, b);
+
+    double color_distance =
+              ColorSpace::Cie2000Comparison::Compare(&point_1_color, &point_2_color);
+
+    if (color_distance < 20) {
+      return true;
+    }
+    else {
+      return false;
+    }
 }
 
 void ObjectModel::SetObjectProperties() {
@@ -361,6 +386,44 @@ void ObjectModel::SetObjectProperties() {
   cv::fillConvexPoly(footprint_raster_, cv_points.data(), cv_points.size(), 255);
   cv::imwrite(kDebugDir + string("footprint_") + name_ + string(".png"),
               footprint_raster_);
+  
+
+  // Downsample point cloud
+  // pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
+  // pcl::PCLPointCloud2::Ptr cloud_voxel_in (new pcl::PCLPointCloud2 ());
+  // *cloud_voxel_in = mesh_.cloud;
+  // sor.setInputCloud (cloud_voxel_in);
+  // sor.setLeafSize (0.01f, 0.01f, 0.01f);
+  // pcl::PCLPointCloud2::Ptr cloud_filtered (new pcl::PCLPointCloud2 ());
+  // sor.filter (*cloud_filtered);
+  // pcl::fromPCLPointCloud2(*cloud_filtered, *downsampled_mesh_cloud_);
+  // printf("Points in downsampled cloud : %d\n", downsampled_mesh_cloud_->points.size());
+  
+  // Get list of unique colors
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_color (new
+                                             pcl::PointCloud<pcl::PointXYZRGB>);
+  pcl::fromPCLPointCloud2(mesh_.cloud, *cloud_color);
+  downsampled_mesh_cloud_ = perception_utils::DownsamplePointCloud(cloud_color);
+  printf("Points in downsampled cloud : %d\n", downsampled_mesh_cloud_->points.size());
+
+  vector<uint32_t> unique_rgb;
+  for (size_t i = 0; i < cloud_color->points.size(); i++) {
+    unique_rgb.push_back(*reinterpret_cast<int*>(&cloud_color->points[i].rgb));
+  }
+
+  vector<uint32_t>::iterator ip; 
+
+  // Using std::unique 
+  // ip = std::unique(unique_rgb.begin(), unique_rgb.begin() + unique_rgb.size()); 
+  ip = std::unique_copy (unique_rgb.begin(), unique_rgb.begin() + unique_rgb.size(), unique_rgb.begin(), getColorEquivalence);
+
+  // Now v becomes {1 3 10 1 3 7 8 * * * * *} 
+  // * means undefined 
+
+  // Resizing the vector so as to remove the undefined terms 
+  unique_rgb.resize(std::distance(unique_rgb.begin(), ip)); 
+  printf("Points in  cloud : %d\n", cloud_color->points.size());
+  printf("Unique colors in model : %d\n", unique_rgb.size());
 }
 
 void ObjectModel::SetObjectPointCloud(const PointCloudPtr &cloud) {

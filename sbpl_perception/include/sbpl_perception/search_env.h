@@ -38,6 +38,7 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
+#include <pcl/filters/voxel_grid.h>
 
 #include <memory>
 #include <string>
@@ -322,6 +323,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
  private:
 
   ros::Publisher render_point_cloud_topic;
+  ros::Publisher downsampled_input_point_cloud_topic;
   ros::Publisher input_point_cloud_topic;
 
   std::vector<ObjectModel> obj_models_;
@@ -371,11 +373,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr projected_knn_;
+  pcl::search::KdTree<PointT>::Ptr downsampled_projected_knn_;
   std::vector<int> valid_indices_;
 
   std::vector<unsigned short> observed_depth_image_;
   PointCloudPtr original_input_cloud_, observed_cloud_, downsampled_observed_cloud_,
-                observed_organized_cloud_, projected_cloud_;
+                observed_organized_cloud_, projected_cloud_, downsampled_projected_cloud_;
   // Refer RecognitionInput::constraint_cloud for details.
   // This is an unorganized point cloud.
   PointCloudPtr constraint_cloud_, projected_constraint_cloud_;
@@ -427,6 +430,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
               std::vector<std::vector<unsigned char>> *unadjusted_child_color_image);
 
   double getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const;
+  int getNumColorNeighbours(PointT point, const PointCloudPtr point_cloud) const;
   int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud) const;
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.
