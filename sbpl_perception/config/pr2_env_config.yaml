@@ -1,4 +1,4 @@
-search_resolution_translation: 0.08 # m 0.04
+search_resolution_translation: 0.05 # m 0.04
 search_resolution_yaw: 0.3926991 # rad
 # use_external_render : 0
 # use_full_object_point_cloud: true

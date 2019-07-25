@@ -403,7 +403,7 @@ void ObjectModel::SetObjectProperties() {
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_color (new
                                              pcl::PointCloud<pcl::PointXYZRGB>);
   pcl::fromPCLPointCloud2(mesh_.cloud, *cloud_color);
-  downsampled_mesh_cloud_ = perception_utils::DownsamplePointCloud(cloud_color);
+  downsampled_mesh_cloud_ = perception_utils::DownsamplePointCloud(cloud_color, 0.01);
   printf("Points in downsampled cloud : %d\n", downsampled_mesh_cloud_->points.size());
 
   vector<uint32_t> unique_rgb;

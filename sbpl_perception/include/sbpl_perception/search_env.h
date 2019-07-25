@@ -324,6 +324,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   ros::Publisher render_point_cloud_topic;
   ros::Publisher downsampled_input_point_cloud_topic;
+  ros::Publisher downsampled_mesh_cloud_topic;
   ros::Publisher input_point_cloud_topic;
 
   std::vector<ObjectModel> obj_models_;
@@ -429,8 +430,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
               std::vector<unsigned short> *unadjusted_child_depth_image,
               std::vector<std::vector<unsigned char>> *unadjusted_child_color_image);
 
+  double getColorDistanceCMC(uint32_t rgb_1, uint32_t rgb_2) const;
   double getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const;
-  int getNumColorNeighbours(PointT point, const PointCloudPtr point_cloud) const;
+  int getNumColorNeighboursCMC(PointT point, const PointCloudPtr point_cloud) const;
   int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud) const;
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.

@@ -267,6 +267,10 @@ int main(int argc, char **argv) {
     }
     mesh_marker_array_pub_.publish(marker_array);
     pose_array_pub_.publish(pose_msg_array);
+    
+    fs_stats << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
+    fs_stats << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
+           << "Cost" << endl;
     fs_stats << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
              <<
              stats_vector[0].expands
