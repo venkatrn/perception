@@ -326,6 +326,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   ros::Publisher downsampled_input_point_cloud_topic;
   ros::Publisher downsampled_mesh_cloud_topic;
   ros::Publisher input_point_cloud_topic;
+  cv::Mat cv_input_color_image;
 
   std::vector<ObjectModel> obj_models_;
   pcl::simulation::Scene::Ptr scene_;
@@ -356,6 +357,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
   std::unordered_map<int, std::vector<int>> succ_cache;
   std::unordered_map<int, std::vector<int>> cost_cache;
+  std::unordered_map<int, std::vector<ObjectState>> valid_succ_cache;
   std::unordered_map<int, unsigned short> minz_map_;
   std::unordered_map<int, unsigned short> maxz_map_;
   std::unordered_map<int, int> g_value_map_;

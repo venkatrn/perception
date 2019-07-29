@@ -64,9 +64,11 @@ constexpr double kColorDistanceThresholdCMC = 10; // m
 
 constexpr double kColorDistanceThreshold = 20; // m
 
-bool kUseColorCost = true;
+bool kUseColorCost = true ;
 
-bool kUseColorPruning = true;
+bool kUseColorPruning = false;
+
+bool kUseHistogramPruning = false;
 
 }  // namespace
 
@@ -357,15 +359,15 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
       search_rad = 0.5 * search_rad;
   }
   
-  // int min_neighbor_points_for_valid_pose = perch_params_.min_neighbor_points_for_valid_pose;
-  // int num_neighbors_found = projected_knn_->radiusSearch(point, search_rad,
-  //                                                        indices,
-  //                                                        sqr_dists, min_neighbor_points_for_valid_pose); //0.2
-
-  int min_neighbor_points_for_valid_pose = 50;
-  int num_neighbors_found = downsampled_projected_knn_->radiusSearch(point, search_rad,
+  int min_neighbor_points_for_valid_pose = perch_params_.min_neighbor_points_for_valid_pose;
+  int num_neighbors_found = projected_knn_->radiusSearch(point, search_rad,
                                                          indices,
                                                          sqr_dists, min_neighbor_points_for_valid_pose); //0.2
+
+  // int min_neighbor_points_for_valid_pose = 50;
+  // int num_neighbors_found = downsampled_projected_knn_->radiusSearch(point, search_rad,
+  //                                                        indices,
+  //                                                        sqr_dists, min_neighbor_points_for_valid_pose); //0.2
 
   if (env_params_.use_external_pose_list != 1) 
   {
@@ -3267,6 +3269,7 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   maxz_map_.clear();
   g_value_map_.clear();
   succ_cache.clear();
+  valid_succ_cache.clear();
   cost_cache.clear();
   last_object_rendering_cost_.clear();
   depth_image_cache_.clear();
@@ -3379,13 +3382,13 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     else {
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_UNCHANGED);
     }
-    cv::Mat cv_color_image = cv::imread(input.input_color_image, CV_LOAD_IMAGE_COLOR);
+    cv_input_color_image = cv::imread(input.input_color_image, CV_LOAD_IMAGE_COLOR);
     // cv_color_image = equalizeIntensity(cv_color_image);
     std::stringstream ss1;
-    ss1 << debug_dir_ << "input_color.png";
+    ss1 << debug_dir_ << "input_color_image.png";
     std::string image_path = ss1.str();
-    cv::imwrite(image_path, cv_color_image);
-    depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_color_image, cv_predicted_mask_image, input.depth_factor);
+    cv::imwrite(image_path, cv_input_color_image);
+    depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_input_color_image, cv_predicted_mask_image, input.depth_factor);
     original_input_cloud_ = depth_img_cloud;
 
     if (env_params_.use_external_pose_list == 1) {
@@ -4075,67 +4078,167 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     {
         printf("States for model : %s\n", obj_models_[ii].name().c_str());
         int succ_count = 0;
-        for (double x = env_params_.x_min; x <= env_params_.x_max;
-             x += res) {
-          for (double y = env_params_.y_min; y <= env_params_.y_max;
-               y += res) {
-            // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
-            for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-              // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
-              ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
+        if (source_state.object_states().size() == 0) 
+        {
+          for (double x = env_params_.x_min; x <= env_params_.x_max;
+              x += res) {
+            for (double y = env_params_.y_min; y <= env_params_.y_max;
+                y += res) {
+              // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
+              for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
+                // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
+                ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
 
-              if (!IsValidPose(source_state, ii, p)) {
-                // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
+                if (!IsValidPose(source_state, ii, p)) {
+                  // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
 
-                continue;
-              }
-              // std::cout << "Valid pose for theta : " << theta << endl;
-
-              GraphState s = source_state; // Can only add objects, not remove them
-              const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
-              s.AppendObject(new_object);
-
-              succ_states->push_back(s);
-
-              if (image_debug_ && s.object_states().size() == 1) {
-                vector<unsigned short> depth_image, last_obj_depth_image;
-                cv::Mat cv_depth_image, last_cv_obj_depth_image;
-                vector<vector<unsigned char>> color_image, last_obj_color_image;
-                cv::Mat cv_color_image, last_cv_obj_color_image;
-                int num_occluders = 0;
-                GetDepthImage(s, &last_obj_depth_image, &last_obj_color_image,
-                                                  last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, false);
-                PointCloudPtr cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
-                std::stringstream ss1;
-                ss1 << debug_dir_ << "/successor - " << obj_models_[ii].name() << "-" << succ_count << "-color.png";
-                std::string image_path = ss1.str();
-                cv::imwrite(image_path, last_cv_obj_color_image);
-                if (IsMaster(mpi_comm_)) {
-                  if (image_debug_) {
-                    PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
-                    // cv::imshow("valid image", last_cv_obj_color_image);
-                    // cv::waitKey(50);
-                  }
+                  continue;
                 }
-              }
-              succ_count += 1;
-              // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
-              // If symmetric object, don't iterate over all thetas
-              if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
-                break;
-              }
+                // std::cout << "Valid pose for theta : " << theta << endl;
 
-              // If 180 degree symmetric, then iterate only between 0 and 180.
-              if (model_meta_data.symmetry_mode == 1 &&
-                  theta > (M_PI + env_params_.theta_res)) {
-                printf("Semi-symmetric object\n");
-                break;
-              }
+                GraphState s = source_state; // Can only add objects, not remove them
+                const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+                s.AppendObject(new_object);
 
-              // }
+                GraphState s_render;
+                s_render.AppendObject(new_object);
+
+                // succ_states->push_back(s);
+                // bool kHistogramPruning = true;
+                cv::Mat last_cv_obj_depth_image, last_cv_obj_color_image;
+                vector<unsigned short> last_obj_depth_image;
+                vector<vector<unsigned char>> last_obj_color_image;
+                std::string image_path;
+                PointCloudPtr cloud_in;
+
+                if ((image_debug_ && s.object_states().size() == 1) || kUseHistogramPruning) 
+                {
+                  // Process successors once when only one object scene or when pruning is on (then it needs to be done always)
+                  int num_occluders = 0;
+                  GetDepthImage(s_render, &last_obj_depth_image, &last_obj_color_image,
+                                                    last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, false);
+                  std::stringstream ss1;
+                  ss1 << debug_dir_ << "/successor - " << obj_models_[ii].name() << "-" << succ_count << "-color.png";
+                  image_path = ss1.str();
+                  
+
+                  if (kUseHistogramPruning)
+                  {
+                    cv::Mat mask, observed_image_segmented;
+                    cv::cvtColor(last_cv_obj_color_image, mask, CV_BGR2GRAY);
+                    mask = mask > 0;
+                    // cv_input_color_image.copyTo(observed_image_segmented, mask);
+
+
+                    cv::Mat Points;
+                    cv::findNonZero(mask, Points);
+                    cv::Rect bounding_box = cv::boundingRect(Points);
+                    observed_image_segmented = cv_input_color_image(bounding_box);
+                    cv::Mat last_cv_obj_color_image_cropped = last_cv_obj_color_image(bounding_box);
+
+                    // cv::findNonZero(last_cv_obj_color_image, mask);
+                    // cv::threshold( src_gray, dst, threshold_value, max_BINARY_value,threshold_type );
+                    // cv::imshow("valid image", mask);
+                    int channels[] = { 0, 1 };
+                    int h_bins = 50; int s_bins = 60;
+                    int histSize[] = { h_bins, s_bins };
+                    cv::MatND hist_base, hist_test1;
+                    cv::Mat hsv_base, hsv_test1;
+                    float h_ranges[] = { 0, 180 };
+                    float s_ranges[] = { 0, 256 };
+                    const float* ranges[] = { h_ranges, s_ranges };
+
+                    cv::cvtColor( observed_image_segmented, hsv_base, CV_BGR2HSV );
+                    cv::cvtColor( last_cv_obj_color_image_cropped, hsv_test1, CV_BGR2HSV );
+
+                    cv::calcHist( &hsv_base, 1, channels, cv::Mat(), hist_base, 2, histSize, ranges, true, false );
+                    cv::normalize( hist_base, hist_base, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
+
+                    cv::calcHist( &hsv_test1, 1, channels, cv::Mat(), hist_test1, 2, histSize, ranges, true, false );
+                    cv::normalize( hist_test1, hist_test1, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
+
+                    double base_test1 = cv::compareHist( hist_base, hist_test1, 3 );
+                    printf("Histogram comparison : %f\n", base_test1);
+                    
+                    
+
+                    if (base_test1 <= 0.8) {
+                      if (s.object_states().size() == 1) 
+                      {
+                        // Write successors only once even if pruning is on
+                        cv::imwrite(image_path, last_cv_obj_color_image);
+                        if (IsMaster(mpi_comm_)) {
+                          cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+                          PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                          // cv::imshow("valid image", last_cv_obj_color_image);
+                        }
+                      }
+                      valid_succ_cache[ii].push_back(new_object);
+                      succ_states->push_back(s);
+                      succ_count += 1;
+                    }
+
+                    // cv::Mat merge;
+                    // cv::hconcat(last_cv_obj_color_image, observed_image_segmented, merge);
+                    // cv::imshow("rendered_image", merge);
+                    // cv::imshow("rendered_image", last_cv_obj_color_image);
+                    // cv::imshow("observed_image_segmented", observed_image_segmented);
+
+
+                    // cv::imshow("rendered_image", cropped_rendered_image);
+
+                    // cv::waitKey(500);
+                  }
+                  
+
+                }
+                
+                if (!kUseHistogramPruning)
+                {
+                  if (s.object_states().size() == 1) 
+                  {
+                    // Write successors only once
+                    cv::imwrite(image_path, last_cv_obj_color_image);
+                    if (IsMaster(mpi_comm_)) {
+                      cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+                      PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                      // cv::imshow("valid image", last_cv_obj_color_image);
+                    }
+                  }
+                  valid_succ_cache[ii].push_back(new_object);
+                  succ_states->push_back(s);
+                  succ_count += 1;
+                }
+                // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
+                // If symmetric object, don't iterate over all thetas
+                if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
+                  break;
+                }
+
+                // If 180 degree symmetric, then iterate only between 0 and 180.
+                if (model_meta_data.symmetry_mode == 1 &&
+                    theta > (M_PI + env_params_.theta_res)) {
+                  printf("Semi-symmetric object\n");
+                  break;
+                }
+
+                // }
+              }
             }
           }
         }
+        else
+        {
+          printf("GenerateSuccessorStates() from cache\n");
+          for (size_t i = 0; i < valid_succ_cache[ii].size(); i++)
+          {
+            // const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+            GraphState s = source_state; // Can only add objects, not remove them
+            s.AppendObject(valid_succ_cache[ii][i]);
+            succ_states->push_back(s);
+          }
+        }
+        
     }
   }
 
