@@ -64,7 +64,7 @@ constexpr double kColorDistanceThresholdCMC = 10; // m
 
 constexpr double kColorDistanceThreshold = 20; // m
 
-bool kUseColorCost = true ;
+bool kUseColorCost = true;
 
 bool kUseColorPruning = false;
 

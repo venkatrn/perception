@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
   world->barrier();
 
   RecognitionInput input_global;
-  std::vector<Eigen::Affine3f> object_transforms;
+  std::vector<Eigen::Affine3f> object_transforms, preprocessing_object_transforms;
 
   if (IsMaster(world)) {
       RecognitionInput input;
@@ -164,7 +164,9 @@ int main(int argc, char **argv) {
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
 
-  object_recognizer.LocalizeObjects(input_global, &object_transforms);
+  object_recognizer.LocalizeObjects(
+    input_global, &object_transforms, &preprocessing_object_transforms
+  );
 
   world->barrier();
 
@@ -188,15 +190,15 @@ int main(int argc, char **argv) {
     }
     ModelBank model_bank_ = ModelBankFromList(model_bank_list);
 
-    vector<std_msgs::Float64MultiArray> rosmsg_object_transforms(
-      object_transforms.size()
-    );
+    // vector<std_msgs::Float64MultiArray> rosmsg_object_transforms(
+    //   object_transforms.size()
+    // );
 
-    for (size_t ii = 0; ii < object_transforms.size(); ++ii) {
-      auto object_transform_t = object_transforms[ii];
-      // std:cout << "test" <<  object_transform_t.matrix();
-      tf::matrixEigenToMsg(object_transform_t.matrix(), rosmsg_object_transforms[ii]);
-    }
+    // for (size_t ii = 0; ii < object_transforms.size(); ++ii) {
+    //   auto object_transform_t = object_transforms[ii];
+    //   // std:cout << "test" <<  object_transform_t.matrix();
+    //   tf::matrixEigenToMsg(object_transform_t.matrix(), rosmsg_object_transforms[ii]);
+    // }
 
 
     auto stats_vector = object_recognizer.GetLastPlanningEpisodeStats();
@@ -207,10 +209,11 @@ int main(int argc, char **argv) {
 
     for (size_t ii = 0; ii < input_global.model_names.size(); ++ii) {
         // std::cout << ii;
-        Eigen::Matrix4d eigen_pose(rosmsg_object_transforms[ii].data.data());
-        Eigen::Affine3d object_transform;
+        // Eigen::Matrix4d eigen_pose(rosmsg_object_transforms[ii].data.data());
+        Eigen::Affine3d object_transform = object_transforms[ii].cast<double>();
+        Eigen::Affine3d object_preprocessing_transform = preprocessing_object_transforms[ii].cast<double>();
         // // Transpose to convert column-major raw data initialization to row-major.
-        object_transform.matrix() = eigen_pose.transpose();
+        // object_transform.matrix() = eigen_pose.transpose();
 
         std::cout << "Pose for Object: " << input_global.model_names[ii] << std::endl <<
                         object_transform.matrix() << std::endl << std::endl;
@@ -261,9 +264,12 @@ int main(int argc, char **argv) {
         marker_array.markers.push_back(marker);
 
         fs_poses << input_global.model_names[ii] << endl;
-        fs_poses << pose_msg.pose.position.x << " " << pose_msg.pose.position.y << " " << pose_msg.pose.position.z << endl; 
-        fs_poses << pose_msg.pose.orientation.x << " " << pose_msg.pose.orientation.y 
+        fs_poses << "translation " << pose_msg.pose.position.x << " " << pose_msg.pose.position.y << " " << pose_msg.pose.position.z << endl; 
+        fs_poses << "quaternion "  << pose_msg.pose.orientation.x << " " << pose_msg.pose.orientation.y 
           << " " << pose_msg.pose.orientation.z << " " << pose_msg.pose.orientation.w << " " << endl;
+        fs_poses << "matrix(incl preprocessing) " << endl << object_transform.matrix() << endl; 
+        fs_poses << "matrix(preprocessing) " << endl << object_preprocessing_transform.matrix() << endl; 
+
     }
     mesh_marker_array_pub_.publish(marker_array);
     pose_array_pub_.publish(pose_msg_array);

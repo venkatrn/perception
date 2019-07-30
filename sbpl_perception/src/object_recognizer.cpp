@@ -201,8 +201,10 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 }
 // This is used Aditya in perch fat
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
-                                       std::vector<Eigen::Affine3f> *object_transforms) const {
+                                       std::vector<Eigen::Affine3f> *object_transforms,
+                                       std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const {
   object_transforms->clear();
+  preprocessing_object_transforms->clear();
 
   vector<ContPose> detected_poses;
   const bool plan_success = LocalizeObjects(input, &detected_poses);
@@ -216,11 +218,13 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
     const auto &models = env_obj_->obj_models_;
     object_transforms->resize(input.model_names.size());
+    preprocessing_object_transforms->resize(input.model_names.size());
 
     for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
       const auto &obj_model = models[ii];
       object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
                                     detected_poses[ii]);
+      preprocessing_object_transforms->at(ii) = obj_model.preprocessing_transform();
     }
   }
 

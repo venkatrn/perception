@@ -16,7 +16,8 @@ class ObjectRecognizer {
   // that align the objects to the scene. Matrices are ordered by the list of names
   // under input.model_names.
   bool LocalizeObjects(const RecognitionInput &input,
-                       std::vector<Eigen::Affine3f> *object_transforms) const;
+                       std::vector<Eigen::Affine3f> *object_transforms,
+                       std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const;
   // Ditto as above, but return the (x,y,\theta) pose for every object in the
   // world frame, rather than the transforms.
   bool LocalizeObjects(const RecognitionInput &input,
