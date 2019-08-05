@@ -71,7 +71,8 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   PointT min_pt, max_pt;
   pcl::getMinMax3D(*cloud_in, min_pt, max_pt);
   double z_translation = min_pt.z;
-  std::cout << "Preprocessing Model" << endl;
+  // double z_translation = 0.01;
+  std::cout << "Preprocessing Model, z : " << z_translation << endl;
   // std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl
   //   << max_pt.y - min_pt.y << endl
   //   << max_pt.z - min_pt.z << endl;

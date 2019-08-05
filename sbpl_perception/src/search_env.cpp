@@ -68,7 +68,7 @@ bool kUseColorCost = true;
 
 bool kUseColorPruning = false;
 
-bool kUseHistogramPruning = false;
+bool kUseHistogramPruning = true;
 
 }  // namespace
 
@@ -1546,6 +1546,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
+      // uint8_t rgb[3] = {0,0,255};
+      // PointCloudPtr cloud_icp_in = GetGravityAlignedPointCloud(new_obj_depth_image, rgb);
+      // PrintPointCloud(cloud_icp_in, 1, render_point_cloud_topic);
       // PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
     }
   }
@@ -1565,8 +1568,12 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                          last_object.symmetric(), pose_out);
   adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
   // End ICP Adjustment
+  printf("pose before icp");
+  std::cout << pose_in << endl;
   printf("pose after icp");
-  std::cout<<adjusted_child_state->object_states().back().cont_pose()<<endl;
+  std::cout << pose_out << endl;
+
+  // std::cout<<adjusted_child_state->object_states().back().cont_pose()<<endl;
   // Check again after icp
   if (!IsValidPose(source_state, last_object_id,
                    adjusted_child_state->object_states().back().cont_pose(), true)) {
@@ -1576,7 +1583,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     // final_depth_image->clear();
     // *final_depth_image = depth_image;
     return -1;
-    // Aditya
+    // Aditya uncomment later
   }
 
   // num_occluders is the number of valid pixels in the input depth image that
@@ -1629,6 +1636,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
+      // uint8_t rgb[3] = {255,0,0};
+      // PointCloudPtr cloud_icp_out = GetGravityAlignedPointCloud(new_obj_depth_image, rgb);
+      // PrintPointCloud(cloud_icp_out, 1, render_point_cloud_topic);
       // PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
     }
   }
@@ -3481,13 +3491,16 @@ double EnvObjectRecognition::GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in
   printf("GetICPAdjustedPoseCUDA()\n");
   auto start = std::chrono::high_resolution_clock::now();
 
-  ICPOdometry icpOdom(kDepthImageWidth, kDepthImageHeight, kCameraCX, kCameraCY, kCameraFX, kCameraFY, 0.05, 0.3);
+  ICPOdometry icpOdom(kDepthImageWidth, kDepthImageHeight, kCameraCX, kCameraCY, kCameraFX, kCameraFY);
   const PointCloudPtr remaining_observed_cloud = perception_utils::IndexFilter(
                                                    observed_cloud_, counted_indices, true);
+  const PointCloudPtr remaining_downsampled_observed_cloud =
+    DownsamplePointCloud(remaining_observed_cloud);
+
   vector<unsigned short> rendered_depth_image = GetDepthImageFromPointCloud(cloud_in);
   std::string fname = "test_cuda_render.png";
   PrintImage(fname, rendered_depth_image);
-  vector<unsigned short> target_depth_image = GetDepthImageFromPointCloud(observed_cloud_);
+  vector<unsigned short> target_depth_image = GetDepthImageFromPointCloud(remaining_observed_cloud);
   fname = "test_cuda_target.png";
   PrintImage(fname, target_depth_image);
   Eigen::Matrix4f outputPose;
@@ -3499,10 +3512,10 @@ double EnvObjectRecognition::GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in
   // PrintImage(test_file, target_depth_image);
 
   Eigen::Vector4f vec_out;
-  // vec_out << outputPose(0,3), outputPose(1,3), outputPose(2,3), 1.0;
+  vec_out << outputPose(0,3), outputPose(1,3), outputPose(2,3), 1.0;
   Eigen::Vector4f vec_in;
   vec_in << pose_in.x(), pose_in.y(), pose_in.z(), 1.0;
-  vec_out = outputPose * vec_in;
+  // vec_out = outputPose * vec_in;
   // Matrix3f rotation_new(3,3);
   // for (int i = 0; i < 3; i++){
   //   for (int j = 0; j < 3; j++){
@@ -3524,7 +3537,7 @@ double EnvObjectRecognition::GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in
   double cos_term = cos(yaw1 + yaw2);
   double sin_term = sin(yaw1 + yaw2);
   double total_yaw = atan2(sin_term, cos_term);
-  *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], pose_in.roll(), pose_in.pitch(), total_yaw);
+  *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], pose_in.roll(), pose_in.pitch(), yaw1);
   
 
   // transformPointCloud(*cloud_in, *cloud_out, outputPose);
@@ -4157,12 +4170,13 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                     cv::calcHist( &hsv_test1, 1, channels, cv::Mat(), hist_test1, 2, histSize, ranges, true, false );
                     cv::normalize( hist_test1, hist_test1, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
 
+                    // using bhattacharya distance, lesser value means histograms are more similar
                     double base_test1 = cv::compareHist( hist_base, hist_test1, 3 );
                     printf("Histogram comparison : %f\n", base_test1);
                     
                     
 
-                    if (base_test1 <= 0.8) {
+                    if (base_test1 <= 0.90) {
                       if (s.object_states().size() == 1) 
                       {
                         // Write successors only once even if pruning is on
