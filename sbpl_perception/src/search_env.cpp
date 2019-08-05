@@ -64,11 +64,11 @@ constexpr double kColorDistanceThresholdCMC = 10; // m
 
 constexpr double kColorDistanceThreshold = 20; // m
 
-bool kUseColorCost = true;
+bool kUseColorCost = false;
 
 bool kUseColorPruning = false;
 
-bool kUseHistogramPruning = true;
+bool kUseHistogramPruning = false;
 
 }  // namespace
 
@@ -2965,10 +2965,10 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
           std::stringstream ss;
           // cout << p.external_render_path();
           ss << p.external_render_path() << "/" << obj_model.name() << "/" << p.external_pose_id() << "-color.png";
-          std::string image_path = ss.str();
-          printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+          std::string color_image_path = ss.str();
+          printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), color_image_path.c_str());
 
-          *cv_color_image = cv::imread(image_path);
+          *cv_color_image = cv::imread(color_image_path);
           // if (mpi_comm_->rank() == kMasterRank) {
             // static cv::Mat c_image;
             // ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
@@ -2976,10 +2976,10 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
 
           ss.str("");
           ss << p.external_render_path() << "/" << obj_model.name() << "/" << p.external_pose_id() << "-depth.png";
-          image_path = ss.str();
-          printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+          color_image_path = ss.str();
+          printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), color_image_path.c_str());
 
-          *cv_depth_image = cv::imread(image_path, CV_LOAD_IMAGE_ANYDEPTH);
+          *cv_depth_image = cv::imread(color_image_path, CV_LOAD_IMAGE_ANYDEPTH);
           // static cv::Mat c_image;
           // cvToShort(cv_depth_image, depth_image);
 
@@ -3396,8 +3396,8 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     // cv_color_image = equalizeIntensity(cv_color_image);
     std::stringstream ss1;
     ss1 << debug_dir_ << "input_color_image.png";
-    std::string image_path = ss1.str();
-    cv::imwrite(image_path, cv_input_color_image);
+    std::string color_image_path = ss1.str();
+    cv::imwrite(color_image_path, cv_input_color_image);
     depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_input_color_image, cv_predicted_mask_image, input.depth_factor);
     original_input_cloud_ = depth_img_cloud;
 
@@ -4032,10 +4032,10 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
               // std::stringstream ss1;
               // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
-              // std::string image_path = ss1.str();
-              // // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+              // std::string color_image_path = ss1.str();
+              // // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), color_image_path.c_str());
               //
-              // cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+              // cv::Mat cv_color_image = cv::imread(color_image_path, CV_LOAD_IMAGE_COLOR);
               // cv::imshow("invalid image", cv_color_image);
               // cv::waitKey(1);
 
@@ -4047,10 +4047,10 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               // std::stringstream ss1;
               // // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
               // ss1 << p.external_render_path() << "/" << obj_models_[ii].name() << "/" << p.external_pose_id() << "-color.png";
-              // std::string image_path = ss1.str();
-              // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), image_path.c_str());
+              // std::string color_image_path = ss1.str();
+              // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), color_image_path.c_str());
 
-              // cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+              // cv::Mat cv_color_image = cv::imread(color_image_path, CV_LOAD_IMAGE_COLOR);
               // cv::imshow("valid image", cv_color_image);
               // cv::waitKey(50);
             }
@@ -4121,7 +4121,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 cv::Mat last_cv_obj_depth_image, last_cv_obj_color_image;
                 vector<unsigned short> last_obj_depth_image;
                 vector<vector<unsigned char>> last_obj_color_image;
-                std::string image_path;
+                std::string color_image_path, depth_image_path;
                 PointCloudPtr cloud_in;
 
                 if ((image_debug_ && s.object_states().size() == 1) || kUseHistogramPruning) 
@@ -4132,7 +4132,10 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                                                     last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, false);
                   std::stringstream ss1;
                   ss1 << debug_dir_ << "/successor - " << obj_models_[ii].name() << "-" << succ_count << "-color.png";
-                  image_path = ss1.str();
+                  color_image_path = ss1.str();
+                  ss1.clear();
+                  ss1 << debug_dir_ << "/successor - " << obj_models_[ii].name() << "-" << succ_count << "-depth.png";
+                  depth_image_path = ss1.str();
                   
 
                   if (kUseHistogramPruning)
@@ -4180,7 +4183,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                       if (s.object_states().size() == 1) 
                       {
                         // Write successors only once even if pruning is on
-                        cv::imwrite(image_path, last_cv_obj_color_image);
+                        cv::imwrite(color_image_path, last_cv_obj_color_image);
                         if (IsMaster(mpi_comm_)) {
                           cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
                           PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
@@ -4212,7 +4215,9 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                   if (s.object_states().size() == 1) 
                   {
                     // Write successors only once
-                    cv::imwrite(image_path, last_cv_obj_color_image);
+                    cv::imwrite(color_image_path, last_cv_obj_color_image);
+                    cv::imwrite(depth_image_path, last_cv_obj_depth_image);
+
                     if (IsMaster(mpi_comm_)) {
                       cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
                       PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
