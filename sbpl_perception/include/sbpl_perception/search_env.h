@@ -108,9 +108,17 @@ struct PERCHParams {
   // occluders versus minimizing the objective.
   double clutter_regularizer;
 
+  bool use_downsampling;
+
+  double downsampling_leaf_size;
+
   bool vis_expanded_states;
   bool print_expanded_states;
   bool debug_verbose;
+  bool vis_successors;
+
+  bool use_color_cost;
+
   PERCHParams() : initialized(false) {}
 
   friend class boost::serialization::access;
@@ -129,6 +137,10 @@ struct PERCHParams {
     ar &debug_verbose;
     ar &use_clutter_mode;
     ar &clutter_regularizer;
+    ar &vis_successors;
+    ar &use_downsampling;
+    ar &downsampling_leaf_size;
+    ar &use_color_cost;
   }
 };
 // BOOST_IS_MPI_DATATYPE(PERCHParams);
