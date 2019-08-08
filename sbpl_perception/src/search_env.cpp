@@ -61,7 +61,7 @@ constexpr double kFootprintTolerance = 0.02; // m
 // Max color distance for two points to be considered neighbours
 constexpr double kColorDistanceThreshold = 15; // m
 
-constexpr bool kUseColorCost = false;
+constexpr bool kUseColorCost = true;
 
 }  // namespace
 
@@ -1430,6 +1430,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   ContPose child_pose = last_object.cont_pose();
   int last_object_id = last_object.id();
 
+  //initializing all containers for images and point clouds
   vector<unsigned short> depth_image, last_obj_depth_image;
   cv::Mat cv_depth_image, last_cv_obj_depth_image;
   vector<vector<unsigned char>> color_image, last_obj_color_image;
@@ -2676,7 +2677,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   cv::Mat cv_depth_image;
   return GetDepthImage(s, depth_image, &color_image, cv_depth_image, &num_occluders);
 }
-
+//GetDepthImage after append a new object
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
                                                  vector<unsigned short> *depth_image,
                                                  vector<vector<unsigned char>> *color_image,
@@ -2767,7 +2768,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
     return depth_buffer;
 
 };
-
+//GetDepthImage with cv:mat color image 
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image,
                              vector<vector<unsigned char>> *color_image,
@@ -3694,7 +3695,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     {
         printf("States for model : %s\n", obj_models_[ii].name().c_str());
         string render_states_dir;
-        string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
+        string render_states_path = "/media/jessy/Data/rendered";
         string render_states_path_parent = render_states_path;
         std::stringstream ss;
         ss << render_states_path << "/" << obj_models_[ii].name();
