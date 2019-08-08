@@ -71,11 +71,17 @@ struct RecognitionInput {
 
   std::string input_depth_image;
 
+  std::string predicted_mask_image;
+
   int use_input_images;
 
   int use_external_pose_list;
 
   double depth_factor;
+
+  int use_icp;
+
+  int shift_pose_centroid;
 };
 
 // A container for the holding the meta-data associated with a 3D model.
@@ -195,9 +201,12 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
   ar &input.reference_frame_;
   ar &input.input_color_image;
   ar &input.input_depth_image;
+  ar &input.predicted_mask_image;
   ar &input.use_input_images;
   ar &input.use_external_pose_list;
   ar &input.depth_factor;
+  ar &input.use_icp;
+  ar &input.shift_pose_centroid;
 }
 
 template<class Archive>

@@ -27,33 +27,26 @@ catkin_make -DCMAKE_BUILD_TYPE=Release
 
 Demo
 ----
-First, download the object CAD models (92 MB total):
-
-```bash
-roscd sbpl_perception 
-chmod +x data/scripts/download_demo_models.sh
-./data/scripts/download_demo_models.sh
+Running with Python :
+1. Clone ```https://github.com/SBPL-Cruz/maskrcnn-benchmark```
+2. Create a python 3 virtual environment :
 ```
-
-An example RGB-D scene containing 3 objects is provided under sbpl_perception/demo. To run PERCH on this with default parameters:
-
-```bash
-roscd sbpl_perception && mkdir visualization
-roslaunch sbpl_perception demo.launch 
+conda create --name maskrcnn_benchmark
+conda activate maskrcnn_benchmark
 ```
+3. Install dependencies in requirements file
+ ```
+ pip install pycocotools
+ pip install pillow
+ pip install scikit-image
+ pip install git+git://github.com/waspinator/coco.git@2.1.0
+ pip install dipy
+ pip install glumpy
+ conda install pyopengl
+ pip install scikit-build
+ pip install rospkg
+ pip install python-pcl
+ pip install defusedxml
+ ```
+ 
 
-The states 'expanded' as well as the goal state will be saved under sbpl_perception/visualization. The expanded states will also show up on an OpenCV window named "Expansions". To also save all the 'generated' (rendered) states to sbpl_perception/visualization, use
-
-```bash
-roslaunch sbpl_perception demo.launch image_debug:=true
-```
-You should see the following input depth and output depth images under sbpl_perception/visualization:
-
-![](https://cloud.githubusercontent.com/assets/1756204/15489006/ca12e31c-2129-11e6-9eed-4b984dd081fc.png)
-![](https://cloud.githubusercontent.com/assets/1756204/15489005/ca10b7e0-2129-11e6-966e-b75c6a43ff3d.png)
-
-Configuration parameters for the algorithm can be found under sbpl_perception/config/demo_env_config.yaml and sbpl_perception/config/demo_planner_config.yaml, along with descriptions of those parameters.
-
-To pull changes from all related repositories in one go, run ```wstool update -t src```.
-
-For more information on setting up PERCH for your custom robot/sensor, reproducing experimental results, and API details, refer to the <a href="https://github.com/venkatrn/perception/wiki">wiki</a>.

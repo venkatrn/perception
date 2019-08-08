@@ -73,9 +73,18 @@ int main(int argc, char **argv) {
   string pose_file = experiment_dir + "output_poses.txt";
   string stats_file = experiment_dir + "output_stats.txt";
 
+  // Delete directories if they exist
+  if (IsMaster(world) &&
+      boost::filesystem::is_directory(experiment_dir)) {
+    boost::filesystem::remove_all(experiment_dir);
+  }
 
+  if (IsMaster(world) &&
+      boost::filesystem::is_directory(debug_dir)) {
+    boost::filesystem::remove_all(debug_dir);
+  }
 
-
+  // Create directories
   if (IsMaster(world) &&
       !boost::filesystem::is_directory(experiment_dir)) {
     boost::filesystem::create_directory(experiment_dir);
@@ -100,7 +109,7 @@ int main(int argc, char **argv) {
   world->barrier();
 
   RecognitionInput input_global;
-  std::vector<Eigen::Affine3f> object_transforms;
+  std::vector<Eigen::Affine3f> object_transforms, preprocessing_object_transforms;
 
   if (IsMaster(world)) {
       RecognitionInput input;
@@ -114,8 +123,11 @@ int main(int argc, char **argv) {
       nh.getParam("/use_external_pose_list", input.use_external_pose_list);
       nh.getParam("/input_color_image", input.input_color_image);
       nh.getParam("/input_depth_image", input.input_depth_image);
+      nh.getParam("/predicted_mask_image", input.predicted_mask_image);
       nh.getParam("/reference_frame_", input.reference_frame_);
       nh.getParam("/depth_factor", input.depth_factor);
+      nh.getParam("/use_icp", input.use_icp);
+      nh.getParam("/shift_pose_centroid", input.shift_pose_centroid);
       // std::string required_object;
       // nh.getParam("/required_object", required_object);
       std::vector<double> camera_pose_list;
@@ -152,7 +164,9 @@ int main(int argc, char **argv) {
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
 
-  object_recognizer.LocalizeObjects(input_global, &object_transforms);
+  object_recognizer.LocalizeObjects(
+    input_global, &object_transforms, &preprocessing_object_transforms
+  );
 
   world->barrier();
 
@@ -162,21 +176,29 @@ int main(int argc, char **argv) {
     ros::NodeHandle nh("~");
     std::string param_key;
     XmlRpc::XmlRpcValue model_bank_list;
+    double mesh_scaling_factor = 1.0;
+    bool mesh_in_mm = false;
 
     if (nh.searchParam("/model_bank", param_key)) {
       nh.getParam(param_key, model_bank_list);
     }
+    if (nh.searchParam("/mesh_in_mm", param_key)) {
+      nh.getParam(param_key, mesh_in_mm);
+    }
+    if (nh.searchParam("/mesh_scaling_factor", param_key)) {
+      nh.getParam(param_key, mesh_scaling_factor);
+    }
     ModelBank model_bank_ = ModelBankFromList(model_bank_list);
 
-    vector<std_msgs::Float64MultiArray> rosmsg_object_transforms(
-      object_transforms.size()
-    );
+    // vector<std_msgs::Float64MultiArray> rosmsg_object_transforms(
+    //   object_transforms.size()
+    // );
 
-    for (size_t ii = 0; ii < object_transforms.size(); ++ii) {
-      auto object_transform_t = object_transforms[ii];
-      // std:cout << "test" <<  object_transform_t.matrix();
-      tf::matrixEigenToMsg(object_transform_t.matrix(), rosmsg_object_transforms[ii]);
-    }
+    // for (size_t ii = 0; ii < object_transforms.size(); ++ii) {
+    //   auto object_transform_t = object_transforms[ii];
+    //   // std:cout << "test" <<  object_transform_t.matrix();
+    //   tf::matrixEigenToMsg(object_transform_t.matrix(), rosmsg_object_transforms[ii]);
+    // }
 
 
     auto stats_vector = object_recognizer.GetLastPlanningEpisodeStats();
@@ -187,10 +209,11 @@ int main(int argc, char **argv) {
 
     for (size_t ii = 0; ii < input_global.model_names.size(); ++ii) {
         // std::cout << ii;
-        Eigen::Matrix4d eigen_pose(rosmsg_object_transforms[ii].data.data());
-        Eigen::Affine3d object_transform;
+        // Eigen::Matrix4d eigen_pose(rosmsg_object_transforms[ii].data.data());
+        Eigen::Affine3d object_transform = object_transforms[ii].cast<double>();
+        Eigen::Affine3d object_preprocessing_transform = preprocessing_object_transforms[ii].cast<double>();
         // // Transpose to convert column-major raw data initialization to row-major.
-        object_transform.matrix() = eigen_pose.transpose();
+        // object_transform.matrix() = eigen_pose.transpose();
 
         std::cout << "Pose for Object: " << input_global.model_names[ii] << std::endl <<
                         object_transform.matrix() << std::endl << std::endl;
@@ -221,9 +244,16 @@ int main(int argc, char **argv) {
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose.position = pose_msg.pose.position;
         marker.pose.orientation = pose_msg.pose.orientation;
-        marker.scale.x = 1;
-        marker.scale.y = 1;
-        marker.scale.z = 1;
+        if (mesh_in_mm) {
+          marker.scale.x = mesh_scaling_factor;
+          marker.scale.y = mesh_scaling_factor;
+          marker.scale.z = mesh_scaling_factor;
+        }
+        else {
+          marker.scale.x = 1;
+          marker.scale.y = 1;
+          marker.scale.z = 1;
+        }
         marker.color.a = 0.8; // Don't forget to set the alpha!
         marker.color.r = 255;
         marker.color.g = 255;
@@ -234,12 +264,19 @@ int main(int argc, char **argv) {
         marker_array.markers.push_back(marker);
 
         fs_poses << input_global.model_names[ii] << endl;
-        fs_poses << pose_msg.pose.position.x << " " << pose_msg.pose.position.y << " " << pose_msg.pose.position.z << endl; 
-        fs_poses << pose_msg.pose.orientation.x << " " << pose_msg.pose.orientation.y 
+        fs_poses << "translation " << pose_msg.pose.position.x << " " << pose_msg.pose.position.y << " " << pose_msg.pose.position.z << endl; 
+        fs_poses << "quaternion "  << pose_msg.pose.orientation.x << " " << pose_msg.pose.orientation.y 
           << " " << pose_msg.pose.orientation.z << " " << pose_msg.pose.orientation.w << " " << endl;
+        fs_poses << "matrix(incl preprocessing) " << endl << object_transform.matrix() << endl; 
+        fs_poses << "matrix(preprocessing) " << endl << object_preprocessing_transform.matrix() << endl; 
+
     }
     mesh_marker_array_pub_.publish(marker_array);
     pose_array_pub_.publish(pose_msg_array);
+    
+    fs_stats << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
+    fs_stats << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
+           << "Cost" << endl;
     fs_stats << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
              <<
              stats_vector[0].expands

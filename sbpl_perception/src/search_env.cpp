@@ -35,6 +35,8 @@
 #include <boost/lexical_cast.hpp>
 #include <omp.h>
 #include <algorithm>
+#include <pcl/point_cloud.h>
+#include <pcl/octree/octree_pointcloud_changedetector.h>
 
 using namespace std;
 using namespace perception_utils;
@@ -42,27 +44,38 @@ using namespace pcl::simulation;
 using namespace Eigen;
 
 namespace {
-// Whether should use depth-dependent cost penalty. If true, cost is
-// indicator(pixel explained) * multiplier * range_in_meters(pixel). Otherwise, cost is
-// indicator(pixel explained).
-constexpr bool kUseDepthSensitiveCost = false;
-// The multiplier used in the above definition.
-constexpr double kDepthSensitiveCostMultiplier = 100.0;
-// If true, we will use a normalized outlier cost function.
-constexpr bool kNormalizeCost = false;
-// When use_clutter is true, we will treat every pixel that is not within
-// the object volume as an extraneous occluder if its depth is less than
-// depth(rendered pixel) - kOcclusionThreshold.
-constexpr unsigned short kOcclusionThreshold = 50; // mm
-// Tolerance used when deciding the footprint of the object in a given pose is
-// out of bounds of the supporting place.
-constexpr double kFootprintTolerance = 0.02; // m
+  // Whether should use depth-dependent cost penalty. If true, cost is
+  // indicator(pixel explained) * multiplier * range_in_meters(pixel). Otherwise, cost is
+  // indicator(pixel explained).
+  constexpr bool kUseDepthSensitiveCost = false;
+  // The multiplier used in the above definition.
+  constexpr double kDepthSensitiveCostMultiplier = 100.0;
+  // If true, we will use a normalized outlier cost function.
+  constexpr bool kNormalizeCost = true;
+  // When use_clutter is true, we will treat every pixel that is not within
+  // the object volume as an extraneous occluder if its depth is less than
+  // depth(rendered pixel) - kOcclusionThreshold.
+  constexpr unsigned short kOcclusionThreshold = 50; // mm
+  // Tolerance used when deciding the footprint of the object in a given pose is
+  // out of bounds of the supporting place.
+  constexpr double kFootprintTolerance = 0.02; // m
 
-// Max color distance for two points to be considered neighbours
-constexpr double kColorDistanceThreshold = 15; // m
+  // Max color distance for two points to be considered neighbours
+  // constexpr double kColorDistanceThreshold = 7.5; // m
+  constexpr double kColorDistanceThresholdCMC = 10; // m
 
-constexpr bool kUseColorCost = true;
+  constexpr dou<<<<<<< color_gl_speed
+48
+ 
+ble kColorDistanceThreshold = 20; // m
 
+  bool kUseColorCost = true;
+
+  bool kUseColorPruning = false;
+
+  bool kUseHistogramPruning = false;
+
+  bool kUseOctomapPruning = false;
 }  // namespace
 
 namespace sbpl_perception {
@@ -96,6 +109,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
   projected_cloud_.reset(new PointCloud);
   observed_organized_cloud_.reset(new PointCloud);
   downsampled_observed_cloud_.reset(new PointCloud);
+  downsampled_projected_cloud_.reset(new PointCloud);
 
   gl_inverse_transform_ <<
                         0, 0 , -1 , 0,
@@ -121,7 +135,13 @@ EnvObjectRecognition::EnvObjectRecognition(const
     // ros::NodeHandle nh_;
     input_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/input_point_cloud", 1);
 
+    downsampled_input_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/downsampled_input_point_cloud", 1);
+
     render_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/rendered_point_cloud", 1);
+
+    // std::string downsampled_mesh_cloud_topic_name = "/perch/downsampled_mesh_cloud_" + obj_models_[model_id].name();
+    std::string downsampled_mesh_cloud_topic_name = "/perch/downsampled_mesh_cloud";
+    downsampled_mesh_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>(downsampled_mesh_cloud_topic_name, 1);
 
     private_nh.param("/perch_params/sensor_resolution_radius", perch_params_.sensor_resolution,
                      0.003);
@@ -139,12 +159,17 @@ EnvObjectRecognition::EnvObjectRecognition(const
                      perch_params_.use_model_specific_search_resolution, false);
     private_nh.param("/perch_params/use_clutter_mode", perch_params_.use_clutter_mode, false);
     private_nh.param("/perch_params/clutter_regularizer", perch_params_.clutter_regularizer, 1.0);
+    private_nh.param("/perch_params/use_downsampling", perch_params_.use_downsampling, false);
+    private_nh.param("/perch_params/downsampling_leaf_size", perch_params_.downsampling_leaf_size, 0.01);
 
     private_nh.param("/perch_params/visualize_expanded_states",
                      perch_params_.vis_expanded_states, false);
+    private_nh.param("/perch_params/visualize_successors",
+                     perch_params_.vis_successors, false);
     private_nh.param("/perch_params/print_expanded_states", perch_params_.print_expanded_states,
                      false);
     private_nh.param("/perch_params/debug_verbose", perch_params_.debug_verbose, false);
+    private_nh.param("/perch_params/use_color_cost", kUseColorCost, false);
     perch_params_.initialized = true;
 
     printf("----------PERCH Config-------------\n");
@@ -160,9 +185,13 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("RCNN Heuristic: %d\n", perch_params_.use_rcnn_heuristic);
     printf("Use Clutter: %d\n", perch_params_.use_clutter_mode);
     printf("Clutter Regularization: %f\n", perch_params_.clutter_regularizer);
+    printf("Use Dowsampling: %d\n", perch_params_.use_downsampling);
+    printf("Dowsampling Leaf Size: %f\n", perch_params_.downsampling_leaf_size);
     printf("Vis Expansions: %d\n", perch_params_.vis_expanded_states);
+    printf("Vis Successors: %d\n", perch_params_.vis_successors);
     printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
     printf("Debug Verbose: %d\n", perch_params_.debug_verbose);
+    printf("Use Color Cost: %d\n", kUseColorCost);
 
     printf("\n");
     printf("----------Camera Config-------------\n");
@@ -345,20 +374,57 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
       search_rad = 0.5 * search_rad;
   }
   
-  // double search_rad = obj_models_[model_id].GetCircumscribedRadius();
-  // int num_neighbors_found = knn->radiusSearch(point, search_rad,
-  //                                             indices,
-  //                                             sqr_dists, perch_params_.min_neighbor_points_for_valid_pose); //0.2
+  int min_neighbor_points_for_valid_pose = perch_params_.min_neighbor_points_for_valid_pose;
   int num_neighbors_found = projected_knn_->radiusSearch(point, search_rad,
                                                          indices,
-                                                         sqr_dists, perch_params_.min_neighbor_points_for_valid_pose); //0.2
+                                                         sqr_dists, min_neighbor_points_for_valid_pose); //0.2
 
-  if (env_params_.use_external_pose_list != 1) {
-    if (num_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
+  // int min_neighbor_points_for_valid_pose = 50;
+  // int num_neighbors_found = downsampled_projected_knn_->radiusSearch(point, search_rad,
+  //                                                        indices,
+  //                                                        sqr_dists, min_neighbor_points_for_valid_pose); //0.2
+
+  if (env_params_.use_external_pose_list != 1) 
+  {
+    if (num_neighbors_found < min_neighbor_points_for_valid_pose) {
       // printf("Invalid 1, neighbours found : %d, radius %f\n",num_neighbors_found, search_rad);
       return false;
     }
     else {
+      // PrintPointCloud(obj_models_[model_id].downsampled_mesh_cloud(), 1, downsampled_mesh_cloud_topic);
+      // sensor_msgs::PointCloud2 output;
+      // pcl::PCLPointCloud2 outputPCL;
+      // pcl::toPCLPointCloud2( *obj_models_[model_id].downsampled_mesh_cloud() ,outputPCL);
+      // pcl::toPCLPointCloud2( *downsampled_projected_cloud_ ,outputPCL);
+      // pcl_conversions::fromPCL(outputPCL, output);
+      // output.header.frame_id = env_params_.reference_frame_;
+      // downsampled_mesh_cloud_topic.publish(output);
+      
+      if (kUseColorCost && !after_refinement && kUseColorPruning) {
+        // printf("Color pruning for model : %s\n", obj_models_[model_id].name().c_str());
+        int total_num_color_neighbors_found = 0;
+        for (int i = 0; i < indices.size(); i++)
+        {
+          // Find color matching points in observed point cloud
+          int num_color_neighbors_found =
+              getNumColorNeighboursCMC(
+                downsampled_projected_cloud_->points[indices[i]], obj_models_[model_id].downsampled_mesh_cloud()
+              );
+          total_num_color_neighbors_found += num_color_neighbors_found;
+          // if (num_color_neighbors_found == 0) {
+          //   return false;
+          // }
+        }
+       
+        if ((double)total_num_color_neighbors_found/indices.size() < 0.3) {
+            // printf("Total color neighbours found : %d\n", total_num_color_neighbors_found);
+            // printf("Fraction of points with color neighbours found : %f\n", (double)total_num_color_neighbors_found/indices.size());
+            return false;
+        } else {
+          printf("Total color neighbours found : %d\n", total_num_color_neighbors_found);
+          printf("Fraction of points with color neighbours found : %f\n", (double)total_num_color_neighbors_found/indices.size());
+        }
+      }
       // if (env_params_.use_external_render == 1) {
       //   int num_color_neighbors_found =
       //       getNumColorNeighbours(point, indices, projected_cloud_);
@@ -535,8 +601,10 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
          source_state.NumObjects());
 
   if (perch_params_.print_expanded_states) {
-    string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
-    PrintState(source_state_id, fname);
+    string fname = debug_dir_ + "expansion_depth_" + to_string(source_state_id) + ".png";
+    string cname = debug_dir_ + "expansion_color_" + to_string(source_state_id) + ".png";
+    PrintState(source_state_id, fname, cname);
+    // PrintState(source_state_id, fname);
   }
 
   vector<int> candidate_succ_ids, candidate_costs;
@@ -659,7 +727,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   //--------------------------------------//
   int min_cost = 9999999999;
   PointCloudPtr min_cost_point_cloud;
-  printf("State number,     target_cost    source_cost    last_level_cost    candidate_costs    last_level_cost\n");
+  printf("State number,     target_cost    source_cost    last_level_cost    candidate_costs    g_value_map\n");
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
 
@@ -692,7 +760,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       //                                      output_unit.depth_image, output_unit.color_image);
       auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
           output_unit.depth_image, rgb);
-      PrintPointCloud(gravity_aligned_point_cloud, candidate_succ_ids[ii], render_point_cloud_topic);
+      // PrintPointCloud(gravity_aligned_point_cloud, candidate_succ_ids[ii], render_point_cloud_topic);
 
       printf("State %d,       %d      %d      %d      %d      %d\n",
              candidate_succ_ids[ii],
@@ -1452,6 +1520,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                     &last_cv_obj_depth_image, &last_cv_obj_color_image);
 
   unadjusted_depth_image->clear();
+  unadjusted_color_image->clear();
   GetComposedDepthImage(source_depth_image, source_color_image,
                         last_obj_depth_image, last_obj_color_image,
                         unadjusted_depth_image, unadjusted_color_image);
@@ -1472,6 +1541,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // new_pixel_indices is pixels corresponding to object added in this state
   vector<unsigned short> new_obj_depth_image(kDepthImageWidth *
                                              kDepthImageHeight, kKinectMaxDepth);
+  vector<unsigned char> color_vector{'0','0','0'};
+  vector<vector<unsigned char>> new_obj_color_image(kDepthImageWidth *
+                                             kDepthImageHeight, color_vector);
 
   // Do ICP alignment on object *only* if it has been occluded by an existing
   // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
@@ -1479,14 +1551,21 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
     new_obj_depth_image[new_pixel_indices[ii]] =
       unadjusted_depth_image->at(new_pixel_indices[ii]);
+
+    if (kUseColorCost)
+      new_obj_color_image[new_pixel_indices[ii]] =
+        unadjusted_color_image->at(new_pixel_indices[ii]);
   }
 
   // Create point cloud (cloud_in) corresponding to new pixels of object that was added in this state.
-  cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image, *unadjusted_color_image);
+  cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image, new_obj_color_image);
 
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
-      PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+      // uint8_t rgb[3] = {0,0,255};
+      // PointCloudPtr cloud_icp_in = GetGravityAlignedPointCloud(new_obj_depth_image, rgb);
+      // PrintPointCloud(cloud_icp_in, 1, render_point_cloud_topic);
+      // PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
     }
   }
   // Align with ICP
@@ -1494,6 +1573,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out,
                      parent_counted_pixels);
+  
+  // GetICPAdjustedPoseCUDA(cloud_in, pose_in, cloud_out, &pose_out,
+  //                   parent_counted_pixels);
   // icp_cost = static_cast<int>(kICPCostMultiplier * icp_fitness_score);
   int last_idx = child_state.NumObjects() - 1;
 
@@ -1502,8 +1584,12 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                          last_object.symmetric(), pose_out);
   adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
   // End ICP Adjustment
+  printf("pose before icp");
+  std::cout << pose_in << endl;
   printf("pose after icp");
-  std::cout<<adjusted_child_state->object_states().back().cont_pose()<<endl;
+  std::cout << pose_out << endl;
+
+  // std::cout<<adjusted_child_state->object_states().back().cont_pose()<<endl;
   // Check again after icp
   if (!IsValidPose(source_state, last_object_id,
                    adjusted_child_state->object_states().back().cont_pose(), true)) {
@@ -1513,7 +1599,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     // final_depth_image->clear();
     // *final_depth_image = depth_image;
     return -1;
-    // Aditya
+    // Aditya uncomment later
   }
 
   // num_occluders is the number of valid pixels in the input depth image that
@@ -1522,8 +1608,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
   if (env_params_.use_external_render == 0)
   {
-      cv::Mat cv_depth_image_temp;
-      succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &color_image, cv_depth_image_temp, &num_occluders);
+      cv::Mat cv_depth_image_temp, cv_depth_color_temp;
+      succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &color_image, 
+                                          cv_depth_image_temp, cv_depth_color_temp, &num_occluders, false);
   }
   else
   {
@@ -1538,6 +1625,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   new_obj_depth_image.clear();
   new_obj_depth_image.resize(kNumPixels, kKinectMaxDepth);
 
+  new_obj_color_image.clear();
+  new_obj_color_image.resize(kNumPixels, color_vector);
+
   if (IsOccluded(source_depth_image, depth_image, &new_pixel_indices,
                  &succ_min_depth,
                  &succ_max_depth)) {
@@ -1551,13 +1641,20 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
     new_obj_depth_image[new_pixel_indices[ii]] =
       depth_image[new_pixel_indices[ii]];
+    
+    if (kUseColorCost)
+      new_obj_color_image[new_pixel_indices[ii]] =
+        color_image[new_pixel_indices[ii]];
   }
 
   // Create point cloud (cloud_out) corresponding to new pixels.
-  cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image, color_image);
+  cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image, new_obj_color_image);
 
   if (IsMaster(mpi_comm_)) {
     if (image_debug_) {
+      // uint8_t rgb[3] = {255,0,0};
+      // PointCloudPtr cloud_icp_out = GetGravityAlignedPointCloud(new_obj_depth_image, rgb);
+      // PrintPointCloud(cloud_icp_out, 1, render_point_cloud_topic);
       // PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
     }
   }
@@ -1579,6 +1676,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                               adjusted_child_state->object_states().back(),
                               false, parent_counted_pixels, child_counted_pixels);
 
+  // Aditya uncomment 
   if (last_level) {
     vector<int> updated_counted_pixels;
     last_level_cost = GetLastLevelCost(succ_cloud,
@@ -1588,6 +1686,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     // // Refer to the header for documentation on child_counted_pixels.
     // *child_counted_pixels = updated_counted_pixels;
     *child_counted_pixels = updated_counted_pixels;
+
+    // last_level_cost = 0;
+    // Aditya remove
   }
 
   total_cost = source_cost + target_cost + last_level_cost;
@@ -1696,17 +1797,38 @@ bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
 
   return is_occluded;
 }
+double EnvObjectRecognition::getColorDistanceCMC(uint32_t rgb_1, uint32_t rgb_2) const
+{
+    uint8_t r = (rgb_1 >> 16);
+    uint8_t g = (rgb_1 >> 8);
+    uint8_t b = (rgb_1);
+    ColorSpace::Rgb point_1_color(r, g, b);
+    // printf("observed point color: %d,%d,%d\n", r,g,b);
+
+    r = (rgb_2 >> 16);
+    g = (rgb_2 >> 8);
+    b = (rgb_2);
+    // printf("model point color: %d,%d,%d\n", r,g,b);
+    ColorSpace::Rgb point_2_color(r, g, b);
+
+    double color_distance =
+              ColorSpace::CmcComparison::Compare(&point_1_color, &point_2_color);
+
+    return color_distance;
+
+}
 double EnvObjectRecognition::getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const
 {
     uint8_t r = (rgb_1 >> 16);
     uint8_t g = (rgb_1 >> 8);
     uint8_t b = (rgb_1);
     ColorSpace::Rgb point_1_color(r, g, b);
+    // printf("observed point color: %d,%d,%d\n", r,g,b);
 
     r = (rgb_2 >> 16);
     g = (rgb_2 >> 8);
     b = (rgb_2);
-    // printf("observed point color : %d,%d,%d\n", r,g,b);
+    // printf("model point color: %d,%d,%d\n", r,g,b);
     ColorSpace::Rgb point_2_color(r, g, b);
 
     double color_distance =
@@ -1714,6 +1836,25 @@ double EnvObjectRecognition::getColorDistance(uint32_t rgb_1, uint32_t rgb_2) co
 
     return color_distance;
 
+}
+
+int EnvObjectRecognition::getNumColorNeighboursCMC(PointT point,
+                                              const PointCloudPtr point_cloud) const
+{
+    uint32_t rgb_1 = *reinterpret_cast<int*>(&point.rgb);
+    // int num_color_neighbors_found = 0;
+    for (size_t i = 0; i < point_cloud->points.size(); i++)
+    {
+        // Find color matching points in observed point cloud
+        uint32_t rgb_2 = *reinterpret_cast<int*>(&point_cloud->points[i].rgb);
+        double color_distance = getColorDistanceCMC(rgb_1, rgb_2);
+        if (color_distance < kColorDistanceThresholdCMC) {
+          // If color is close then this is a valid neighbour
+          // num_color_neighbors_found++;
+          return 1;
+        }
+    }
+    return 0;
 }
 
 int EnvObjectRecognition::getNumColorNeighbours(PointT point,
@@ -1738,15 +1879,15 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
 int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
                                         partial_rendered_cloud) {
   // Nearest-neighbor cost
-  // if (IsMaster(mpi_comm_)) {
-  //   if (image_debug_) {
-  //     PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
-  //   }
-  // }
+  if (IsMaster(mpi_comm_)) {
+    if (image_debug_) {
+      // PrintPointCloud(partial_rendered_cloud, 1, render_point_cloud_topic);
+    }
+  }
   double nn_score = 0;
   double nn_color_score = 0;
   int total_color_neighbours = 0;
-
+  // Searching in observed cloud for every point in rendered cloud
   for (size_t ii = 0; ii < partial_rendered_cloud->points.size(); ++ii) {
     // A rendered point will get cost as 1 if there are no points in neighbourhood or if
     // neighbourhoold points dont match the color of the point
@@ -2086,20 +2227,20 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
         nn_score += 1.0;
       }
     }
-    else
-    {
-        // Check RGB cost
-        if (env_params_.use_external_render == 1)
-        {
-            int num_color_neighbors_found =
-                getNumColorNeighbours(point, indices, full_rendered_cloud);
+    // else
+    // {
+    //     // Check RGB cost, not used, no need to check rgb cost at last level
+    //     if (env_params_.use_external_render == 1)
+    //     {
+    //         int num_color_neighbors_found =
+    //             getNumColorNeighbours(point, indices, full_rendered_cloud);
 
-            if (num_color_neighbors_found == 0) {
-                // If no color neighbours found then cost is 1.0
-                nn_score += 1.0;
-            }
-        }
-    }
+    //         if (num_color_neighbors_found == 0) {
+    //             // If no color neighbours found then cost is 1.0
+    //             nn_score += 1.0;
+    //         }
+    //     }
+    // }
   }
 
   assert(updated_counted_pixels->size() == valid_indices_.size());
@@ -2109,9 +2250,15 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
 }
 
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
-  cv::Mat depth_image, cv::Mat color_image, double depth_factor) {
+  cv::Mat depth_image, cv::Mat color_image, cv::Mat predicted_mask_image, double depth_factor) {
 
   PointCloudPtr cloud(new PointCloud);
+  // double min;
+  // double max;
+  // cv::minMaxIdx(depth_image, &min, &max);
+  // printf("min:%f, max:%f", min, max);
+  // cv::Mat adjMap;
+  // depth_image.convertTo(adjMap, CV_16U, 65535 / (max-min), -min); 
 
   printf("GetGravityAlignedPointCloudCV()\n");
   cv::Size s = depth_image.size();
@@ -2153,6 +2300,12 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
         kinect_simulator_->rl_->getGlobalPointCV(u, v,
                                                   static_cast<float>(depth_image.at<uchar>(v,u)/depth_factor), transform,
                                                   point_eig);
+        // printf("depth data : %f\n", static_cast<float>(adjMap.at<unsigned char>(v,u)));
+        // printf("depth data : %f\n", static_cast<float>(depth_image.at<unsigned short>(v,u) - min)/1000);
+        // printf("depth data : %f\n", static_cast<float>(depth_image.at<unsigned short>(v,u)*65535.0 / (max-min) - min));
+        // kinect_simulator_->rl_->getGlobalPointCV(u, v,
+        //                                   static_cast<float>(depth_image.at<unsigned short>(v,u)*65535.0 / (max-min) - min)/1000000, transform,
+        //                                   point_eig);
       }
       
       point.x = point_eig[0];
@@ -2168,7 +2321,8 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       }
       else
       {
-        cloud->points.push_back(point);
+        if (predicted_mask_image.at<uchar>(v, u) > 0)
+          cloud->points.push_back(point);
       }
     }
   }
@@ -2284,6 +2438,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
               | (uint32_t)color_image[ii][1] << 8
               | (uint32_t)color_image[ii][2]
           );
+          // cout << "color : " << rgbc << endl;
           point.rgb = *reinterpret_cast<float*>(&rgbc);
         }
         kinect_simulator_->rl_->getGlobalPoint(u, v,
@@ -2304,6 +2459,10 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
     std::cout << "GetGravityAlignedPointCloud() took "
               << std::chrono::duration_cast<milli>(finish - start).count()
               << " milliseconds\n";
+    if (perch_params_.use_downsampling) {
+      cloud = DownsamplePointCloud(cloud, perch_params_.downsampling_leaf_size);
+    }
+    printf("GetGravityAlignedPointCloud with depth and color, cloud size : %d \n", cloud->points.size());
 
     return cloud;
 }
@@ -2437,7 +2596,21 @@ void EnvObjectRecognition::PrintState(int state_id, string fname) {
     s = hash_manager_.GetState(state_id);
   }
 
-  PrintState(s, fname, fname);
+  PrintState(s, fname);
+  return;
+}
+
+void EnvObjectRecognition::PrintState(int state_id, string fname, string cname) {
+
+  GraphState s;
+
+  if (adjusted_states_.find(state_id) != adjusted_states_.end()) {
+    s = adjusted_states_[state_id];
+  } else {
+    s = hash_manager_.GetState(state_id);
+  }
+
+  PrintState(s, fname, cname);
   return;
 }
 
@@ -2453,27 +2626,29 @@ void EnvObjectRecognition::PrintState(GraphState s, string fname) {
 }
 
 void EnvObjectRecognition::PrintState(GraphState s, string fname, string cfname) {
-
+  // Print state with color image always
   printf("Num objects: %zu\n", s.NumObjects());
   std::cout << s << std::endl;
-
-  if (kUseColorCost == false) {
-    vector<unsigned short> depth_image;
-    GetDepthImage(s, &depth_image);
-    PrintImage(fname, depth_image);
+  bool kUseColorCostOriginal = kUseColorCost;
+  if (!kUseColorCost) 
+  {
+    kUseColorCost = true; 
   }
-  else {
-    vector<unsigned short> depth_image;
-    cv::Mat cv_depth_image, cv_color_image;
-    vector<vector<unsigned char>> color_image;
-    int num_occluders = 0;
+  
+  vector<unsigned short> depth_image;
+  cv::Mat cv_depth_image, cv_color_image;
+  vector<vector<unsigned char>> color_image;
+  int num_occluders = 0;
 
-    GetDepthImage(s, &depth_image, &color_image,
-                  cv_depth_image, &num_occluders);
-    cv::imwrite(fname.c_str(), cv_depth_image);
-    // PrintImage(fname, depth_image);
-    // PrintImage(cfname, color_image);    
-  }
+  GetDepthImage(s, &depth_image, &color_image,
+                cv_depth_image, cv_color_image, &num_occluders, false);
+  // cv::imwrite(fname.c_str(), cv_depth_image);
+  PrintImage(fname, depth_image);
+  cv::imwrite(cfname.c_str(), cv_color_image);
+  // PrintImage(fname, depth_image);
+  // PrintImage(cfname, color_image);    
+  
+  kUseColorCost = kUseColorCostOriginal; 
   return;
 }
 
@@ -2503,7 +2678,7 @@ void EnvObjectRecognition::depthCVToShort(cv::Mat input_image,
         // }
       }
     }
-    printf("depthCVToShort() Done\n");
+    printf("depthCVToShort() DoneD\n");
 
 }
 
@@ -2674,8 +2849,8 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
 
   int num_occluders = 0;
   vector<vector<unsigned char>> color_image;
-  cv::Mat cv_depth_image;
-  return GetDepthImage(s, depth_image, &color_image, cv_depth_image, &num_occluders);
+  cv::Mat cv_depth_image, cv_color_image;
+  return GetDepthImage(s, depth_image, &color_image, cv_depth_image, cv_color_image, &num_occluders, false);
 }
 //GetDepthImage after append a new object
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
@@ -2688,7 +2863,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   if (env_params_.use_external_render == 1) {
       return GetDepthImage(s, depth_image, color_image, cv_depth_image, cv_color_image, &num_occluders);
   } else {
-      return GetDepthImage(s, depth_image, color_image, *cv_depth_image, &num_occluders);
+      return GetDepthImage(s, depth_image, color_image, *cv_depth_image, *cv_color_image, &num_occluders, false);
   }
 }
 
@@ -2701,11 +2876,13 @@ cv::Mat rotate(cv::Mat src, double angle)
     return dst;
 }
 
-const float *EnvObjectRecognition::GetDepthImage(GraphState s,
+const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
                                                 std::vector<unsigned short> *depth_image, 
                                                 std::vector<std::vector<unsigned char>> *color_image,
                                                 cv::Mat &cv_depth_image,
-                                                int* num_occluders_in_input_cloud) {
+                                                cv::Mat &cv_color_image,
+                                                int* num_occluders_in_input_cloud,
+                                                bool shift_centroid) {
 
   *num_occluders_in_input_cloud = 0;
   if (scene_ == NULL) {
@@ -2714,7 +2891,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
 
   scene_->clear();
 
-  const auto &object_states = s.object_states();
+  auto &object_states = s.mutable_object_states();
   printf("GetDepthImage() for number of objects : %d\n", object_states.size());
 
   // cout << "External Render :" << env_params_.use_external_render;
@@ -2724,7 +2901,18 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
       ObjectModel obj_model = obj_models_[object_state.id()];
       ContPose p = object_state.cont_pose();
       // std::cout << "Object model in pose : " << p << endl;
-      auto transformed_mesh = obj_model.GetTransformedMesh(p);
+      
+      // std::cout << "Object model in pose after shift: " << p << endl;
+      pcl::PolygonMeshPtr transformed_mesh;
+      if (shift_centroid && ii == object_states.size()-1) 
+      {
+        transformed_mesh = obj_model.GetTransformedMeshWithShift(p);
+        object_states[ii] = ObjectState(object_state.id(), object_state.symmetric(), p);
+      } 
+      else 
+      {
+        transformed_mesh = obj_model.GetTransformedMesh(p);
+      }
 
       PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
                                                              GL_POLYGON, transformed_mesh));
@@ -2739,6 +2927,8 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
     if (kUseColorCost) {
       const uint8_t *color_buffer = kinect_simulator_->rl_->getColorBuffer();
       kinect_simulator_->get_rgb_image_uchar(color_buffer, color_image);
+      kinect_simulator_->get_rgb_image_cv(color_buffer, cv_color_image);
+      cv::cvtColor(cv_color_image, cv_color_image, CV_BGR2RGB);
       // kinect_simulator_->write_rgb_image(color_buffer, "test_color.png");
     }
     // printf("depth vector max size :%d\n", (int) depth_image->max_size());
@@ -2799,10 +2989,10 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
           std::stringstream ss;
           // cout << p.external_render_path();
           ss << p.external_render_path() << "/" << obj_model.name() << "/" << p.external_pose_id() << "-color.png";
-          std::string image_path = ss.str();
-          printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+          std::string color_image_path = ss.str();
+          printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), color_image_path.c_str());
 
-          *cv_color_image = cv::imread(image_path);
+          *cv_color_image = cv::imread(color_image_path);
           // if (mpi_comm_->rank() == kMasterRank) {
             // static cv::Mat c_image;
             // ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
@@ -2810,10 +3000,10 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
 
           ss.str("");
           ss << p.external_render_path() << "/" << obj_model.name() << "/" << p.external_pose_id() << "-depth.png";
-          image_path = ss.str();
-          printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+          color_image_path = ss.str();
+          printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), color_image_path.c_str());
 
-          *cv_depth_image = cv::imread(image_path, CV_LOAD_IMAGE_ANYDEPTH);
+          *cv_depth_image = cv::imread(color_image_path, CV_LOAD_IMAGE_ANYDEPTH);
           // static cv::Mat c_image;
           // cvToShort(cv_depth_image, depth_image);
 
@@ -2980,8 +3170,18 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     *observed_cloud_  = *gravity_aligned_point_cloud;
   }
 
+  printf("Use Dowsampling: %d\n", perch_params_.use_downsampling);
+  if (perch_params_.use_downsampling) {
+    observed_cloud_ = DownsamplePointCloud(observed_cloud_, perch_params_.downsampling_leaf_size);
+  }
+
+
   vector<int> nan_indices;
-  downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_);
+  downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_, 0.01);
+  if (IsMaster(mpi_comm_)) {
+    for (int i = 0; i < 10; i++)
+      PrintPointCloud(downsampled_observed_cloud_, 1, downsampled_input_point_cloud_topic);
+  }
 
   knn.reset(new pcl::search::KdTree<PointT>(true));
   printf("Setting knn with cloud of size : %d\n", observed_cloud_->points.size());
@@ -2990,10 +3190,11 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   // }
   knn->setInputCloud(observed_cloud_);
 
-  if (mpi_comm_->rank() == kMasterRank) {
-    if (env_params_.use_external_pose_list == 0)
-      LabelEuclideanClusters();
-  }
+  // Aditya commented
+  // if (mpi_comm_->rank() == kMasterRank) {
+  //   if (env_params_.use_external_pose_list == 0)
+  //     LabelEuclideanClusters();
+  // }
 
   // Project point cloud to table.
   *projected_cloud_ = *observed_cloud_;
@@ -3022,6 +3223,16 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   projected_knn_.reset(new pcl::search::KdTree<PointT>(true));
   projected_knn_->setInputCloud(projected_cloud_);
 
+  // Project the downsampled observed cloud
+  *downsampled_projected_cloud_ = *downsampled_observed_cloud_;
+  // downsampled_projected_cloud_ = DownsamplePointCloud(projected_cloud_, 0.005);
+  for (size_t ii = 0; ii < downsampled_projected_cloud_->size(); ++ii) {
+    downsampled_projected_cloud_->points[ii].z = env_params_.table_height;
+  }
+  printf("Setting downsampled_projected_knn_ with cloud of size : %d\n", downsampled_projected_cloud_->points.size());
+  downsampled_projected_knn_.reset(new pcl::search::KdTree<PointT>(true));
+  downsampled_projected_knn_->setInputCloud(downsampled_projected_cloud_);
+  
   min_observed_depth_ = kKinectMaxDepth;
   max_observed_depth_ = 0;
 
@@ -3099,6 +3310,7 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   maxz_map_.clear();
   g_value_map_.clear();
   succ_cache.clear();
+  valid_succ_cache.clear();
   cost_cache.clear();
   last_object_rendering_cost_.clear();
   depth_image_cache_.clear();
@@ -3117,6 +3329,7 @@ void EnvObjectRecognition::ResetEnvironmentState() {
   projected_cloud_.reset(new PointCloud);
   observed_organized_cloud_.reset(new PointCloud);
   downsampled_observed_cloud_.reset(new PointCloud);
+  downsampled_projected_cloud_.reset(new PointCloud);
 }
 
 void EnvObjectRecognition::SetObservation(vector<int> object_ids,
@@ -3145,6 +3358,28 @@ void EnvObjectRecognition::SetObservation(vector<int> object_ids,
   SetObservation(object_ids.size(), depth_image);
 }
 
+cv::Mat equalizeIntensity(const cv::Mat& inputImage)
+{
+    if(inputImage.channels() >= 3)
+    {
+        cv::Mat ycrcb;
+        cv::cvtColor(inputImage,ycrcb,CV_BGR2YCrCb);
+
+        vector<cv::Mat> channels;
+        cv::split(ycrcb,channels);
+
+        cv::equalizeHist(channels[0], channels[0]);
+
+        cv::Mat result;
+        cv::merge(channels,ycrcb);
+        cv::cvtColor(ycrcb,result,CV_YCrCb2BGR);
+
+        return result;
+    }
+
+    return cv::Mat();
+}
+
 void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   ResetEnvironmentState();
 
@@ -3159,11 +3394,15 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   env_params_.use_external_render = input.use_external_render;
   env_params_.reference_frame_ = input.reference_frame_;
   env_params_.use_external_pose_list = input.use_external_pose_list;
+  env_params_.use_icp = input.use_icp;
+  env_params_.shift_pose_centroid = input.shift_pose_centroid;
   
 
   printf("External Render : %d\n", env_params_.use_external_render);
   printf("External Pose List : %d\n", env_params_.use_external_pose_list);
   printf("Depth Factor : %f\n", input.depth_factor);
+  printf("ICP : %d\n", env_params_.use_icp);
+  printf("Shift Pose Centroid : %d\n", env_params_.shift_pose_centroid);
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
   // if (input.model_repetitions.empty()) {
@@ -3175,16 +3414,22 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   {
     printf("Using input images instead of cloud\n");
     // Using CV_LOAD_IMAGE_UNCHANGED to use exact conversion from NDDS documentation /255 * 1000 gives actual distance in cm
-    cv::Mat cv_depth_image;
+    cv::Mat cv_depth_image, cv_predicted_mask_image;
     if (env_params_.use_external_pose_list == 1) {
       // For FAT dataset, we have 16bit images
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
+      cv_predicted_mask_image = cv::imread(input.predicted_mask_image, CV_LOAD_IMAGE_UNCHANGED);
     }
     else {
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_UNCHANGED);
     }
-    cv::Mat cv_color_image = cv::imread(input.input_color_image, CV_LOAD_IMAGE_COLOR);
-    depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_color_image, input.depth_factor);
+    cv_input_color_image = cv::imread(input.input_color_image, CV_LOAD_IMAGE_COLOR);
+    // cv_color_image = equalizeIntensity(cv_color_image);
+    std::stringstream ss1;
+    ss1 << debug_dir_ << "input_color_image.png";
+    std::string color_image_path = ss1.str();
+    cv::imwrite(color_image_path, cv_input_color_image);
+    depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_input_color_image, cv_predicted_mask_image, input.depth_factor);
     original_input_cloud_ = depth_img_cloud;
 
     if (env_params_.use_external_pose_list == 1) {
@@ -3195,10 +3440,6 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     }
     // depthCVToShort(cv_depth_image, &depth_image);
 
-    if (IsMaster(mpi_comm_)) {
-      for (int i = 0; i < 10; i++)
-        PrintPointCloud(original_input_cloud_, 1, input_point_cloud_topic);
-    }
   }
   else {
     *original_input_cloud_ = input.cloud;
@@ -3240,6 +3481,11 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   // Write input depth image to folder
   SetObservation(input.model_names.size(), depth_image);
 
+  // Printpoint cloud after downsampling etc.
+  if (IsMaster(mpi_comm_)) {
+    for (int i = 0; i < 10; i++)
+      PrintPointCloud(observed_cloud_, 1, input_point_cloud_topic);
+  }
   // Precompute RCNN heuristics.
   rcnn_heuristic_factory_.reset(new RCNNHeuristicFactory(input, original_input_cloud_,
                                                          kinect_simulator_));
@@ -3266,9 +3512,74 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
     printf("Translation resolution: %f\n", env_params_.res);
     printf("Rotation resolution: %f\n", env_params_.theta_res);
     printf("Mesh in millimeters: %d\n", kMeshInMillimeters);
+    printf("Mesh scaling factor: %d\n", kMeshScalingFactor);
   }
 }
 
+double EnvObjectRecognition::GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in,
+                                                const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
+                                                const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
+
+  printf("GetICPAdjustedPoseCUDA()\n");
+  auto start = std::chrono::high_resolution_clock::now();
+
+  ICPOdometry icpOdom(kDepthImageWidth, kDepthImageHeight, kCameraCX, kCameraCY, kCameraFX, kCameraFY);
+  const PointCloudPtr remaining_observed_cloud = perception_utils::IndexFilter(
+                                                   observed_cloud_, counted_indices, true);
+  const PointCloudPtr remaining_downsampled_observed_cloud =
+    DownsamplePointCloud(remaining_observed_cloud);
+
+  vector<unsigned short> rendered_depth_image = GetDepthImageFromPointCloud(cloud_in);
+  std::string fname = "test_cuda_render.png";
+  PrintImage(fname, rendered_depth_image);
+  vector<unsigned short> target_depth_image = GetDepthImageFromPointCloud(remaining_observed_cloud);
+  fname = "test_cuda_target.png";
+  PrintImage(fname, target_depth_image);
+  Eigen::Matrix4f outputPose;
+  Eigen::Matrix4d inputPose = pose_in.GetTransform().matrix().cast<double>();
+
+  icpOdom.doICP(inputPose, rendered_depth_image, target_depth_image, outputPose);
+
+  // std::string test_file = "test.png";
+  // PrintImage(test_file, target_depth_image);
+
+  Eigen::Vector4f vec_out;
+  vec_out << outputPose(0,3), outputPose(1,3), outputPose(2,3), 1.0;
+  Eigen::Vector4f vec_in;
+  vec_in << pose_in.x(), pose_in.y(), pose_in.z(), 1.0;
+  // vec_out = outputPose * vec_in;
+  // Matrix3f rotation_new(3,3);
+  // for (int i = 0; i < 3; i++){
+  //   for (int j = 0; j < 3; j++){
+  //     rotation_new(i, j) = outputPose(i, j);
+  //   }     
+  // }
+  // auto euler = rotation_new.eulerAngles(2,1,0);
+  // double roll_ = euler[0];
+  // double pitch_ = euler[1];
+  // double yaw_ = euler[2];
+
+  // Quaternionf quaternion(rotation_new.cast<float>());
+  // *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], quaternion.x(), quaternion.y(), quaternion.z(), quaternion.w());
+
+  double yaw = atan2(outputPose(1, 0), outputPose(0, 0));
+
+  double yaw1 = pose_in.yaw();
+  double yaw2 = yaw;
+  double cos_term = cos(yaw1 + yaw2);
+  double sin_term = sin(yaw1 + yaw2);
+  double total_yaw = atan2(sin_term, cos_term);
+  *pose_out = ContPose(vec_out[0], vec_out[1], vec_out[2], pose_in.roll(), pose_in.pitch(), yaw1);
+  
+
+  // transformPointCloud(*cloud_in, *cloud_out, outputPose);
+
+
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "GetICPAdjustedPoseCUDA() took "
+            << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()
+            << " milliseconds\n";
+}
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
                                                 const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
@@ -3277,7 +3588,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   auto start = std::chrono::high_resolution_clock::now();
 
 
-  if (env_params_.use_external_render == 1)
+  if (env_params_.use_icp == 0)
   {
     printf("No ICP done\n");
     cloud_out = cloud_in;
@@ -3657,7 +3968,7 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(
 }
 
 void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
-                                                   &source_state, std::vector<GraphState> *succ_states) const {
+                                                   &source_state, std::vector<GraphState> *succ_states) {
 
   printf("GenerateSuccessorStates() \n");
   assert(succ_states != nullptr);
@@ -3753,10 +4064,10 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
               // std::stringstream ss1;
               // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
-              // std::string image_path = ss1.str();
-              // // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), image_path.c_str());
+              // std::string color_image_path = ss1.str();
+              // // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), color_image_path.c_str());
               //
-              // cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+              // cv::Mat cv_color_image = cv::imread(color_image_path, CV_LOAD_IMAGE_COLOR);
               // cv::imshow("invalid image", cv_color_image);
               // cv::waitKey(1);
 
@@ -3768,10 +4079,10 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               // std::stringstream ss1;
               // // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
               // ss1 << p.external_render_path() << "/" << obj_models_[ii].name() << "/" << p.external_pose_id() << "-color.png";
-              // std::string image_path = ss1.str();
-              // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), image_path.c_str());
+              // std::string color_image_path = ss1.str();
+              // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), color_image_path.c_str());
 
-              // cv::Mat cv_color_image = cv::imread(image_path, CV_LOAD_IMAGE_COLOR);
+              // cv::Mat cv_color_image = cv::imread(color_image_path, CV_LOAD_IMAGE_COLOR);
               // cv::imshow("valid image", cv_color_image);
               // cv::waitKey(50);
             }
@@ -3779,6 +4090,16 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
             GraphState s = source_state; // Can only add objects, not remove them
             const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
             s.AppendObject(new_object);
+
+            if (env_params_.shift_pose_centroid == 1) {
+              vector<unsigned short> depth_image, last_obj_depth_image;
+              cv::Mat cv_depth_image, last_cv_obj_depth_image;
+              vector<vector<unsigned char>> color_image, last_obj_color_image;
+              cv::Mat cv_color_image, last_cv_obj_color_image;
+              int num_occluders = 0;
+              GetDepthImage(s, &last_obj_depth_image, &last_obj_color_image,
+                                                last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, true);
+            }
 
             succ_states->push_back(s);
 
@@ -3801,44 +4122,260 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     else
     {
         printf("States for model : %s\n", obj_models_[ii].name().c_str());
-        for (double x = env_params_.x_min; x <= env_params_.x_max;
-             x += res) {
-          for (double y = env_params_.y_min; y <= env_params_.y_max;
-               y += res) {
-            // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
-            for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-              // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
-              ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
+        int succ_count = 0;
+        if (source_state.object_states().size() == 0) 
+        {
+          for (double x = env_params_.x_min; x <= env_params_.x_max;
+              x += res) {
+            for (double y = env_params_.y_min; y <= env_params_.y_max;
+                y += res) {
+              // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
+              for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
+                // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
+                ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
 
-              if (!IsValidPose(source_state, ii, p)) {
-                // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
+                if (!IsValidPose(source_state, ii, p)) {
+                  // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
 
-                continue;
+                  continue;
+                }
+                // std::cout << "Valid pose for theta : " << theta << endl;
+
+                GraphState s = source_state; // Can only add objects, not remove them
+                const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+                s.AppendObject(new_object);
+
+                GraphState s_render;
+                s_render.AppendObject(new_object);
+
+                // succ_states->push_back(s);
+                // bool kHistogramPruning = true;
+                cv::Mat last_cv_obj_depth_image, last_cv_obj_color_image;
+                vector<unsigned short> last_obj_depth_image;
+                vector<vector<unsigned char>> last_obj_color_image;
+                std::string color_image_path, depth_image_path;
+                PointCloudPtr cloud_in;
+
+                bool vis_successors_ = true;
+                if ((perch_params_.vis_successors && s.object_states().size() == 1) || kUseHistogramPruning || kUseOctomapPruning) 
+                {
+                  // Process successors once when only one object scene or when pruning is on (then it needs to be done always)
+                  int num_occluders = 0;
+                  GetDepthImage(s_render, &last_obj_depth_image, &last_obj_color_image,
+                                                    last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, false);
+                  std::stringstream ss1;
+                  ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-color.png";
+                  color_image_path = ss1.str();
+                  ss1.clear();
+                  ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-depth.png";
+                  depth_image_path = ss1.str();
+                  
+
+                  if (kUseHistogramPruning)
+                  {
+                    cv::Mat mask, observed_image_segmented;
+                    cv::cvtColor(last_cv_obj_color_image, mask, CV_BGR2GRAY);
+                    mask = mask > 0;
+                    // cv_input_color_image.copyTo(observed_image_segmented, mask);
+
+
+                    cv::Mat Points;
+                    cv::findNonZero(mask, Points);
+                    cv::Rect bounding_box = cv::boundingRect(Points);
+                    observed_image_segmented = cv_input_color_image(bounding_box);
+                    cv::Mat last_cv_obj_color_image_cropped = last_cv_obj_color_image(bounding_box);
+
+                    // cv::findNonZero(last_cv_obj_color_image, mask);
+                    // cv::threshold( src_gray, dst, threshold_value, max_BINARY_value,threshold_type );
+                    // cv::imshow("valid image", mask);
+                    int channels[] = { 0, 1 };
+                    int h_bins = 50; int s_bins = 60;
+                    int histSize[] = { h_bins, s_bins };
+                    cv::MatND hist_base, hist_test1;
+                    cv::Mat hsv_base, hsv_test1;
+                    float h_ranges[] = { 0, 180 };
+                    float s_ranges[] = { 0, 256 };
+                    const float* ranges[] = { h_ranges, s_ranges };
+
+                    cv::cvtColor( observed_image_segmented, hsv_base, CV_BGR2HSV );
+                    cv::cvtColor( last_cv_obj_color_image_cropped, hsv_test1, CV_BGR2HSV );
+
+                    cv::calcHist( &hsv_base, 1, channels, cv::Mat(), hist_base, 2, histSize, ranges, true, false );
+                    cv::normalize( hist_base, hist_base, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
+
+                    cv::calcHist( &hsv_test1, 1, channels, cv::Mat(), hist_test1, 2, histSize, ranges, true, false );
+                    cv::normalize( hist_test1, hist_test1, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
+
+                    // using bhattacharya distance, lesser value means histograms are more similar
+                    double base_test1 = cv::compareHist( hist_base, hist_test1, 3 );
+                    printf("Histogram comparison : %f\n", base_test1);
+                    
+                    
+
+                    if (base_test1 <= 0.90) {
+                      if (s.object_states().size() == 1 && perch_params_.vis_successors) 
+                      {
+                        // Write successors only once even if pruning is on
+                        cv::imwrite(color_image_path, last_cv_obj_color_image);
+                        if (IsMaster(mpi_comm_)) {
+                          cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+                          PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                          // cv::imshow("valid image", last_cv_obj_color_image);
+                        }
+                      }
+                      valid_succ_cache[ii].push_back(new_object);
+                      succ_states->push_back(s);
+                      succ_count += 1;
+                    }
+
+                    // cv::Mat merge;
+                    // cv::hconcat(last_cv_obj_color_image, observed_image_segmented, merge);
+                    // cv::imshow("rendered_image", merge);
+                    // cv::imshow("rendered_image", last_cv_obj_color_image);
+                    // cv::imshow("observed_image_segmented", observed_image_segmented);
+
+
+                    // cv::imshow("rendered_image", cropped_rendered_image);
+
+                    // cv::waitKey(500);
+                  }
+
+                  if (kUseOctomapPruning)
+                  {
+                    int num_points_changed = 0;
+                    cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+
+                    const float resolution = 0.02;
+                    pcl::octree::OctreePointCloudChangeDetector<pcl::PointXYZRGB> octree_sim (resolution);
+                    octree_sim.setInputCloud (cloud_in);
+                    octree_sim.addPointsFromInputCloud ();
+
+                    octree_sim.switchBuffers ();
+                    
+                    octree_sim.setInputCloud (observed_cloud_);
+                    octree_sim.addPointsFromInputCloud ();
+
+                    std::vector<int> newPointIdxVector;
+
+                    octree_sim.getPointIndicesFromNewVoxels (newPointIdxVector);
+                    num_points_changed = newPointIdxVector.size();
+                    printf("Number of points changed : %d\n", newPointIdxVector.size());
+                    printf("Fraction of points changed : %f\n", (float) num_points_changed/observed_cloud_->points.size());
+
+                    // uint8_t rgb[3] = {255,255,255};
+                    // for (size_t i = 0; i < newPointIdxVector.size (); ++i) {
+                    //   uint32_t rgbc = ((uint32_t)rgb[0] << 16 | (uint32_t)rgb[1] << 8 | (uint32_t)rgb[2]);
+                    //   observed_cloud_->points[newPointIdxVector[i]].rgb = *reinterpret_cast<float*>(&rgbc);
+
+                    //   // std::cout << i << "# Index:" << newPointIdxVector[i]
+                    //   //           << "  Point:" << cloudB->points[newPointIdxVector[i]].x << " "
+                    //   //           << cloudB->points[newPointIdxVector[i]].y << " "
+                    //   //           << cloudB->points[newPointIdxVector[i]].z << std::endl;
+                    // }
+                    if ((float) num_points_changed/observed_cloud_->points.size() < 0.8) 
+                    {
+                      if (s.object_states().size() == 1 && perch_params_.vis_successors) {
+                        cv::imwrite(color_image_path, last_cv_obj_color_image);
+                        cv::imwrite(depth_image_path, last_cv_obj_depth_image);
+                        if (IsMaster(mpi_comm_)) {
+                          PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                        }
+                      }
+                      valid_succ_cache[ii].push_back(new_object);
+                      succ_states->push_back(s);
+                      succ_count += 1;
+                    }
+                  }
+                  
+
+                }
+                
+                if (!kUseHistogramPruning && !kUseOctomapPruning)
+                {
+                  if (s.object_states().size() == 1 && perch_params_.vis_successors) 
+                  {
+                    // Write successors only once
+                    cv::imwrite(color_image_path, last_cv_obj_color_image);
+                    cv::imwrite(depth_image_path, last_cv_obj_depth_image);
+
+                    if (IsMaster(mpi_comm_)) {
+                      cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+                      PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                      // cv::imshow("valid image", last_cv_obj_color_image);
+
+                      // const float resolution = 0.02;
+                      // // Instantiate octree-based point cloud change detection class
+                      // pcl::octree::OctreePointCloudChangeDetector<pcl::PointXYZRGB> octree_sim (resolution);
+                      // octree_sim.setInputCloud (cloud_in);
+                      // octree_sim.addPointsFromInputCloud ();
+
+                      // octree_sim.switchBuffers ();
+                      
+                      // octree_sim.setInputCloud (observed_cloud_);
+                      // octree_sim.addPointsFromInputCloud ();
+
+                      // std::vector<int> newPointIdxVector;
+
+                      // // Get vector of point indices from octree voxels which did not exist in previous buffer
+                      // octree_sim.getPointIndicesFromNewVoxels (newPointIdxVector);
+                      // num_points_changed = newPointIdxVector.size();
+                      // printf("Number of points changed : %d\n", newPointIdxVector.size());
+                      // printf("Fraction of points changed : %f\n", (float) num_points_changed/observed_cloud_->points.size());
+
+                      // // uint8_t rgb[3] = {255,255,255};
+                      // // for (size_t i = 0; i < newPointIdxVector.size (); ++i) {
+                      // //   uint32_t rgbc = ((uint32_t)rgb[0] << 16 | (uint32_t)rgb[1] << 8 | (uint32_t)rgb[2]);
+                      // //   observed_cloud_->points[newPointIdxVector[i]].rgb = *reinterpret_cast<float*>(&rgbc);
+
+                      // //   // std::cout << i << "# Index:" << newPointIdxVector[i]
+                      // //   //           << "  Point:" << cloudB->points[newPointIdxVector[i]].x << " "
+                      // //   //           << cloudB->points[newPointIdxVector[i]].y << " "
+                      // //   //           << cloudB->points[newPointIdxVector[i]].z << std::endl;
+                      // // }
+                      // // PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                      // if ((float) num_points_changed/observed_cloud_->points.size() < 0.8) 
+                      // {
+                      //   PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                      // }
+                    }
+                  }
+                  // if ((float) num_points_changed/observed_cloud_->points.size() < 0.8) 
+                  // {
+                  valid_succ_cache[ii].push_back(new_object);
+                  succ_states->push_back(s);
+                  succ_count += 1;
+                  // }
+                }
+                // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
+                // If symmetric object, don't iterate over all thetas
+                if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
+                  break;
+                }
+
+                // If 180 degree symmetric, then iterate only between 0 and 180.
+                if (model_meta_data.symmetry_mode == 1 &&
+                    theta > (M_PI + env_params_.theta_res)) {
+                  printf("Semi-symmetric object\n");
+                  break;
+                }
+
+                // }
               }
-              // std::cout << "Valid pose for theta : " << theta << endl;
-
-              GraphState s = source_state; // Can only add objects, not remove them
-              const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
-              s.AppendObject(new_object);
-
-              succ_states->push_back(s);
-              // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
-              // If symmetric object, don't iterate over all thetas
-              if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
-                break;
-              }
-
-              // If 180 degree symmetric, then iterate only between 0 and 180.
-              if (model_meta_data.symmetry_mode == 1 &&
-                  theta > (M_PI + env_params_.theta_res)) {
-                printf("Semi-symmetric object\n");
-                break;
-              }
-
-              // }
             }
           }
         }
+        else
+        {
+          printf("GenerateSuccessorStates() from cache\n");
+          for (size_t i = 0; i < valid_succ_cache[ii].size(); i++)
+          {
+            // const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+            GraphState s = source_state; // Can only add objects, not remove them
+            s.AppendObject(valid_succ_cache[ii][i]);
+            succ_states->push_back(s);
+          }
+        }
+        
     }
   }
 

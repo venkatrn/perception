@@ -27,7 +27,7 @@ ContPose::ContPose(double x, double y, double z, double qx, double qy,
   Eigen::Quaterniond quaternion = Eigen::Quaterniond(qw, qx, qy, qz);
   auto euler = quaternion.toRotationMatrix().eulerAngles(0,1,2);
   // std::cout << "Euler from quaternion in roll, pitch, yaw"<< std::endl << euler << std::endl;
-  std::cout << "Euler from quaternion :"<< quaternion.w() << " " << quaternion.vec() << std::endl;
+  // std::cout << "Euler from quaternion :"<< quaternion.w() << " " << quaternion.vec() << std::endl;
   x_ = x;
   y_ = y;
   z_ = z;
@@ -81,7 +81,7 @@ Eigen::Isometry3d ContPose::GetTransform() const {
   const Eigen::AngleAxisd yaw_angle(yaw_, Eigen::Vector3d::UnitZ());
   Eigen::Quaterniond quaternion;
   if (qw_ == 0 && qx_ == 0 && qy_ == 0 && qz_ == 0) {
-    std::cout << "using euler\n";
+    // std::cout << "using euler\n";
     quaternion = yaw_angle * pitch_angle * roll_angle;
   } else {
     quaternion = Eigen::Quaterniond(qw_, qx_, qy_, qz_);

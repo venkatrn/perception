@@ -37,6 +37,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   float camera_znear = 0.0;
   float camera_zfar = 0.0;
   bool mesh_in_mm = false;
+  double mesh_scaling_factor = 1.0;
   bool image_debug = true;
 
   if (IsMaster(mpi_world_)) {
@@ -83,6 +84,10 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
     if (private_nh.searchParam("mesh_in_mm", param_key)) {
       private_nh.getParam(param_key, mesh_in_mm);
+    }
+
+    if (private_nh.searchParam("mesh_scaling_factor", param_key)) {
+      private_nh.getParam(param_key, mesh_scaling_factor);
     }
 
     if (private_nh.searchParam("model_bank", param_key)) {
@@ -156,6 +161,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   broadcast(*mpi_world_, search_resolution_translation, kMasterRank);
   broadcast(*mpi_world_, search_resolution_yaw, kMasterRank);
   broadcast(*mpi_world_, mesh_in_mm, kMasterRank);
+  broadcast(*mpi_world_, mesh_scaling_factor, kMasterRank);
   broadcast(*mpi_world_, camera_width, kMasterRank);
   broadcast(*mpi_world_, camera_height, kMasterRank);
   broadcast(*mpi_world_, camera_fx, kMasterRank);
@@ -167,6 +173,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
   // TODO: use config manager.
   kMeshInMillimeters = mesh_in_mm;
+  kMeshScalingFactor = mesh_scaling_factor;
   kCameraWidth = camera_width;
   kCameraHeight = camera_height;
   kCameraFX = camera_fx;
@@ -194,8 +201,10 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 }
 // This is used Aditya in perch fat
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
-                                       std::vector<Eigen::Affine3f> *object_transforms) const {
+                                       std::vector<Eigen::Affine3f> *object_transforms,
+                                       std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const {
   object_transforms->clear();
+  preprocessing_object_transforms->clear();
 
   vector<ContPose> detected_poses;
   const bool plan_success = LocalizeObjects(input, &detected_poses);
@@ -209,11 +218,13 @@ bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
 
     const auto &models = env_obj_->obj_models_;
     object_transforms->resize(input.model_names.size());
+    preprocessing_object_transforms->resize(input.model_names.size());
 
     for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
       const auto &obj_model = models[ii];
       object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
                                     detected_poses[ii]);
+      preprocessing_object_transforms->at(ii) = obj_model.preprocessing_transform();
     }
   }
 
@@ -335,7 +346,8 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
                             solution_state_ids[solution_state_ids.size() - 2]);
       printf("Goal state ID is %d\n", goal_state_id);
       env_obj_->PrintState(goal_state_id,
-                           env_obj_->GetDebugDir() + string("output_depth_image.png"));
+                           env_obj_->GetDebugDir() + string("output_depth_image.png"),
+                           env_obj_->GetDebugDir() + string("output_color_image.png"));
       env_obj_->GetGoalPoses(goal_state_id, detected_poses);
 
       cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;
@@ -348,7 +360,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
         
       }
 
-      last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
+      // last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
 
       cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
       cout << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "

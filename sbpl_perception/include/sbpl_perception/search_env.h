@@ -38,6 +38,7 @@
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
+#include <pcl/filters/voxel_grid.h>
 
 #include <memory>
 #include <string>
@@ -49,6 +50,8 @@
 #include <ColorSpace/Conversion.h>
 #include <ColorSpace/Comparison.h>
 #include <chrono>
+
+#include "ICP/ICPOdometry.h"
 
 namespace sbpl_perception {
 
@@ -70,6 +73,8 @@ struct EnvParams {
   int use_external_render;
   std::string reference_frame_;
   int use_external_pose_list;
+  int use_icp;
+  int shift_pose_centroid;
 };
 
 struct PERCHParams {
@@ -103,9 +108,17 @@ struct PERCHParams {
   // occluders versus minimizing the objective.
   double clutter_regularizer;
 
+  bool use_downsampling;
+
+  double downsampling_leaf_size;
+
   bool vis_expanded_states;
   bool print_expanded_states;
   bool debug_verbose;
+  bool vis_successors;
+
+  bool use_color_cost;
+
   PERCHParams() : initialized(false) {}
 
   friend class boost::serialization::access;
@@ -124,6 +137,10 @@ struct PERCHParams {
     ar &debug_verbose;
     ar &use_clutter_mode;
     ar &clutter_regularizer;
+    ar &vis_successors;
+    ar &use_downsampling;
+    ar &downsampling_leaf_size;
+    ar &use_color_cost;
   }
 };
 // BOOST_IS_MPI_DATATYPE(PERCHParams);
@@ -142,6 +159,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                     const std::vector<std::string> &model_names);
 
   void PrintState(int state_id, std::string fname);
+  void PrintState(int state_id, std::string fname, std::string cname);
   void PrintState(GraphState s, std::string fname);
   void PrintState(GraphState s, std::string fname, std::string cfname);
   void PrintImage(std::string fname,
@@ -153,11 +171,13 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // If kClutterMode is true, then the rendered scene will account for
   // "occluders" in the input scene, i.e, any point in the input cloud which
   // occludes a point in the rendered scene.
-  const float *GetDepthImage(GraphState s,
+  const float *GetDepthImage(GraphState &s,
                              std::vector<unsigned short> *depth_image, 
                              std::vector<std::vector<unsigned char>> *color_image,
                              cv::Mat &cv_depth_image,
-                             int* num_occluders_in_input_cloud);
+                             cv::Mat &cv_color_image,
+                             int* num_occluders_in_input_cloud,
+                             bool shift_centroid);
 
   const float *GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image,
@@ -196,6 +216,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetTableHeight(double height);
   double GetTableHeight();
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
+
+  double GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in,
+                            const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
+                            const std::vector<int> counted_indices = std::vector<int>(0));
 
   double GetICPAdjustedPose(const PointCloudPtr cloud_in,
                             const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
@@ -288,7 +312,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unique_ptr<RCNNHeuristicFactory> rcnn_heuristic_factory_;
   Heuristics rcnn_heuristics_;
 
-  PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, double depth_factor);
+  PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, cv::Mat predicted_mask_image, double depth_factor);
 
   PointCloudPtr GetGravityAlignedPointCloud(
     const vector<unsigned short> &depth_image, uint8_t rgb[3]);
@@ -311,7 +335,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
  private:
 
   ros::Publisher render_point_cloud_topic;
+  ros::Publisher downsampled_input_point_cloud_topic;
+  ros::Publisher downsampled_mesh_cloud_topic;
   ros::Publisher input_point_cloud_topic;
+  cv::Mat cv_input_color_image;
 
   std::vector<ObjectModel> obj_models_;
   pcl::simulation::Scene::Ptr scene_;
@@ -342,6 +369,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
   std::unordered_map<int, std::vector<int>> succ_cache;
   std::unordered_map<int, std::vector<int>> cost_cache;
+  std::unordered_map<int, std::vector<ObjectState>> valid_succ_cache;
   std::unordered_map<int, unsigned short> minz_map_;
   std::unordered_map<int, unsigned short> maxz_map_;
   std::unordered_map<int, int> g_value_map_;
@@ -360,11 +388,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr projected_knn_;
+  pcl::search::KdTree<PointT>::Ptr downsampled_projected_knn_;
   std::vector<int> valid_indices_;
 
   std::vector<unsigned short> observed_depth_image_;
   PointCloudPtr original_input_cloud_, observed_cloud_, downsampled_observed_cloud_,
-                observed_organized_cloud_, projected_cloud_;
+                observed_organized_cloud_, projected_cloud_, downsampled_projected_cloud_;
   // Refer RecognitionInput::constraint_cloud for details.
   // This is an unorganized point cloud.
   PointCloudPtr constraint_cloud_, projected_constraint_cloud_;
@@ -384,7 +413,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void ResetEnvironmentState();
 
   void GenerateSuccessorStates(const GraphState &source_state,
-                               std::vector<GraphState> *succ_states) const;
+                               std::vector<GraphState> *succ_states);
 
   // Returns true if a valid depth image was composed.
   static bool GetComposedDepthImage(const std::vector<unsigned short>
@@ -415,7 +444,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
               std::vector<unsigned short> *unadjusted_child_depth_image,
               std::vector<std::vector<unsigned char>> *unadjusted_child_color_image);
 
+  double getColorDistanceCMC(uint32_t rgb_1, uint32_t rgb_2) const;
   double getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const;
+  int getNumColorNeighboursCMC(PointT point, const PointCloudPtr point_cloud) const;
   int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud) const;
 
   // Cost for newly rendered object. Input cloud must contain only newly rendered points.

@@ -62,7 +62,7 @@ namespace pcl
         void get_depth_image_uint(const float* depth_buffer, std::vector<unsigned short>* depth_img_uint);
         void get_depth_image_cv(const float* depth_buffer, cv::Mat &depth_image);
         void get_rgb_image_uchar(const uint8_t* rgb_buffer, std::vector<std::vector<uchar>>* color_image_uchar);
-    
+        void get_rgb_image_cv(const uint8_t *rgb_buffer, cv::Mat &color_image);
       private:
         uint16_t t_gamma[2048];  
     

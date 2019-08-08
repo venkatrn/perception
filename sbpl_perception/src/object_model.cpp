@@ -28,11 +28,13 @@
 #include <vtkPointData.h>
 #include <vtkSmartPointer.h>
 #include <vtkSelectEnclosedPoints.h>
+#include <perception_utils/perception_utils.h>
 
 using namespace std;
 
 // TODO: use config manager.
 bool kMeshInMillimeters = false;
+double kMeshScalingFactor = 0.01;
 
 namespace {
 // Inflate inscribed (and circumscribed) radius of mesh by the following
@@ -45,7 +47,7 @@ const string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
 
 Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
-                                pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, bool flipped) {
+                                pcl::PolygonMesh::Ptr &mesh_out, bool mesh_in_mm, double kMeshScalingFactor, bool flipped) {
   pcl::PointCloud<PointT>::Ptr cloud_in (new
                                          pcl::PointCloud<PointT>);
   pcl::PointCloud<PointT>::Ptr cloud_out (new
@@ -69,7 +71,8 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   PointT min_pt, max_pt;
   pcl::getMinMax3D(*cloud_in, min_pt, max_pt);
   double z_translation = min_pt.z;
-  std::cout << "Preprocessing Model" << endl;
+  // double z_translation = 0.01;
+  std::cout << "Preprocessing Model, z : " << z_translation << endl;
   // std::cout <<  "Bounds: " << max_pt.x - min_pt.x << endl
   //   << max_pt.y - min_pt.y << endl
   //   << max_pt.z - min_pt.z << endl;
@@ -79,7 +82,7 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
 
   // By default, assume cad models are in mm.
   if (mesh_in_mm) {
-    const double kScale = 0.01;
+    const double kScale = kMeshScalingFactor;
     // const double kScale = 0.001 * 0.7; // UGH, chess piece models are
     // off-scale. TODO: add scaling paramater for models in config file.
     transform.scale(kScale);
@@ -214,13 +217,14 @@ ObjectModel::ObjectModel(const pcl::PolygonMesh &mesh, const string name,
   // pcl::PolygonMesh::Ptr mesh_out(new pcl::PolygonMesh(mesh));
   pcl::PolygonMesh::Ptr mesh_out(new pcl::PolygonMesh);
   preprocessing_transform_ = PreprocessModel(mesh_in, mesh_out,
-                                             kMeshInMillimeters, flipped);
+                                             kMeshInMillimeters, kMeshScalingFactor, flipped);
 
   std::cout << "Preprocessing transform : " << preprocessing_transform_.matrix() << endl;
   mesh_ = *mesh_out;
   symmetric_ = symmetric;
   name_ = name;
   cloud_.reset(new PointCloud);
+  downsampled_mesh_cloud_.reset(new PointCloud);
   SetObjectProperties();
 }
 
@@ -233,10 +237,68 @@ void ObjectModel::TransformPolyMesh(const pcl::PolygonMesh::Ptr
   pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
 
   transformPointCloud(*cloud_in, *cloud_out, transform);
+  // Eigen::Vector4f centroid;
+  // pcl::compute3DCentroid(*cloud_out, centroid);
+  // std::cout << "centroid " << centroid << std::endl;
+  // std::cout << "centroid old " << transform << std::endl;
 
   *mesh_out = *mesh_in;
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
   return;
+}
+
+void ObjectModel::TransformPolyMeshWithShift(const pcl::PolygonMesh::Ptr
+                                    &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f &transform) {
+  pcl::PointCloud<PointT>::Ptr cloud_in (new
+                                                pcl::PointCloud<PointT>);
+  pcl::PointCloud<PointT>::Ptr cloud_out (new
+                                                 pcl::PointCloud<PointT>);
+  pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
+
+  transformPointCloud(*cloud_in, *cloud_out, transform);
+  Eigen::Vector4f centroid;
+  pcl::compute3DCentroid(*cloud_out, centroid);
+  std::cout << "centroid " << centroid << std::endl;
+  Eigen::Vector4f vec_out;
+  vec_out << transform(0,3), transform(1,3), transform(2,3);
+  std::cout << "centroid old " << vec_out << std::endl;
+  std::cout << "centroid difference  " << vec_out-centroid << std::endl;
+  Eigen::Vector4f shift = vec_out-centroid;
+
+  Eigen::Affine3f transform_2 = Eigen::Affine3f::Identity();
+  transform_2.translation() << shift[0], shift[1], shift[2];
+  transform(0,3) += shift[0];
+  transform(1,3) += shift[1];
+  transform(2,3) += shift[2];
+  // transform = transform_2.matrix();
+  transformPointCloud(*cloud_out, *cloud_out, transform_2);
+
+  *mesh_out = *mesh_in;
+  pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
+  return;
+}
+
+bool getColorEquivalence(uint32_t rgb_1, uint32_t rgb_2)
+{
+    uint8_t r = (rgb_1 >> 16);
+    uint8_t g = (rgb_1 >> 8);
+    uint8_t b = (rgb_1);
+    ColorSpace::Rgb point_1_color(r, g, b);
+
+    r = (rgb_2 >> 16);
+    g = (rgb_2 >> 8);
+    b = (rgb_2);
+    ColorSpace::Rgb point_2_color(r, g, b);
+
+    double color_distance =
+              ColorSpace::Cie2000Comparison::Compare(&point_1_color, &point_2_color);
+
+    if (color_distance < 20) {
+      return true;
+    }
+    else {
+      return false;
+    }
 }
 
 void ObjectModel::SetObjectProperties() {
@@ -325,6 +387,44 @@ void ObjectModel::SetObjectProperties() {
   cv::fillConvexPoly(footprint_raster_, cv_points.data(), cv_points.size(), 255);
   cv::imwrite(kDebugDir + string("footprint_") + name_ + string(".png"),
               footprint_raster_);
+  
+
+  // Downsample point cloud
+  // pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
+  // pcl::PCLPointCloud2::Ptr cloud_voxel_in (new pcl::PCLPointCloud2 ());
+  // *cloud_voxel_in = mesh_.cloud;
+  // sor.setInputCloud (cloud_voxel_in);
+  // sor.setLeafSize (0.01f, 0.01f, 0.01f);
+  // pcl::PCLPointCloud2::Ptr cloud_filtered (new pcl::PCLPointCloud2 ());
+  // sor.filter (*cloud_filtered);
+  // pcl::fromPCLPointCloud2(*cloud_filtered, *downsampled_mesh_cloud_);
+  // printf("Points in downsampled cloud : %d\n", downsampled_mesh_cloud_->points.size());
+  
+  // Get list of unique colors
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_color (new
+                                             pcl::PointCloud<pcl::PointXYZRGB>);
+  pcl::fromPCLPointCloud2(mesh_.cloud, *cloud_color);
+  downsampled_mesh_cloud_ = perception_utils::DownsamplePointCloud(cloud_color, 0.01);
+  printf("Points in downsampled cloud : %d\n", downsampled_mesh_cloud_->points.size());
+
+  vector<uint32_t> unique_rgb;
+  for (size_t i = 0; i < cloud_color->points.size(); i++) {
+    unique_rgb.push_back(*reinterpret_cast<int*>(&cloud_color->points[i].rgb));
+  }
+
+  vector<uint32_t>::iterator ip; 
+
+  // Using std::unique 
+  // ip = std::unique(unique_rgb.begin(), unique_rgb.begin() + unique_rgb.size()); 
+  ip = std::unique_copy (unique_rgb.begin(), unique_rgb.begin() + unique_rgb.size(), unique_rgb.begin(), getColorEquivalence);
+
+  // Now v becomes {1 3 10 1 3 7 8 * * * * *} 
+  // * means undefined 
+
+  // Resizing the vector so as to remove the undefined terms 
+  unique_rgb.resize(std::distance(unique_rgb.begin(), ip)); 
+  printf("Points in  cloud : %d\n", cloud_color->points.size());
+  printf("Unique colors in model : %d\n", unique_rgb.size());
 }
 
 void ObjectModel::SetObjectPointCloud(const PointCloudPtr &cloud) {
@@ -349,6 +449,19 @@ pcl::PolygonMeshPtr ObjectModel::GetTransformedMesh(const ContPose &p) const {
   // transform = p.GetTransformMatrix();
   // std::cout << "matrix " << transform << endl;
   TransformPolyMesh(mesh_in, transformed_mesh, transform);
+  return transformed_mesh;
+}
+
+pcl::PolygonMeshPtr ObjectModel::GetTransformedMeshWithShift(ContPose &p) const {
+  // Called from getdepthimage
+  pcl::PolygonMeshPtr mesh_in(new pcl::PolygonMesh(mesh_));
+  pcl::PolygonMeshPtr transformed_mesh(new pcl::PolygonMesh);
+  Eigen::Matrix4f transform;
+  transform = p.GetTransform().matrix().cast<float>();
+  // transform = p.GetTransformMatrix();
+  // std::cout << "matrix " << transform << endl;
+  TransformPolyMeshWithShift(mesh_in, transformed_mesh, transform);
+  p = ContPose(transform(0,3), transform(1,3), transform(2,3), p.qx(), p.qy(), p.qz(), p.qw());
   return transformed_mesh;
 }
 

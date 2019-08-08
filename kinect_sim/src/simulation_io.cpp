@@ -496,3 +496,25 @@ pcl::simulation::SimExample::get_rgb_image_uchar(const uint8_t *rgb_buffer,
     }
   }
 }
+
+
+void
+pcl::simulation::SimExample::get_rgb_image_cv(const uint8_t *rgb_buffer,
+                                              cv::Mat &color_image) {
+  int npixels = rl_->getWidth() * rl_->getHeight();
+  color_image.create(height_, width_, CV_8UC3);
+
+  for (int y = 0; y <  height_; ++y) {
+    for (int x = 0; x < width_; ++x) {
+      int px_in = (height_ - 1 - y) * width_ + x ; // flip up down
+      // cv::Scalar color(
+      //   rgb_buffer[3 * px_in + 0],
+      //   rgb_buffer[3 * px_in + 1],
+      //   rgb_buffer[3 * px_in + 2]
+      // );
+      color_image.at<cv::Vec3b>(y, x)[0] = rgb_buffer[3 * px_in + 0];
+      color_image.at<cv::Vec3b>(y, x)[1] = rgb_buffer[3 * px_in + 1];
+      color_image.at<cv::Vec3b>(y, x)[2] = rgb_buffer[3 * px_in + 2];
+    }
+  }
+}
