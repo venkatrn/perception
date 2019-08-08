@@ -51,7 +51,6 @@
 #include <ColorSpace/Comparison.h>
 #include <chrono>
 
-#include "ICP/ICPOdometry.h"
 
 namespace sbpl_perception {
 
@@ -216,10 +215,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void SetTableHeight(double height);
   double GetTableHeight();
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
-
-  double GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in,
-                            const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
-                            const std::vector<int> counted_indices = std::vector<int>(0));
 
   double GetICPAdjustedPose(const PointCloudPtr cloud_in,
                             const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
