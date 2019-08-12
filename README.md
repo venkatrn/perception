@@ -19,6 +19,6 @@ https://github.com/venkatrn/sbpl_utils.git
 2. Install Open CV 2.4 if not already installed. You can follow steps on the <a href="https://docs.opencv.org/2.4/doc/tutorials/introduction/linux_install/linux_install.html">Open CV website</a>
 3. Install gsl library :
 ```
-https://docs.opencv.org/2.4/doc/tutorials/introduction/linux_install/linux_install.html
+sudo apt-get install libgsl-dev
 ```
 4. Compile the packages in the catkin_ws
