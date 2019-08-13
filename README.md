@@ -28,6 +28,10 @@ sudo apt-get install libgsl-dev libvtk6-dev
 ```
 object_recognition_node/launch/roman_object_recognition_robot.launch
 ```
+7. Check camera parameters in :
+```
+sbpl_perception/config/roman_camera_config.yaml
+```
 7. Launch camera and code using (the transforms should be being published by another code) : 
 ```
 roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false
