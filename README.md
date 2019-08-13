@@ -11,10 +11,11 @@ Requirements
 
 Setup (For running with a robot camera or bagfile recorded from robot)
 -----
-1. Create a catkin_ws and clone the following :
+1. Create a catkin_ws and clone the following (clone realsense package to work with real camera) :
 ```
 https://github.com/SBPL-Cruz/improved-mha-planner
 https://github.com/venkatrn/sbpl_utils.git
+https://github.com/IntelRealSense/realsense-ros
 ```
 2. Install Open CV 2.4 if not already installed. You can follow steps on the <a href="https://docs.opencv.org/2.4/doc/tutorials/introduction/linux_install/linux_install.html">Open CV website</a>
 3. Install gsl library :
@@ -28,3 +29,7 @@ sudo apt-get install libgsl-dev
 object_recognition_node/launch/roman_object_recognition_robot.launch
 ```
 7. Launch camera and code using (the transforms should be being published by another code) : 
+```
+roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false
+roslaunch realsense2_camera rs_rgbd.launch camera:=/head_camera publish_tf:=false
+```
