@@ -6,47 +6,19 @@ This library provides implementations for single and multi-object instance local
 
 Requirements
 ------------
-- Ubuntu 14.04+
-- ROS Hydro+ (active development only on Indigo)
+- Ubuntu 16.04+
+- ROS Kinetic (active development only on Kinetic)
 
-Setup
+Setup (For running with a robot camera or bagfile recorded from robot)
 -----
-
-1. Get ROS Indigo from http://wiki.ros.org/indigo/Installation/Ubuntu
-2. Set up a catkin workspace ~/my_workspace (http://wiki.ros.org/catkin/Tutorials/create_a_workspace).
-3. Download the <a href="https://raw.githubusercontent.com/venkatrn/perception/master/perch.rosinstall" download="perch.rosinstall">rosinstall file</a> to your workspace.
-
-```bash
-cd ~/my_workspace
-wstool init src
-wstool merge -t src perch.rosinstall
-wstool update -t src
-rosdep install --from-paths src --ignore-src --rosdistro indigo -y
-catkin_make -DCMAKE_BUILD_TYPE=Release
+1. Create a catkin_ws and clone the following :
 ```
-
-Demo
-----
-Running with Python :
-1. Clone ```https://github.com/SBPL-Cruz/maskrcnn-benchmark```
-2. Create a python 3 virtual environment :
+https://github.com/SBPL-Cruz/improved-mha-planner
+https://github.com/venkatrn/sbpl_utils.git
 ```
-conda create --name maskrcnn_benchmark
-conda activate maskrcnn_benchmark
+2. Install Open CV 2.4 if not already installed. You can follow steps on the <a href="https://docs.opencv.org/2.4/doc/tutorials/introduction/linux_install/linux_install.html">Open CV website</a>
+3. Install gsl library :
 ```
-3. Install dependencies in requirements file
- ```
- pip install pycocotools
- pip install pillow
- pip install scikit-image
- pip install git+git://github.com/waspinator/coco.git@2.1.0
- pip install dipy
- pip install glumpy
- conda install pyopengl
- pip install scikit-build
- pip install rospkg
- pip install python-pcl
- pip install defusedxml
- ```
- 
-
+sudo apt-get install libgsl-dev
+```
+4. Compile the packages in the catkin_ws

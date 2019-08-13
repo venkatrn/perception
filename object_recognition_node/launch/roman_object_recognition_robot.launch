@@ -11,14 +11,14 @@
 
   <include file="$(find sbpl_perception)/config/roman_objects.xml"/>
 
+
   <group if="$(arg urdf)">
       <include file="$(find roman_model)/robots/upload_rcta_roman.launch" />
   </group>
+
   <node name="rviz" pkg="rviz" type="rviz" args="-d $(find roman_model)/robots/realsense_camera_robot.rviz" required="true" />
 
-  <node pkg="tf" type="static_transform_publisher" name="base_camera_broadcaster" args="0.438 0.017 0.573 0.0 0.333 0 0.943 base_link camera_link 100" />
-
-  <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch-prefix="/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpirun -n 3 --mca mpi_yield_when_idle 1" respawn="false">
+  <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch-prefix="mpirun -n 1 --mca mpi_yield_when_idle 1" respawn="false">
       <rosparam command="load" file="$(find sbpl_perception)/config/pr2_env_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/pr2_planner_config.yaml" />
       <rosparam command="load" file="$(find sbpl_perception)/config/roman_camera_config.yaml" />
@@ -28,15 +28,14 @@
 
   <node pkg="object_recognition_node" type="obj_rec_node" name="object_recognition_node" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false">
     <!-- <remap from="/keypress_topic" to="/obj_recognition_keyboard_listener/keydown"/> -->
+    <!-- <remap from="input_cloud" to="/roman1/center_realsense/depth_registered/points"/> -->
     <remap from="input_cloud" to="/roman1/center_realsense/depth_registered/points"/>
-    <!-- <remap from="requested_object" to="/roman1/requested_object"/> -->
-    <!-- <remap from="input_cloud" to="/camera/depth_registered/points"/> -->
     <param name="pcl_visualization" value="false"/>
     <param name="use_external_render" value="0"/>
 
     <!-- <param name="table_height" value="1.127"/> <!&#45;&#45;1.13&#45;&#45;> -->
 
-    <param name="table_height" value="-0.115"/> <!--1.13-->
+    <param name="table_height" value="-0.113"/> <!--1.13-->
     <param name="zmax" value="0.25"/> <!--1.13-->
     <!-- <param name="xmin" value="1.0"/>
     <param name="xmax" value="1.15"/>
@@ -45,11 +44,11 @@
 
     <!--  Crate -->
     <param name="xmin" value="0.6"/> <!--1.13-->
-    <param name="xmax" value="1.25"/> <!--1.13-->
+    <param name="xmax" value="1.5"/> <!--1.13-->
     <param name="ymin" value="-0.30"/> <!--1.13-->
     <param name="ymax" value="0.30"/> <!--1.13-->
 
-    <param name="reference_frame" value="/map"/>
+    <param name="reference_frame" value="/roman1/map"/>
     <param name="camera_optical_frame" value="/roman1/center_realsense_color_optical_frame"/>
     <param name="camera_frame" value="/roman1/center_realsense_depth_frame"/>
     <!-- <param name="camera_frame" value="/roman1/center_realsense_depth_frame"/> -->

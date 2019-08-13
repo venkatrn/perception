@@ -122,5 +122,10 @@ target_link_libraries (kinect_sim_test_simple ${PROJECT_NAME})
 target_link_libraries (kinect_sim_test_performance ${PROJECT_NAME})
 target_link_libraries (kinect_sim_terminal_demo ${PROJECT_NAME})
 
+
+install(DIRECTORY src/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/src
+  PATTERN ".svn" EXCLUDE)
+  
 install(DIRECTORY include/${PROJECT_NAME}/
         DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})

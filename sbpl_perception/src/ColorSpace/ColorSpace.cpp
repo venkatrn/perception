@@ -1,5 +1,5 @@
-#include <ColorSpace/ColorSpace.h>
-#include <ColorSpace/Conversion.h>
+#include <sbpl_perception/ColorSpace/ColorSpace.h>
+#include <sbpl_perception/ColorSpace/Conversion.h>
 
 namespace ColorSpace {
 	Rgb::Rgb() {}
@@ -184,4 +184,3 @@ namespace ColorSpace {
 		lab->b = b;
 	}
 }
-

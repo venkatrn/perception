@@ -46,9 +46,9 @@
 #include <vector>
 
 #include <ros/ros.h>
-#include <ColorSpace/ColorSpace.h>
-#include <ColorSpace/Conversion.h>
-#include <ColorSpace/Comparison.h>
+#include <sbpl_perception/ColorSpace/ColorSpace.h>
+#include <sbpl_perception/ColorSpace/Conversion.h>
+#include <sbpl_perception/ColorSpace/Comparison.h>
 #include <chrono>
 
 namespace sbpl_perception {

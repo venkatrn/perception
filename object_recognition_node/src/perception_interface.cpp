@@ -236,7 +236,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
   // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.4);
+  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.28);
   pt_filter.filter(*table_removed_cloud);
 
   printf("table_removed_cloud size : %d\n", table_removed_cloud->size());
@@ -301,7 +301,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 
 
   tf_listener_.lookupTransform(reference_frame_.c_str(),
-                               camera_optical_frame_.c_str(), ros::Time(0.0), transform);
+                                camera_optical_frame_.c_str(), ros::Time(0.0), transform);
   printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
       transform.getOrigin().y(), transform.getOrigin().z());
   Eigen::Isometry3d camera_to_world_pose;
