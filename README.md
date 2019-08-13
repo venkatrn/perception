@@ -37,4 +37,6 @@ sbpl_perception/config/roman_camera_config.yaml
 roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false
 roslaunch realsense2_camera rs_rgbd.launch camera:=/head_camera publish_tf:=false
 ```
-8. To test you can download sample bag file from this <a href="https://drive.google.com/file/d/1X4yzLiQTnaXYLKMgNcFwvKDNLZDHyxPz/view?usp=sharing">link</a>
+8. The command ```roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false``` will launch the the visualization in RVIZ which shows input point cloud, successors and output pose of crate (the crate model is published as a marker with the detected pose). The config file for rviz that is loaded is stored in ```object_recognition_node/rviz/realsense_camera_robot.rviz``` 
+
+9. To test you can download sample bag file from this <a href="https://drive.google.com/file/d/1X4yzLiQTnaXYLKMgNcFwvKDNLZDHyxPz/view?usp=sharing">link</a>
