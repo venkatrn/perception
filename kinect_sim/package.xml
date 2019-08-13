@@ -34,8 +34,8 @@
   <run_depend>cv_bridge</run_depend>
   <run_depend>libpcl-all</run_depend>
   <run_depend>libpcl-all-dev</run_depend>
-  <run_depend>libglew-dev</run_depend>a
-  <run_depend>glut</run_depend>a
+  <run_depend>libglew-dev</run_depend>
+  <run_depend>glut</run_depend>
 
   <!-- Dependencies needed only for running tests. -->
   <!-- <test_depend>geometry_msgs</test_depend> -->

@@ -19,8 +19,11 @@ SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
 
 
 find_package(ZLIB)
+
 include_directories(${ZLIB_INCLUDE_DIRS})
 # Load catkin and all dependencies required for this package
+#find_package(CUDA REQUIRED)
+
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   kinect_sim
@@ -29,9 +32,14 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib
   sbpl
+  eigen_conversions
+  visualization_msgs
+  rospy
+  sbpl_utils
   sbpl_utils)
 
 
+#include_directories(${CUDA_INCLUDE_DIRS})
 
 #find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
 
@@ -61,6 +69,7 @@ find_package(Boost 1.58.0 REQUIRED mpi serialization system)
 find_package(OpenMP)
 # find_package(fcl REQUIRED)
 find_package(octomap REQUIRED)
+find_package(Pangolin REQUIRED)
 
 find_package(PkgConfig QUIET)
 # pkg_check_modules(FCL REQUIRED fcl)
@@ -98,6 +107,9 @@ catkin_package(
     roslib
     sbpl
     sbpl_utils
+    rospy
+    eigen_conversions
+    visualization_msgs
   DEPENDS
     # OpenCV
     #MPI
@@ -133,8 +145,8 @@ add_library(${PROJECT_NAME}
 #        ${MPI_ROOT}/lib/libmpi.so)
 #message(WARNING ${catkin_LIBRARIES})
 
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES}
-  #${MPI_CXX_LIBRARIES}
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES} ${Pangolin_LIBRARIES}
+  #${MPI_CXX_LIBRARIES} ${CUDA_LIBRARIES}
   #${PCL_LIBRARIES} ${OpenCV_LIBRARIES} /usr/lib/libvtkCommon.so.5.10 /usr/lib/libvtkFiltering.so.5.10 /usr/lib/libvtkRendering.so.5.10 /usr/lib/libvtkIO.so.5.10
   # ${MPI_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   #/usr/lib/libvtkGraphics.so.5.10
@@ -187,6 +199,10 @@ target_link_libraries(heuristic_test ${PROJECT_NAME})
 add_executable(perch
   experiments/src/perch.cpp)
 target_link_libraries(perch ${PROJECT_NAME})
+
+add_executable(perch_fat
+  experiments/src/perch_fat.cpp)
+target_link_libraries(perch_fat ${PROJECT_NAME})
 
 add_executable(perch_single_object
   experiments/src/perch_single_object.cpp)

@@ -37,7 +37,8 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   float camera_znear = 0.0;
   float camera_zfar = 0.0;
   bool mesh_in_mm = false;
-  bool image_debug = false;
+  double mesh_scaling_factor = 1.0;
+  bool image_debug = true;
 
   if (IsMaster(mpi_world_)) {
     // ///////////////////////////////////////////////////////////////////
@@ -53,28 +54,28 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
     ros::NodeHandle private_nh("~");
 
-    private_nh.param("image_debug", image_debug, false);
+    private_nh.param("/image_debug", image_debug, true);
 
-    private_nh.param("search_resolution_translation",
+    private_nh.param("/search_resolution_translation",
                      search_resolution_translation, 0.04);
-    private_nh.param("search_resolution_yaw", search_resolution_yaw,
+    private_nh.param("/search_resolution_yaw", search_resolution_yaw,
                      0.3926991);
 
-    private_nh.param("camera_width", camera_width,
+    private_nh.param("/camera_width", camera_width,
                      640);
-    private_nh.param("camera_height", camera_height,
+    private_nh.param("/camera_height", camera_height,
                      480);
-    private_nh.param("camera_fx", camera_fx,
+    private_nh.param("/camera_fx", camera_fx,
                      576.09757860f);
-    private_nh.param("camera_fy", camera_fy,
+    private_nh.param("/camera_fy", camera_fy,
                      576.09757860f);
-    private_nh.param("camera_cx", camera_cx,
+    private_nh.param("/camera_cx", camera_cx,
                      321.06398107f);
-    private_nh.param("camera_cy", camera_cy,
+    private_nh.param("/camera_cy", camera_cy,
                      242.97676897f);
-    private_nh.param("camera_znear", camera_znear,
+    private_nh.param("/camera_znear", camera_znear,
                      0.1f);
-    private_nh.param("camera_zfar", camera_zfar,
+    private_nh.param("/camera_zfar", camera_zfar,
                      20.0f);
 
     XmlRpc::XmlRpcValue model_bank_list;
@@ -83,6 +84,10 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
     if (private_nh.searchParam("mesh_in_mm", param_key)) {
       private_nh.getParam(param_key, mesh_in_mm);
+    }
+
+    if (private_nh.searchParam("mesh_scaling_factor", param_key)) {
+      private_nh.getParam(param_key, mesh_scaling_factor);
     }
 
     if (private_nh.searchParam("model_bank", param_key)) {
@@ -127,13 +132,13 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
     }
 
     // Load planner config params.
-    private_nh.param("inflation_epsilon", planner_params_.inflation_eps, 10.0);
-    private_nh.param("max_planning_time", planner_params_.max_time, 60.0);
+    private_nh.param("/inflation_epsilon", planner_params_.inflation_eps, 10.0);
+    private_nh.param("/max_planning_time", planner_params_.max_time, 60.0);
     // If true, planner will ignore time limit until a first solution is
     // found. For anytime search, planner terminates with first solution.
-    private_nh.param("first_solution", planner_params_.return_first_solution,
+    private_nh.param("/first_solution", planner_params_.return_first_solution,
                      true);
-    private_nh.param("use_lazy", planner_params_.use_lazy,
+    private_nh.param("/use_lazy", planner_params_.use_lazy,
                      true);
     planner_params_.meta_search_type =
       mha_planner::MetaSearchType::ROUND_ROBIN; //DTS
@@ -156,6 +161,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   broadcast(*mpi_world_, search_resolution_translation, kMasterRank);
   broadcast(*mpi_world_, search_resolution_yaw, kMasterRank);
   broadcast(*mpi_world_, mesh_in_mm, kMasterRank);
+  broadcast(*mpi_world_, mesh_scaling_factor, kMasterRank);
   broadcast(*mpi_world_, camera_width, kMasterRank);
   broadcast(*mpi_world_, camera_height, kMasterRank);
   broadcast(*mpi_world_, camera_fx, kMasterRank);
@@ -167,6 +173,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
 
   // TODO: use config manager.
   kMeshInMillimeters = mesh_in_mm;
+  kMeshScalingFactor = mesh_scaling_factor;
   kCameraWidth = camera_width;
   kCameraHeight = camera_height;
   kCameraFX = camera_fx;
@@ -192,28 +199,33 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   env_obj_->SetDebugOptions(image_debug);
 
 }
-
+// This is used Aditya in perch fat
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
-                                       std::vector<Eigen::Affine3f> *object_transforms) const {
+                                       std::vector<Eigen::Affine3f> *object_transforms,
+                                       std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const {
   object_transforms->clear();
+  preprocessing_object_transforms->clear();
 
   vector<ContPose> detected_poses;
   const bool plan_success = LocalizeObjects(input, &detected_poses);
-
   if (!plan_success) {
     return false;
   }
 
-  assert(detected_poses.size() == input.model_names.size());
+  if (IsMaster(mpi_world_)) {
+    assert(detected_poses.size() == input.model_names.size());
 
 
-  const auto &models = env_obj_->obj_models_;
-  object_transforms->resize(input.model_names.size());
+    const auto &models = env_obj_->obj_models_;
+    object_transforms->resize(input.model_names.size());
+    preprocessing_object_transforms->resize(input.model_names.size());
 
-  for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
-    const auto &obj_model = models[ii];
-    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
-                                  detected_poses[ii]);
+    for (size_t ii = 0; ii < input.model_names.size(); ++ii) {
+      const auto &obj_model = models[ii];
+      object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
+                                    detected_poses[ii]);
+      preprocessing_object_transforms->at(ii) = obj_model.preprocessing_transform();
+    }
   }
 
   return plan_success;
@@ -334,7 +346,8 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
                             solution_state_ids[solution_state_ids.size() - 2]);
       printf("Goal state ID is %d\n", goal_state_id);
       env_obj_->PrintState(goal_state_id,
-                           env_obj_->GetDebugDir() + string("output_depth_image.png"));
+                           env_obj_->GetDebugDir() + string("output_depth_image.png"),
+                           env_obj_->GetDebugDir() + string("output_color_image.png"));
       env_obj_->GetGoalPoses(goal_state_id, detected_poses);
 
       cout << endl << "[[[[[[[[  Detected Poses:  ]]]]]]]]:" << endl;
@@ -347,7 +360,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
         
       }
 
-      last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
+      // last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
 
       cout << endl << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
       cout << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
@@ -371,6 +384,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       bool lazy;
       env_obj_->ComputeCostsInParallel(input, &output, lazy);
     }
+
   } else {
     while (!planning_finished) {
       vector<CostComputationInput> input;
@@ -380,13 +394,15 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       // If master is done, exit loop.
       mpi_world_->irecv(kMasterRank, kPlanningFinishedTag, planning_finished);
     }
+    
   }
 
   mpi_world_->barrier();
   broadcast(*mpi_world_, plan_success, kMasterRank);
 
   if (plan_success) {
-    broadcast(*mpi_world_, *detected_poses, kMasterRank);
+    // Commented by Aditya to prevent seg fault in case of multiple objects
+    // broadcast(*mpi_world_, *detected_poses, kMasterRank);
   }
 
   mpi_world_->barrier();

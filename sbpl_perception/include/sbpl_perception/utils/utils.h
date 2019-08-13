@@ -21,8 +21,8 @@ namespace sbpl_perception {
 
 // Depth image parameters (TODO: read in from config file).
 // 424 x 512 for Kinect V2.0.
-constexpr int kDepthImageHeight = 480;
-constexpr int kDepthImageWidth = 640;
+constexpr int kDepthImageHeight = 540;
+constexpr int kDepthImageWidth = 960;
 constexpr int kNumPixels = kDepthImageWidth * kDepthImageHeight;
 
 // The max-range (no return) value in a depth image produced by
@@ -66,6 +66,22 @@ struct RecognitionInput {
   int use_external_render;
 
   std::string reference_frame_;
+
+  std::string input_color_image;
+
+  std::string input_depth_image;
+
+  std::string predicted_mask_image;
+
+  int use_input_images;
+
+  int use_external_pose_list;
+
+  double depth_factor;
+
+  int use_icp;
+
+  int shift_pose_centroid;
 };
 
 // A container for the holding the meta-data associated with a 3D model.
@@ -138,7 +154,11 @@ int GetNumValidPixels(const std::vector<unsigned short> &depth_image);
 // Converts an organized point cloud (assumed to be in meters) to a kinect depth image in the UINT16
 // format (millimeters), using the special value of kKinectMaxDepth for no-returns.
 std::vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
+  const PointCloudPtr depth_img_cloud, double depth_factor);
+
+std::vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
   const PointCloudPtr depth_img_cloud);
+
 
 // Various index conversions.
 // Vectorized depth image and PCL organized cloud share the same index.
@@ -177,6 +197,16 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
   ar &input.table_height;
   ar &input.heuristics_dir;
   ar &input.constraint_cloud;
+  ar &input.use_external_render;
+  ar &input.reference_frame_;
+  ar &input.input_color_image;
+  ar &input.input_depth_image;
+  ar &input.predicted_mask_image;
+  ar &input.use_input_images;
+  ar &input.use_external_pose_list;
+  ar &input.depth_factor;
+  ar &input.use_icp;
+  ar &input.shift_pose_centroid;
 }
 
 template<class Archive>

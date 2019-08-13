@@ -123,7 +123,7 @@ void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
   sensor_msgs::PointCloud2 ref_sensor_cloud;
   tf::StampedTransform transform;
 
-
+  ROS_ERROR("%s", "Waiting for transform");
   try {
     tf_listener_.waitForTransform(reference_frame_, sensor_cloud->header.frame_id,
                                   ros::Time(0), ros::Duration(10.0));
@@ -134,7 +134,7 @@ void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
 
     //ros::Duration(1.0).sleep();
   }
-
+  ROS_ERROR("%s", "Got transform");
   pcl_ros::transformPointCloud(reference_frame_, transform, *sensor_cloud,
                                ref_sensor_cloud);
 
@@ -419,12 +419,12 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
           marker.action = visualization_msgs::Marker::ADD;
           marker.pose.position = msg.pose.position;
           marker.pose.orientation = msg.pose.orientation;
-          // marker.scale.x = 0.01;
-          // marker.scale.y = 0.01;
-          // marker.scale.z = 0.01;
-          marker.scale.x = 1;
-          marker.scale.y = 1;
-          marker.scale.z = 1;
+          marker.scale.x = 0.01;
+          marker.scale.y = 0.01;
+          marker.scale.z = 0.01;
+          // marker.scale.x = 1;
+          // marker.scale.y = 1;
+          // marker.scale.z = 1;
           marker.color.a = 0.8; // Don't forget to set the alpha!
           marker.color.r = red;
           marker.color.g = green;
@@ -441,17 +441,17 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
     }
 
     // Set action client result if still active.
-    if (perch_server_->isActive()) {
-      perch_result_.object_poses = latest_object_poses_;
-      perch_server_->setSucceeded(perch_result_);
-    }
+      if (perch_server_->isActive()) {
+        perch_result_.object_poses = latest_object_poses_;
+        perch_server_->setSucceeded(perch_result_);
+      }
   } else {
-    ROS_ERROR("Object localizer service failed.");
-    // Set action client result if still active.
-    if (perch_server_->isActive()) {
-      perch_result_.object_poses.clear();
-      perch_server_->setAborted(perch_result_);
-    }
+      ROS_ERROR("Object localizer service failed.");
+      // Set action client result if still active.
+      if (perch_server_->isActive()) {
+        perch_result_.object_poses.clear();
+        perch_server_->setAborted(perch_result_);
+      }
   }
 }
 

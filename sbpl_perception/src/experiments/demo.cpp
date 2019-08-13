@@ -84,9 +84,9 @@ int main(int argc, char **argv) {
   // input.model_names = vector<string>({"crate"});
   input.cloud = *cloud_in;
 
-  vector<Eigen::Affine3f> object_transforms;
+  vector<Eigen::Affine3f> object_transforms, preprocessing_transforms;
   vector<PointCloudPtr> object_point_clouds;
-  object_recognizer.LocalizeObjects(input, &object_transforms);
+  object_recognizer.LocalizeObjects(input, &object_transforms, &preprocessing_transforms);
   object_point_clouds = object_recognizer.GetObjectPointClouds();
 
   if (IsMaster(world)) {

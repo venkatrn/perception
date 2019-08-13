@@ -24,7 +24,10 @@ class RCNNHeuristicFactory {
  public:
   typedef std::unordered_map<std::string, std::vector<Detection>> DetectionsMap;
 
-  RCNNHeuristicFactory(const RecognitionInput &input,
+  RCNNHeuristicFactory(const RecognitionInput &input, PointCloudPtr input_cloud,
+                      const pcl::simulation::SimExample::Ptr kinect_simulator);
+
+  RCNNHeuristicFactory(const RecognitionInput &input, 
                        const pcl::simulation::SimExample::Ptr kinect_simulator);
   const Heuristics &GetHeuristics() const {
     return heuristics_;

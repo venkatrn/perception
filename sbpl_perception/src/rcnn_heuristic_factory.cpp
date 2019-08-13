@@ -35,6 +35,34 @@ const int kMinimumBBoxPointsForLowConfidence = 2000;
 } // namespace
 
 namespace sbpl_perception {
+RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input, PointCloudPtr input_cloud,
+                                           const pcl::simulation::SimExample::Ptr kinect_simulator) : recognition_input_
+  (input),
+  kinect_simulator_(kinect_simulator), debug_dir_(kDefaultDebugDir) {
+
+  Eigen::Affine3f cam_to_body;
+  cam_to_body.matrix() << 0, 0, 1, 0,
+                     -1, 0, 0, 0,
+                     0, -1, 0, 0,
+                     0, 0, 0, 1;
+  PointCloudPtr depth_img_cloud(new PointCloud);
+  Eigen::Affine3f transform;
+  transform.matrix() = recognition_input_.camera_pose.matrix().cast<float>();
+  transform = cam_to_body.inverse() * transform.inverse();
+  transformPointCloud(*input_cloud, *depth_img_cloud,
+                      transform);
+
+  auto depth_image = OrganizedPointCloudToKinectDepthImage(
+                       depth_img_cloud);
+  input_depth_image_ = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1,
+                               depth_image.data());
+  // Because the data is transient.
+  input_depth_image_ = input_depth_image_.clone();
+  EncodeDepthImage(input_depth_image_, encoded_depth_image_);
+  // RescaleDepthImage(input_depth_image_, encoded_depth_image_, 0,
+  //                   kRescalingMaxDepth);
+}
+
 RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input,
                                            const pcl::simulation::SimExample::Ptr kinect_simulator) : recognition_input_
   (input),

@@ -21,6 +21,25 @@ ContPose::ContPose(double x, double y, double z, double roll, double pitch,
   yaw_(angles::normalize_angle_positive(yaw)) {
 };
 
+ContPose::ContPose(double x, double y, double z, double qx, double qy,
+                   double qz, double qw)  {
+  
+  Eigen::Quaterniond quaternion = Eigen::Quaterniond(qw, qx, qy, qz);
+  auto euler = quaternion.toRotationMatrix().eulerAngles(0,1,2);
+  // std::cout << "Euler from quaternion in roll, pitch, yaw"<< std::endl << euler << std::endl;
+  // std::cout << "Euler from quaternion :"<< quaternion.w() << " " << quaternion.vec() << std::endl;
+  x_ = x;
+  y_ = y;
+  z_ = z;
+  qx_ = qx;
+  qy_ = qy;
+  qz_ = qz;
+  qw_ = qw;
+  roll_ = euler[0];
+  pitch_ = euler[1];
+  yaw_ = euler[2];
+};
+
 ContPose::ContPose(int external_pose_id, std::string external_render_path,
                    double x, double y, double z, double roll, double pitch,
                    double yaw) :
@@ -60,8 +79,40 @@ Eigen::Isometry3d ContPose::GetTransform() const {
   const Eigen::AngleAxisd roll_angle(roll_, Eigen::Vector3d::UnitX());
   const Eigen::AngleAxisd pitch_angle(pitch_, Eigen::Vector3d::UnitY());
   const Eigen::AngleAxisd yaw_angle(yaw_, Eigen::Vector3d::UnitZ());
-  const Eigen::Quaterniond quaternion = yaw_angle * pitch_angle * roll_angle;
+  Eigen::Quaterniond quaternion;
+  if (qw_ == 0 && qx_ == 0 && qy_ == 0 && qz_ == 0) {
+    // std::cout << "using euler\n";
+    quaternion = yaw_angle * pitch_angle * roll_angle;
+  } else {
+    quaternion = Eigen::Quaterniond(qw_, qx_, qy_, qz_);
+  }
+  quaternion.normalize();
   const Eigen::Isometry3d transform(Eigen::Translation3d(x_, y_, z_) * quaternion);
+  return transform;
+}
+
+Eigen::Matrix4f ContPose::GetTransformMatrix() const {
+  Eigen::Quaterniond quaternion = Eigen::Quaterniond(qw_, qx_, qy_, qz_);
+  Eigen::Matrix3f rotation = quaternion.normalized().toRotationMatrix().cast<float>();
+  Eigen::Matrix4f transform;
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
+      transform(i, j) = rotation(i, j);
+    }
+  }
+  transform(0, 3) = x_;
+  transform(1, 3) = y_;
+  transform(2, 3) = z_;
+  transform(3, 3) = 1;
+  std::cout << "GetTransformMatrix()" << transform << std::endl;
+  return transform;
+}
+
+Eigen::Affine3f ContPose::GetTransformAffine3f() const {
+  Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+  Eigen::Quaterniond quaternion = Eigen::Quaterniond(qw_, qx_, qy_, qz_);
+  transform.translation() << x_, y_, z_;
+  transform.rotate(quaternion.cast<float>());
   return transform;
 }
 
@@ -72,7 +123,11 @@ std::ostream &operator<< (std::ostream &stream, const ContPose &cont_pose) {
          << cont_pose.z() << ", "
          << cont_pose.roll() << ", "
          << cont_pose.pitch() << ", "
-         << cont_pose.yaw()
+         << cont_pose.yaw() << ", "
+         << cont_pose.qx() << ", "
+         << cont_pose.qy() << ", "
+         << cont_pose.qz() << ", "
+         << cont_pose.qw() << ", "
          << ")";
   return stream;
 }
