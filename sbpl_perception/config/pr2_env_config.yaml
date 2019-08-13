@@ -4,8 +4,6 @@
 # use_full_object_point_cloud: true
 
 perch_params:
-  # sensor_resolution_radius: 0.003 #m
-  # min_neighbor_points_for_valid_pose: 500 #50
   min_points_for_constraint_cloud: 50
   max_icp_iterations: 15
   icp_max_correspondence: 0.05 #m #0.075
@@ -14,13 +12,19 @@ perch_params:
   use_model_specific_search_resolution: false
 
   ## RGB
-  use_color_cost: true
+  use_color_cost: false
 
-  ## Downsampling
-  sensor_resolution_radius: 0.015 #m
-  min_neighbor_points_for_valid_pose: 25 #50
+  ## With Downsampling
   use_downsampling: true
-  downsampling_leaf_size: 0.02
+  # sensor_resolution_radius: 0.015 #m
+  sensor_resolution_radius: 0.005 #m
+  min_neighbor_points_for_valid_pose: 25 #50
+  # downsampling_leaf_size: 0.02
+  downsampling_leaf_size: 0.01
+
+  ## Without Downsampling
+  # sensor_resolution_radius: 0.003 #m
+  # min_neighbor_points_for_valid_pose: 500 #50
 
   ## Clutter mode
   use_clutter_mode: false

@@ -72,6 +72,8 @@ namespace {
 
   bool kUseHistogramPruning = false;
 
+  bool kUseHistogramLazy = false;
+
   bool kUseOctomapPruning = false;
 }  // namespace
 
@@ -644,7 +646,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
 
   // Sort in increasing order of cost for debugging
-  std::sort(cost_computation_output.begin(), cost_computation_output.end(), compareCostComputationOutput);
+  // std::sort(cost_computation_output.begin(), cost_computation_output.end(), compareCostComputationOutput);
   
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
@@ -684,10 +686,10 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     } else {
       adjusted_states_[candidate_succ_ids[ii]] = output_unit.adjusted_state;
       assert(output_unit.depth_image.size() != 0);
-      if (env_params_.use_external_render == 1)
-      {
-        assert(output_unit.color_image.size() != 0);
-      }
+      // if (env_params_.use_external_render == 1)
+      // {
+      //   assert(output_unit.color_image.size() != 0);
+      // }
       candidate_costs[ii] = output_unit.cost;
       minz_map_[candidate_succ_ids[ii]] =
         output_unit.state_properties.last_min_depth;
@@ -704,6 +706,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       // Cache the depth image only for single object renderings, *only* if valid.
       // NOTE: The hash key is computed on the *unadjusted* child state.
       if (source_state.NumObjects() == 0) {
+        // Cache first successors
         // depth_image_cache_[candidate_succ_ids[ii]] = output_unit.depth_image;
         adjusted_single_object_depth_image_cache_[cost_computation_input[ii].child_state]
           =
@@ -711,8 +714,24 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
         unadjusted_single_object_depth_image_cache_[cost_computation_input[ii].child_state]
           =
             output_unit.unadjusted_depth_image;
+        
+        // adjusted_single_object_color_image_cache_[cost_computation_input[ii].child_state]
+        //   =
+        //     output_unit.color_image;
+        // unadjusted_single_object_color_image_cache_[cost_computation_input[ii].child_state]
+        //   =
+        //     output_unit.unadjusted_color_image;
+            
         adjusted_single_object_state_cache_[cost_computation_input[ii].child_state] =
           output_unit.adjusted_state;
+
+        if (kUseHistogramLazy) 
+        {
+          adjusted_single_object_histogram_score_cache_[cost_computation_input[ii].child_state] =
+            output_unit.histogram_score;
+          printf("Caching histogram scores : %f\n",  output_unit.histogram_score);
+        }
+
         assert(output_unit.adjusted_state.object_states().size() > 0);
         assert(adjusted_single_object_state_cache_[cost_computation_input[ii].child_state].object_states().size()
                > 0);
@@ -934,17 +953,20 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
                                  &output_unit.state_properties, &output_unit.depth_image,
                                  &output_unit.color_image,
                                  &output_unit.unadjusted_depth_image,
-                                 &output_unit.unadjusted_color_image);
+                                 &output_unit.unadjusted_color_image,
+                                 output_unit.histogram_score);
     } else {
       if (input_unit.unadjusted_last_object_depth_image.empty()) {
         output_unit.cost = -1;
       } else {
         output_unit.cost = GetLazyCost(input_unit.source_state, input_unit.child_state,
-                                       input_unit.source_depth_image,
+                                       source_depth_image,
+                                       source_color_image,
                                        input_unit.unadjusted_last_object_depth_image,
                                        input_unit.adjusted_last_object_depth_image,
                                        input_unit.adjusted_last_object_state,
                                        input_unit.source_counted_pixels,
+                                       input_unit.adjusted_last_object_histogram_score,
                                        &output_unit.adjusted_state,
                                        &output_unit.state_properties,
                                        &output_unit.depth_image);
@@ -1023,8 +1045,11 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
          source_state.NumObjects());
 
   if (perch_params_.print_expanded_states) {
-    string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
-    PrintState(source_state_id, fname);
+    // string fname = debug_dir_ + "expansion_" + to_string(source_state_id) + ".png";
+    // PrintState(source_state_id, fname);
+    string fname = debug_dir_ + "expansion_depth_" + to_string(source_state_id) + ".png";
+    string cname = debug_dir_ + "expansion_color_" + to_string(source_state_id) + ".png";
+    PrintState(source_state_id, fname, cname);
   }
 
   vector<int> candidate_succ_ids;
@@ -1056,16 +1081,22 @@ void EnvObjectRecognition::GetLazySuccs(int source_state_id,
       candidate_succs[ii].object_states().back();
     GraphState single_object_graph_state;
     single_object_graph_state.AppendObject(last_object_state);
-
+    // Get unadjusted depth image from cache
     const bool valid_state = GetSingleObjectDepthImage(single_object_graph_state,
                                                        &input_unit.unadjusted_last_object_depth_image, false);
 
     if (!valid_state) {
       continue;
     }
-
+    // Get adjusted depth image from cache
     GetSingleObjectDepthImage(single_object_graph_state,
                               &input_unit.adjusted_last_object_depth_image, true);
+    if (kUseHistogramLazy) {
+      // Get adjusted histogram score from cache
+      GetSingleObjectHistogramScore(single_object_graph_state, 
+                                    input_unit.adjusted_last_object_histogram_score);
+    }
+    // Get adjusted state corresponding to unadjusted state from cache
     assert(adjusted_single_object_state_cache_.find(single_object_graph_state) !=
            adjusted_single_object_state_cache_.end());
     input_unit.adjusted_last_object_state =
@@ -1182,7 +1213,8 @@ int EnvObjectRecognition::GetTrueCost(int source_state_id,
                              &output_unit.state_properties, &output_unit.depth_image,
                              &output_unit.color_image,
                              &output_unit.unadjusted_depth_image,
-                             &output_unit.unadjusted_color_image);
+                             &output_unit.unadjusted_color_image,
+                             output_unit.histogram_score);
 
   bool invalid_state = output_unit.cost == -1;
 
@@ -1293,14 +1325,74 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   }
 }
 
+bool EnvObjectRecognition::IsValidHistogram(
+        cv::Mat last_cv_obj_color_image, double threshold, double &base_distance) 
+{
+  // Get mask corresponding to non-zero pixels in rendered image
+  cv::Mat mask, observed_image_segmented;
+  cv::cvtColor(last_cv_obj_color_image, mask, CV_BGR2GRAY);
+  mask = mask > 0;
+  // cv_input_color_image.copyTo(observed_image_segmented, mask);
+
+  // Crop rendered and observed image to this mask
+  cv::Mat Points;
+  cv::findNonZero(mask, Points);
+  cv::Rect bounding_box = cv::boundingRect(Points);
+  observed_image_segmented = cv_input_color_image(bounding_box);
+  cv::Mat last_cv_obj_color_image_cropped = last_cv_obj_color_image(bounding_box);
+
+  // cv::findNonZero(last_cv_obj_color_image, mask);
+  // cv::threshold( src_gray, dst, threshold_value, max_BINARY_value,threshold_type );
+  // cv::imshow("valid image", mask);
+  int channels[] = { 0, 1 };
+  int h_bins = 50; int s_bins = 60;
+  int histSize[] = { h_bins, s_bins };
+  cv::MatND hist_base, hist_test1;
+  cv::Mat hsv_base, hsv_test1;
+  float h_ranges[] = { 0, 180 };
+  float s_ranges[] = { 0, 256 };
+  const float* ranges[] = { h_ranges, s_ranges };
+
+  cv::cvtColor( observed_image_segmented, hsv_base, CV_BGR2HSV );
+  cv::cvtColor( last_cv_obj_color_image_cropped, hsv_test1, CV_BGR2HSV );
+
+  cv::calcHist( &hsv_base, 1, channels, cv::Mat(), hist_base, 2, histSize, ranges, true, false );
+  // Make all values between 0 and 1
+  cv::normalize( hist_base, hist_base, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
+
+  cv::calcHist( &hsv_test1, 1, channels, cv::Mat(), hist_test1, 2, histSize, ranges, true, false );
+  cv::normalize( hist_test1, hist_test1, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
+
+  // using bhattacharya distance, lesser value means histograms are more similar
+  base_distance = cv::compareHist( hist_base, hist_test1, 3 );
+  // double base_distance = cv::compareHist( hist_base, hist_test1, 2 );
+  printf("Histogram comparison : %f\n", base_distance);
+  
+  
+
+  if (base_distance > threshold) {
+    // int random = rand() % 500 + 1;
+    cv::Mat merge;
+    cv::hconcat(last_cv_obj_color_image_cropped, observed_image_segmented, merge);
+    std::string cfname = debug_dir_ + "rejected_histogram_match_" + to_string(rejected_histogram_count) + ".png";
+    cv::imwrite(cfname.c_str(), merge);
+    rejected_histogram_count++;
+    // cv::imshow("rendered_image", merge);
+    // cv::waitKey(500);
+    return false;
+  }
+  return true;
+}
 
 int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
                                       const GraphState &child_state,
                                       const std::vector<unsigned short> &source_depth_image,
+                                      const vector<vector<unsigned char>> &source_color_image,
                                       const std::vector<unsigned short> &unadjusted_last_object_depth_image,
                                       const std::vector<unsigned short> &adjusted_last_object_depth_image,
                                       const GraphState &adjusted_last_object_state,
                                       const std::vector<int> &parent_counted_pixels,
+                                      const double adjusted_last_object_histogram_score,
                                       GraphState *adjusted_child_state,
                                       GraphStateProperties *child_properties,
                                       vector<unsigned short> *final_depth_image) {
@@ -1315,6 +1407,20 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   ContPose child_pose = last_object.cont_pose();
   int last_object_id = last_object.id();
 
+  // RGB Aditya
+  cv::Mat last_cv_obj_depth_image, last_cv_obj_color_image;
+  vector<unsigned short> last_obj_depth_image;
+  vector<vector<unsigned char>> last_obj_color_image;
+  const float *succ_depth_buffer;
+  if (kUseColorCost)
+  {
+    GraphState s_new_obj;
+    s_new_obj.AppendObject(ObjectState(last_object_id,
+                                      obj_models_[last_object_id].symmetric(), child_pose));
+    succ_depth_buffer = GetDepthImage(s_new_obj, &last_obj_depth_image, &last_obj_color_image,
+                                      &last_cv_obj_depth_image, &last_cv_obj_color_image);
+  }
+
   ContPose pose_in(child_pose),
            pose_out(child_pose);
   PointCloudPtr cloud_in(new PointCloud);
@@ -1324,9 +1430,30 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   unsigned short succ_min_depth, succ_max_depth;
   vector<int> new_pixel_indices;
 
+  // RGB Aditya
   vector<unsigned short> child_depth_image;
-  GetComposedDepthImage(source_depth_image, unadjusted_last_object_depth_image,
-                        &child_depth_image);
+  vector<vector<unsigned char>> child_color_image;
+  if (kUseColorCost)
+  {
+      GetComposedDepthImage(source_depth_image, source_color_image,
+                            last_obj_depth_image, last_obj_color_image,
+                            &child_depth_image, &child_color_image);
+  }
+  else 
+  {
+      GetComposedDepthImage(source_depth_image, unadjusted_last_object_depth_image,
+                            &child_depth_image);
+      last_obj_depth_image = unadjusted_last_object_depth_image;
+  }
+  // GetComposedDepthImage(source_depth_image, source_color_image,
+  //                     unadjusted_last_object_depth_image, last_obj_color_image,
+  //                     &child_depth_image, &child_color_image);
+  
+  if (image_debug_)
+  {
+    std::string imn = "last_obj_depth_image.png";
+    // PrintImage(imn, last_obj_depth_image, true);
+  }
 
   if (IsOccluded(source_depth_image, child_depth_image, &new_pixel_indices,
                  &succ_min_depth,
@@ -1337,21 +1464,33 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   vector<unsigned short> new_obj_depth_image(kDepthImageWidth *
                                              kDepthImageHeight, kKinectMaxDepth);
 
+  // RGB Aditya
+  vector<unsigned char> color_vector{'0','0','0'};
+  vector<vector<unsigned char>> new_obj_color_image(kDepthImageWidth *
+                                             kDepthImageHeight, color_vector);
   // Do ICP alignment on object *only* if it has been occluded by an existing
   // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
 
+  // if (static_cast<int>(new_pixel_indices.size()) != GetNumValidPixels(
+  //       unadjusted_last_object_depth_image)) {
   if (static_cast<int>(new_pixel_indices.size()) != GetNumValidPixels(
-        unadjusted_last_object_depth_image)) {
+        last_obj_depth_image)) {
 
     for (size_t ii = 0; ii < new_pixel_indices.size(); ++ii) {
       new_obj_depth_image[new_pixel_indices[ii]] =
         child_depth_image[new_pixel_indices[ii]];
+      
+      // RGB Aditya
+      if (kUseColorCost)
+        new_obj_color_image[new_pixel_indices[ii]] =
+          child_color_image[new_pixel_indices[ii]];
     }
-
+    
     // Create point cloud (cloud_in) corresponding to new pixels.
-    cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image);
+    cloud_in = GetGravityAlignedPointCloud(new_obj_depth_image, new_obj_color_image);
 
     // Begin ICP Adjustment
+    // ICP needs to happend with both objects in the image, so full state is needed
     GetICPAdjustedPose(cloud_in, pose_in, cloud_out, &pose_out,
                        parent_counted_pixels);
 
@@ -1374,9 +1513,24 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
       return -1;
     }
 
-    // The first operation removes self occluding points, and the second one
-    // removes points occluded by other objects in the scene.
-    new_obj_depth_image = GetDepthImageFromPointCloud(cloud_out);
+    // RGB Aditya
+    if (kUseColorCost) {
+      int num_occluders = 0;
+      succ_depth_buffer = GetDepthImage(
+        *adjusted_child_state, &new_obj_depth_image, &new_obj_color_image, 
+        last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, false
+      );
+    } else {
+      // The first operation removes self occluding points, and the second one
+      // removes points occluded by other objects in the scene.
+      // Need to Remove other objects, so that cost computation can be lazy
+      new_obj_depth_image = GetDepthImageFromPointCloud(cloud_out);
+    }
+    if (image_debug_)
+    {
+      std::string imn = "new_obj_depth_image_icp.png";
+      // PrintImage(imn, new_obj_depth_image, true);
+    }
 
     vector<int> new_pixel_indices_unused;
 
@@ -1390,11 +1544,14 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     child_properties->last_min_depth = succ_min_depth;
     child_properties->last_min_depth = succ_max_depth;
 
-    new_obj_depth_image = ApplyOcclusionMask(new_obj_depth_image,
-                                             source_depth_image);
+    if (!kUseColorCost) {
+      new_obj_depth_image = ApplyOcclusionMask(new_obj_depth_image,
+                                              source_depth_image);
+    }
 
   } else {
-    new_obj_depth_image = adjusted_last_object_depth_image;
+    // If there is no occlusion, no need to do ICP, just use the corresponding ICP adjusted state
+    // generated at the first level
     int last_idx = child_state.NumObjects() - 1;
     assert(last_idx >= 0);
     assert(adjusted_last_object_state.object_states().size() > 0);
@@ -1402,6 +1559,25 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     const auto &last_object = adjusted_last_object_state.object_states().back();
     adjusted_child_state->mutable_object_states()[last_idx] =
       last_object;
+
+    // RGB Aditya
+    if (kUseHistogramLazy) {
+      printf("Got cached histogram score : %f\n", adjusted_last_object_histogram_score);
+      if (adjusted_last_object_histogram_score > 0.85) {
+        printf("Rejecting because of low histogram score\n");
+        return -1;
+      }
+    }
+    if (kUseColorCost) {
+      int num_occluders = 0;
+      GraphState s = adjusted_last_object_state;
+      succ_depth_buffer = GetDepthImage(
+        s, &new_obj_depth_image, &new_obj_color_image, 
+        last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, false
+      );
+    } else {
+      new_obj_depth_image = adjusted_last_object_depth_image;
+    }
 
     if (!IsValidPose(source_state, last_object_id,
                      last_object.cont_pose(), true)) {
@@ -1422,9 +1598,24 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
 
     child_properties->last_min_depth = succ_min_depth;
     child_properties->last_min_depth = succ_max_depth;
+
+    // std::string imn = "adjusted_last_object_depth_image.png";
+    // PrintImage(imn, new_obj_depth_image, true);
+    // cv::imshow("valid image", last_cv_obj_color_image);
+    // cv::waitKey(100);
+    
   }
 
-  cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image);
+  // if (kUseHistogramLazy)
+  // {
+  //   double histogram_distance;
+  //   if (!IsValidHistogram(last_cv_obj_color_image, 0.80, histogram_distance)) {
+  //     return -1;
+  //   }
+  // }
+
+  cloud_out = GetGravityAlignedPointCloud(new_obj_depth_image, new_obj_color_image);
+
 
   // Compute costs
   // const bool last_level = static_cast<int>(child_state.NumObjects()) ==
@@ -1446,6 +1637,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   child_properties->last_level_cost = 0;
 
   total_cost = source_cost + target_cost + last_level_cost;
+  printf("Cost of this state : %d\n", total_cost);
 
   // std::stringstream cloud_ss;
   // cloud_ss.precision(20);
@@ -1465,10 +1657,20 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   //   writer.writeBinary (ss2.str()  , *cloud_out);
   //   writer.writeBinary (ss3.str()  , *succ_cloud);
   // }
-
-  GetComposedDepthImage(source_depth_image,
-                        new_obj_depth_image,
-                        final_depth_image);
+  if (image_debug_) {
+    if (IsMaster(mpi_comm_)) {
+      // PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
+    }
+    std::string imn = "new_obj_depth_image_final.png";
+    // PrintImage(imn, new_obj_depth_image, true);
+    // cv::imshow("valid image", last_cv_obj_color_image);
+    // cv::waitKey(100);
+  }
+  // RGB Aditya
+  *final_depth_image = new_obj_depth_image;
+  // GetComposedDepthImage(source_depth_image,
+  //                       new_obj_depth_image,
+  //                       final_depth_image);
   return total_cost;
 }
 
@@ -1482,7 +1684,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                   vector<unsigned short> *final_depth_image,
                                   vector<vector<unsigned char>> *final_color_image,
                                   vector<unsigned short> *unadjusted_depth_image,
-                                  vector<vector<unsigned char>> *unadjusted_color_image) {
+                                  vector<vector<unsigned char>> *unadjusted_color_image,
+                                  double &histogram_score) {
 
   std::cout << "GetCost() : Getting cost for state " << endl;
   assert(child_state.NumObjects() > 0);
@@ -1601,10 +1804,10 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   // num_occluders is the number of valid pixels in the input depth image that
   // occlude the rendered scene corresponding to adjusted_child_state.
   int num_occluders = 0;
+  cv::Mat cv_depth_image_temp, cv_depth_color_temp;
 
   if (env_params_.use_external_render == 0)
   {
-      cv::Mat cv_depth_image_temp, cv_depth_color_temp;
       succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image, &color_image, 
                                           cv_depth_image_temp, cv_depth_color_temp, &num_occluders, false);
   }
@@ -1658,6 +1861,13 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   child_properties->last_min_depth = succ_min_depth;
   child_properties->last_max_depth = succ_max_depth;
 
+  if (kUseHistogramLazy && child_state.NumObjects() == 1)
+  {
+    if (!IsValidHistogram(cv_depth_color_temp, 0.85, histogram_score)) {
+      printf("Rejecting because of histogram from GetCost()\n");
+      return -1;
+    }
+  }
   // Compute costs
   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
                           env_params_.num_objects;
@@ -1694,13 +1904,24 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   }
 
 
-  unadjusted_color_image->clear();
-  unadjusted_color_image->shrink_to_fit();
+  // unadjusted_color_image->clear();
+  // unadjusted_color_image->shrink_to_fit();
   // unadjusted_depth_image->clear();
   // unadjusted_depth_image->shrink_to_fit();
 
   *final_depth_image = depth_image;
 
+  // if (source_state.NumObjects() == 0)
+  // {
+  //   // Store color images in output unit
+  //   *final_color_image = color_image;
+  // }
+  // else
+  {
+    // Dont store color images in output unit
+    unadjusted_color_image->clear();
+    unadjusted_color_image->shrink_to_fit();
+  }
   // final_color_image->clear();
   // final_color_image->shrink_to_fit();
   // *final_color_image = color_image;
@@ -2771,6 +2992,65 @@ void EnvObjectRecognition::CVToShort(cv::Mat *input_depth_image,
     std::cout << "CVToShort() took "
               << std::chrono::duration_cast<milli>(finish - start).count()
               << " milliseconds\n";
+}
+
+void EnvObjectRecognition::PrintImage(string fname,
+                                      const vector<unsigned short> &depth_image,
+                                      bool show_image_window) {
+
+  assert(depth_image.size() != 0);
+  static cv::Mat image;
+  image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+
+  const double range = double(max_observed_depth_ - min_observed_depth_);
+
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      int idx = ii * kDepthImageWidth + jj;
+      if (depth_image[idx] >= kKinectMaxDepth) {
+        image.at<uchar>(ii, jj) = 0;
+      } else {
+        image.at<uchar>(ii, jj) = 255;
+      }
+      // printf("%d\n", depth_image[idx]);
+      // if (depth_image[idx] > max_observed_depth_ ||
+      //     depth_image[idx] == kKinectMaxDepth) {
+      //   image.at<uchar>(ii, jj) = 0;
+      // } 
+      // else if (depth_image[idx] < min_observed_depth_) {
+      //   image.at<uchar>(ii, jj) = 255;
+      // } 
+      // else {
+      //   image.at<uchar>(ii, jj) = static_cast<uchar>(255.0 - double(
+      //                                                  depth_image[idx] - min_observed_depth_) * 255.0 / range);
+      // }
+    }
+  }
+
+  static cv::Mat c_image;
+  cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
+
+  // Convert background to white to make pretty.
+  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+      if (image.at<uchar>(ii, jj) == 0) {
+        c_image.at<cv::Vec3b>(ii, jj)[0] = 0;
+        c_image.at<cv::Vec3b>(ii, jj)[1] = 0;
+        c_image.at<cv::Vec3b>(ii, jj)[2] = 0;
+      }
+    }
+  }
+
+  cv::imwrite(fname.c_str(), c_image);
+
+  if (show_image_window) {
+    // if (fname.find("expansion") != string::npos) {
+      cv::imshow(fname, image);
+      cv::waitKey(10);
+    // }
+  }
+
+  //http://docs.opencv.org/modules/contrib/doc/facerec/colormaps.html
 }
 
 void EnvObjectRecognition::PrintImage(string fname,
@@ -4169,46 +4449,9 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
                   if (kUseHistogramPruning)
                   {
-                    cv::Mat mask, observed_image_segmented;
-                    cv::cvtColor(last_cv_obj_color_image, mask, CV_BGR2GRAY);
-                    mask = mask > 0;
-                    // cv_input_color_image.copyTo(observed_image_segmented, mask);
-
-
-                    cv::Mat Points;
-                    cv::findNonZero(mask, Points);
-                    cv::Rect bounding_box = cv::boundingRect(Points);
-                    observed_image_segmented = cv_input_color_image(bounding_box);
-                    cv::Mat last_cv_obj_color_image_cropped = last_cv_obj_color_image(bounding_box);
-
-                    // cv::findNonZero(last_cv_obj_color_image, mask);
-                    // cv::threshold( src_gray, dst, threshold_value, max_BINARY_value,threshold_type );
-                    // cv::imshow("valid image", mask);
-                    int channels[] = { 0, 1 };
-                    int h_bins = 50; int s_bins = 60;
-                    int histSize[] = { h_bins, s_bins };
-                    cv::MatND hist_base, hist_test1;
-                    cv::Mat hsv_base, hsv_test1;
-                    float h_ranges[] = { 0, 180 };
-                    float s_ranges[] = { 0, 256 };
-                    const float* ranges[] = { h_ranges, s_ranges };
-
-                    cv::cvtColor( observed_image_segmented, hsv_base, CV_BGR2HSV );
-                    cv::cvtColor( last_cv_obj_color_image_cropped, hsv_test1, CV_BGR2HSV );
-
-                    cv::calcHist( &hsv_base, 1, channels, cv::Mat(), hist_base, 2, histSize, ranges, true, false );
-                    cv::normalize( hist_base, hist_base, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
-
-                    cv::calcHist( &hsv_test1, 1, channels, cv::Mat(), hist_test1, 2, histSize, ranges, true, false );
-                    cv::normalize( hist_test1, hist_test1, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
-
-                    // using bhattacharya distance, lesser value means histograms are more similar
-                    double base_test1 = cv::compareHist( hist_base, hist_test1, 3 );
-                    printf("Histogram comparison : %f\n", base_test1);
-                    
-                    
-
-                    if (base_test1 <= 0.90) {
+                    double histogram_distance;
+                    if (IsValidHistogram(last_cv_obj_color_image, 0.9, histogram_distance)) 
+                    {
                       if (s.object_states().size() == 1 && perch_params_.vis_successors) 
                       {
                         // Write successors only once even if pruning is on
@@ -4223,6 +4466,61 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                       succ_states->push_back(s);
                       succ_count += 1;
                     }
+                    
+                    // cv::Mat mask, observed_image_segmented;
+                    // cv::cvtColor(last_cv_obj_color_image, mask, CV_BGR2GRAY);
+                    // mask = mask > 0;
+                    // // cv_input_color_image.copyTo(observed_image_segmented, mask);
+
+
+                    // cv::Mat Points;
+                    // cv::findNonZero(mask, Points);
+                    // cv::Rect bounding_box = cv::boundingRect(Points);
+                    // observed_image_segmented = cv_input_color_image(bounding_box);
+                    // cv::Mat last_cv_obj_color_image_cropped = last_cv_obj_color_image(bounding_box);
+
+                    // // cv::findNonZero(last_cv_obj_color_image, mask);
+                    // // cv::threshold( src_gray, dst, threshold_value, max_BINARY_value,threshold_type );
+                    // // cv::imshow("valid image", mask);
+                    // int channels[] = { 0, 1 };
+                    // int h_bins = 50; int s_bins = 60;
+                    // int histSize[] = { h_bins, s_bins };
+                    // cv::MatND hist_base, hist_test1;
+                    // cv::Mat hsv_base, hsv_test1;
+                    // float h_ranges[] = { 0, 180 };
+                    // float s_ranges[] = { 0, 256 };
+                    // const float* ranges[] = { h_ranges, s_ranges };
+
+                    // cv::cvtColor( observed_image_segmented, hsv_base, CV_BGR2HSV );
+                    // cv::cvtColor( last_cv_obj_color_image_cropped, hsv_test1, CV_BGR2HSV );
+
+                    // cv::calcHist( &hsv_base, 1, channels, cv::Mat(), hist_base, 2, histSize, ranges, true, false );
+                    // cv::normalize( hist_base, hist_base, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
+
+                    // cv::calcHist( &hsv_test1, 1, channels, cv::Mat(), hist_test1, 2, histSize, ranges, true, false );
+                    // cv::normalize( hist_test1, hist_test1, 0, 1, cv::NORM_MINMAX, -1, cv::Mat() );
+
+                    // // using bhattacharya distance, lesser value means histograms are more similar
+                    // double base_test1 = cv::compareHist( hist_base, hist_test1, 3 );
+                    // printf("Histogram comparison : %f\n", base_test1);
+                    
+                    
+
+                    // if (base_test1 <= 0.90) {
+                    //   if (s.object_states().size() == 1 && perch_params_.vis_successors) 
+                    //   {
+                    //     // Write successors only once even if pruning is on
+                    //     cv::imwrite(color_image_path, last_cv_obj_color_image);
+                    //     if (IsMaster(mpi_comm_)) {
+                    //       cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+                    //       PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                    //       // cv::imshow("valid image", last_cv_obj_color_image);
+                    //     }
+                    //   }
+                    //   valid_succ_cache[ii].push_back(new_object);
+                    //   succ_states->push_back(s);
+                    //   succ_count += 1;
+                    // }
 
                     // cv::Mat merge;
                     // cv::hconcat(last_cv_obj_color_image, observed_image_segmented, merge);
@@ -4459,6 +4757,22 @@ bool EnvObjectRecognition::GetSingleObjectDepthImage(const GraphState
 
   *single_object_depth_image =
     cache[single_object_graph_state];
+
+  return true;
+}
+
+bool EnvObjectRecognition::GetSingleObjectHistogramScore(const GraphState
+                                                     &single_object_graph_state, double &histogram_score) {
+  assert(single_object_graph_state.NumObjects() == 1);
+
+  // TODO: Verify there are no cases where this will fail.
+  if (adjusted_single_object_histogram_score_cache_.find(single_object_graph_state) ==
+      adjusted_single_object_histogram_score_cache_.end()) {
+    return false;
+  }
+
+  histogram_score =
+    adjusted_single_object_histogram_score_cache_[single_object_graph_state];
 
   return true;
 }

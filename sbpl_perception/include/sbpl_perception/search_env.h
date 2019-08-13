@@ -164,6 +164,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintState(GraphState s, std::string fname, std::string cfname);
   void PrintImage(std::string fname,
                   const std::vector<unsigned short> &depth_image);
+  void PrintImage(std::string fname,
+                  const std::vector<unsigned short> &depth_image,
+                  bool show_image_window);
 
   // Return the depth image rendered according to object poses in state s. Will
   // also return the number of points in the input cloud that occlude any of
@@ -384,7 +387,13 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<GraphState, std::vector<unsigned short>>
                                                            adjusted_single_object_depth_image_cache_;
   std::unordered_map<GraphState, GraphState> adjusted_single_object_state_cache_;
-
+  // Maps state hash to color image.
+  std::unordered_map<GraphState, std::vector<std::vector<unsigned char>>>
+                                                           unadjusted_single_object_color_image_cache_;
+  std::unordered_map<GraphState, std::vector<std::vector<unsigned char>>>
+                                                           adjusted_single_object_color_image_cache_;
+  std::unordered_map<GraphState, double>
+                                    adjusted_single_object_histogram_score_cache_;
   // pcl::search::OrganizedNeighbor<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr knn;
   pcl::search::KdTree<PointT>::Ptr projected_knn_;
@@ -430,6 +439,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   bool GetSingleObjectDepthImage(const GraphState &single_object_graph_state,
                                  std::vector<unsigned short> *single_object_depth_image, bool after_refinement);
 
+  bool GetSingleObjectHistogramScore(const GraphState &single_object_graph_state,
+                                      double &histogram_score);
+
   // Computes the cost for the parent-child edge. Returns the adjusted child state, where the pose
   // of the last added object is adjusted using ICP and the computed state properties.
   int GetCost(const GraphState &source_state, const GraphState &child_state,
@@ -442,7 +454,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
               std::vector<unsigned short> *adjusted_child_depth_image,
               std::vector<std::vector<unsigned char>> *adjusted_child_color_image,
               std::vector<unsigned short> *unadjusted_child_depth_image,
-              std::vector<std::vector<unsigned char>> *unadjusted_child_color_image);
+              std::vector<std::vector<unsigned char>> *unadjusted_child_color_image,
+              double &histogram_score);
 
   double getColorDistanceCMC(uint32_t rgb_1, uint32_t rgb_2) const;
   double getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const;
@@ -469,10 +482,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // unadjusted child depth image (pre-ICP).
   int GetLazyCost(const GraphState &source_state, const GraphState &child_state,
                   const std::vector<unsigned short> &source_depth_image,
+                  const std::vector<std::vector<unsigned char>> &source_color_image,                  
                   const std::vector<unsigned short> &unadjusted_last_object_depth_image,
                   const std::vector<unsigned short> &adjusted_last_object_depth_image,
                   const GraphState &adjusted_last_object_state,
                   const std::vector<int> &parent_counted_pixels,
+                  const double adjusted_last_object_histogram_score,
                   GraphState *adjusted_child_state,
                   GraphStateProperties *state_properties,
                   std::vector<unsigned short> *final_depth_image);
@@ -486,6 +501,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   bool IsValidPose(GraphState s, int model_id, ContPose p,
                    bool after_refinement) const;
+
+  int rejected_histogram_count = 0;
+  bool IsValidHistogram(cv::Mat last_cv_obj_color_image, double threshold, double &base_distance);
 
   void LabelEuclideanClusters();
   std::vector<unsigned short> GetDepthImageFromPointCloud(
