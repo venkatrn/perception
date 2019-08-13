@@ -51,8 +51,6 @@
 #include <ColorSpace/Comparison.h>
 #include <chrono>
 
-#include "ICP/ICPOdometry.h"
-
 namespace sbpl_perception {
 
 struct EnvConfig {

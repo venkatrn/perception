@@ -22,7 +22,7 @@ find_package(ZLIB)
 
 include_directories(${ZLIB_INCLUDE_DIRS})
 # Load catkin and all dependencies required for this package
-find_package(CUDA REQUIRED)
+#find_package(CUDA REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
@@ -36,11 +36,10 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   rospy
   sbpl_utils
-  ICP
 )
 
 
-include_directories(${CUDA_INCLUDE_DIRS})
+#include_directories(${CUDA_INCLUDE_DIRS})
 
 #find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
 
@@ -108,7 +107,6 @@ catkin_package(
     rospy
     eigen_conversions
     visualization_msgs
-    ICP
   DEPENDS
     # OpenCV
     #MPI
@@ -143,8 +141,8 @@ add_library(${PROJECT_NAME}
 #        ${MPI_ROOT}/lib/libmpi.so)
 #message(WARNING ${catkin_LIBRARIES})
 
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES} ${CUDA_LIBRARIES} ${Pangolin_LIBRARIES}
-  #${MPI_CXX_LIBRARIES}
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES} ${Pangolin_LIBRARIES}
+  #${MPI_CXX_LIBRARIES} ${CUDA_LIBRARIES}
   #${PCL_LIBRARIES} ${OpenCV_LIBRARIES} /usr/lib/libvtkCommon.so.5.10 /usr/lib/libvtkFiltering.so.5.10 /usr/lib/libvtkRendering.so.5.10 /usr/lib/libvtkIO.so.5.10
   # ${MPI_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so
   #/usr/lib/libvtkGraphics.so.5.10
