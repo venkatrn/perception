@@ -18,9 +18,9 @@ https://github.com/venkatrn/sbpl_utils.git
 https://github.com/IntelRealSense/realsense-ros
 ```
 2. Install Open CV 2.4 if not already installed. You can follow steps on the <a href="https://docs.opencv.org/2.4/doc/tutorials/introduction/linux_install/linux_install.html">Open CV website</a>
-3. Install gsl library :
+3. Install gsl, vtk library :
 ```
-sudo apt-get install libgsl-dev
+sudo apt-get install libgsl-dev libvtk6-dev
 ```
 4. Compile the packages in the catkin_ws
 5. If you get compilation errors in ```octree_pointcloud_changedetector.h```, follow steps <a href="https://github.com/PointCloudLibrary/pcl/issues/2564">here</a> to fix
