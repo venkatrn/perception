@@ -32,8 +32,9 @@ object_recognition_node/launch/roman_object_recognition_robot.launch
 ```
 sbpl_perception/config/roman_camera_config.yaml
 ```
-7. Launch camera and code using (the transforms should be being published by another code) : 
+7. Launch camera and code using (the transforms should be being published by another code or bag file, dont launch camera if using bag file) : 
 ```
 roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false
 roslaunch realsense2_camera rs_rgbd.launch camera:=/head_camera publish_tf:=false
 ```
+8. To test you can download sample bag file from this <a ref="https://drive.google.com/file/d/1X4yzLiQTnaXYLKMgNcFwvKDNLZDHyxPz/view?usp=sharing">link</a>
