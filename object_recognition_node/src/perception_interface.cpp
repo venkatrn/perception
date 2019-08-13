@@ -249,7 +249,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   // Convert to ROS data type
   pcl_conversions::fromPCL(outputPCL, output);
 
-  for (int i = 0; i < 100; i++)
+  for (int i = 0; i < 10; i++)
     filtered_point_cloud_pub_.publish(output);
 
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
