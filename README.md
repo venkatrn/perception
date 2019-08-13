@@ -32,10 +32,13 @@ object_recognition_node/launch/roman_object_recognition_robot.launch
 ```
 sbpl_perception/config/roman_camera_config.yaml
 ```
-8. To test with real data you can download sample bag file from this <a href="https://drive.google.com/file/d/1X4yzLiQTnaXYLKMgNcFwvKDNLZDHyxPz/view?usp=sharing">link</a> or if using a robot, run Realsense using :
-```
-roslaunch realsense2_camera rs_rgbd.launch camera:=/head_camera publish_tf:=false
-```
+8. To test with real data you can download sample bag file from these links :
+* <a href="https://drive.google.com/file/d/1X4yzLiQTnaXYLKMgNcFwvKDNLZDHyxPz/view?usp=sharing">Bag 1</a>
+* <a href="https://drive.google.com/file/d/196hBLNwqhEgh-8tK8u-tqNAjxM6xgTaY/view?usp=sharing">Bag 2</a> 
+* Or if using a robot, run Realsense using :
+  ```
+  roslaunch realsense2_camera rs_rgbd.launch camera:=/head_camera publish_tf:=false
+  ```
 7. Launch the code and RVIZ visualization using (the transforms between camera and base of robot should be being published by another node or bag file). The launch file is configured to use 4 cores for parallelization. To change this, change the number in this line - ```mpirun -n 4``` : 
 ```
 roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false
