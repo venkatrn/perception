@@ -32,8 +32,15 @@ object_recognition_node/launch/roman_object_recognition_robot.launch
 ```
 sbpl_perception/config/roman_camera_config.yaml
 ```
-7. Launch camera and code using (the transforms should be being published by another code) : 
+8. To test with real data you can download sample bag file from this <a href="https://drive.google.com/file/d/1X4yzLiQTnaXYLKMgNcFwvKDNLZDHyxPz/view?usp=sharing">link</a> or if using a robot, run Realsense using :
 ```
-roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false
 roslaunch realsense2_camera rs_rgbd.launch camera:=/head_camera publish_tf:=false
 ```
+7. Launch the code and RVIZ visualization using (the transforms between camera and base of robot should be being published by another node or bag file) : 
+```
+roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false
+```
+8. The command ```rostopic pub /requested_object std_msgs/String "data: 'test'"``` needs to be run to launch the code. This will start the algorithm once input point cloud and transform between camera and robot base has been received. The input point cloud, successors and output pose of crate (the crate model is published as a marker with the detected pose) can be seen in RVIZ. The config file for rviz that needs to be loadd is stored in ```object_recognition_node/rviz/realsense_camera_robot.rviz```. Sample RVIZ output when this config is used :
+
+
+
