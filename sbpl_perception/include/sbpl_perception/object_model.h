@@ -21,9 +21,9 @@
 #include <pcl/PolygonMesh.h>
 #include <pcl/filters/voxel_grid.h>
 #include <algorithm> 
-#include <ColorSpace/ColorSpace.h>
-#include <ColorSpace/Conversion.h>
-#include <ColorSpace/Comparison.h>
+#include <sbpl_perception/ColorSpace/ColorSpace.h>
+#include <sbpl_perception/ColorSpace/Conversion.h>
+#include <sbpl_perception/ColorSpace/Comparison.h>
 
 // TODO: use config manager.
 // If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.

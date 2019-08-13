@@ -236,7 +236,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
   // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.28);
+  // pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.28);
+  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.35);
   pt_filter.filter(*table_removed_cloud);
 
   printf("table_removed_cloud size : %d\n", table_removed_cloud->size());
@@ -419,12 +420,12 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
           marker.action = visualization_msgs::Marker::ADD;
           marker.pose.position = msg.pose.position;
           marker.pose.orientation = msg.pose.orientation;
-          marker.scale.x = 0.01;
-          marker.scale.y = 0.01;
-          marker.scale.z = 0.01;
-          // marker.scale.x = 1;
-          // marker.scale.y = 1;
-          // marker.scale.z = 1;
+          // marker.scale.x = 0.01;
+          // marker.scale.y = 0.01;
+          // marker.scale.z = 0.01;
+          marker.scale.x = 1;
+          marker.scale.y = 1;
+          marker.scale.z = 1;
           marker.color.a = 0.8; // Don't forget to set the alpha!
           marker.color.r = red;
           marker.color.g = green;

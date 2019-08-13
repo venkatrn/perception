@@ -107,8 +107,9 @@ bool ObjectLocalizerService::LocalizerHelper(const
   mpi_world->barrier();
   broadcast(*mpi_world, recognition_input, kMasterRank);
 
+  std::vector<Eigen::Affine3f> preprocessing_object_transforms;
   const bool found_solution = object_recognizer.LocalizeObjects(
-                                recognition_input, object_transforms);
+                                recognition_input, object_transforms, &preprocessing_object_transforms);
 
   return found_solution;
 }

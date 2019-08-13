@@ -66,6 +66,8 @@ namespace {
 
   constexpr double kColorDistanceThreshold = 20; // m
 
+  constexpr double kNormalizeCostBase = 100;
+
   bool kUseColorCost = true;
 
   bool kUseColorPruning = false;
