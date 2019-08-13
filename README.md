@@ -22,3 +22,9 @@ https://github.com/venkatrn/sbpl_utils.git
 sudo apt-get install libgsl-dev
 ```
 4. Compile the packages in the catkin_ws
+5. If you get compilation errors in ```octree_pointcloud_changedetector.h```, follow steps <a href="https://github.com/PointCloudLibrary/pcl/issues/2564">here</a> to fix
+6. Check parameters (frame names etc.) in the launch file :
+```
+object_recognition_node/launch/roman_object_recognition_robot.launch
+```
+7. Launch camera and code using (the transforms should be being published by another code) : 
