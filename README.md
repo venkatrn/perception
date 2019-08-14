@@ -4,6 +4,13 @@ Overview
 --------
 This library provides implementations for single and multi-object instance localization from RGB-D sensor (MS Kinect, ASUS Xtion etc.) data. These are based on the <a href="http://www.cs.cmu.edu/~venkatrn/papers/icra16a.pdf">PERCH (Perception via Search)</a> and <a href="http://www.cs.cmu.edu/~venkatrn/papers/rss16.pdf">D2P (Discriminatively-guided Deliberative Perception)</a> algorithms.
 
+Features
+------------
+* Detect single objects in 3D space (in a tabletop setting) in under 10s
+* No pretraining required
+* Works with depth data from typical RGBD cameras
+* Get high detection accuracies required for tasks such as robotic manipulation 
+
 Requirements
 ------------
 - Ubuntu 16.04+
