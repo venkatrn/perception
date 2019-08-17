@@ -11,7 +11,7 @@
 #include <kinect_sim/scene.h>
 #include <kinect_sim/simulation_io.hpp>
 #include <perception_utils/pcl_typedefs.h>
-#include <sbpl/headers.h>
+#include <sbpl_perch/headers.h>
 #include <sbpl_perception/config_parser.h>
 #include <sbpl_perception/graph_state.h>
 #include <sbpl_perception/mpi_utils.h>
@@ -39,6 +39,7 @@
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/statistical_outlier_removal.h>
 
 #include <memory>
 #include <string>

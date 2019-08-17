@@ -31,7 +31,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   roscpp
   roslib
-  sbpl
+  sbpl_perch
   eigen_conversions
   visualization_msgs
   rospy
@@ -61,14 +61,14 @@ set( Boost_LIBRARIES
 #find_package(MPI REQUIRED)
 
 #find_package(PkgConfig REQUIRED)
-#pkg_check_modules(SBPL REQUIRED sbpl)
+#pkg_check_modules(SBPL REQUIRED sbpl_perch)
 #include_directories(${SBPL_INCLUDE_DIRS})
 #link_directories(${SBPL_LIBRARY_DIRS})
 
 find_package(OpenMP)
 # find_package(fcl REQUIRED)
 find_package(octomap REQUIRED)
-find_package(Pangolin REQUIRED)
+# find_package(Pangolin REQUIRED)
 
 find_package(PkgConfig QUIET)
 # pkg_check_modules(FCL REQUIRED fcl)
@@ -102,7 +102,7 @@ catkin_package(
     pcl_ros
     roscpp
     roslib
-    sbpl
+    sbpl_perch
     sbpl_utils
     rospy
     eigen_conversions
@@ -141,7 +141,8 @@ add_library(${PROJECT_NAME}
 #        ${MPI_ROOT}/lib/libmpi.so)
 #message(WARNING ${catkin_LIBRARIES})
 
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES} ${Pangolin_LIBRARIES}
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES} 
+  #${Pangolin_LIBRARIES}
   #${MPI_CXX_LIBRARIES} ${CUDA_LIBRARIES}
   #${PCL_LIBRARIES} ${OpenCV_LIBRARIES} /usr/lib/libvtkCommon.so.5.10 /usr/lib/libvtkFiltering.so.5.10 /usr/lib/libvtkRendering.so.5.10 /usr/lib/libvtkIO.so.5.10
   # ${MPI_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES} ${FCL_LIBRARIES} libvtkCommon.so libvtkFiltering.so libvtkRendering.so libvtkIO.so

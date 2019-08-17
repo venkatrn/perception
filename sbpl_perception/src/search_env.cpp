@@ -374,69 +374,82 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   }
   
   int min_neighbor_points_for_valid_pose = perch_params_.min_neighbor_points_for_valid_pose;
-  int num_neighbors_found = projected_knn_->radiusSearch(point, search_rad,
-                                                         indices,
-                                                         sqr_dists, min_neighbor_points_for_valid_pose); //0.2
+  int num_neighbors_found = 0;
+  
+  if (env_params_.use_external_pose_list != 1) 
+  {
+    num_neighbors_found = projected_knn_->radiusSearch(point, search_rad,
+                                                        indices,
+                                                        sqr_dists, min_neighbor_points_for_valid_pose); //0.2
+  }
+  else
+  {
+    // For 6D cant search in projected cloud so search in original cloud
+    num_neighbors_found = knn->radiusSearch(point, search_rad,
+                                            indices,
+                                            sqr_dists, min_neighbor_points_for_valid_pose); //0.2
+  }
+  
+  
 
   // int min_neighbor_points_for_valid_pose = 50;
   // int num_neighbors_found = downsampled_projected_knn_->radiusSearch(point, search_rad,
   //                                                        indices,
   //                                                        sqr_dists, min_neighbor_points_for_valid_pose); //0.2
 
-  if (env_params_.use_external_pose_list != 1) 
-  {
-    if (num_neighbors_found < min_neighbor_points_for_valid_pose) {
-      // printf("Invalid 1, neighbours found : %d, radius %f\n",num_neighbors_found, search_rad);
-      return false;
-    }
-    else {
-      // PrintPointCloud(obj_models_[model_id].downsampled_mesh_cloud(), 1, downsampled_mesh_cloud_topic);
-      // sensor_msgs::PointCloud2 output;
-      // pcl::PCLPointCloud2 outputPCL;
-      // pcl::toPCLPointCloud2( *obj_models_[model_id].downsampled_mesh_cloud() ,outputPCL);
-      // pcl::toPCLPointCloud2( *downsampled_projected_cloud_ ,outputPCL);
-      // pcl_conversions::fromPCL(outputPCL, output);
-      // output.header.frame_id = env_params_.reference_frame_;
-      // downsampled_mesh_cloud_topic.publish(output);
-      
-      if (kUseColorCost && !after_refinement && kUseColorPruning) {
-        // printf("Color pruning for model : %s\n", obj_models_[model_id].name().c_str());
-        int total_num_color_neighbors_found = 0;
-        for (int i = 0; i < indices.size(); i++)
-        {
-          // Find color matching points in observed point cloud
-          int num_color_neighbors_found =
-              getNumColorNeighboursCMC(
-                downsampled_projected_cloud_->points[indices[i]], obj_models_[model_id].downsampled_mesh_cloud()
-              );
-          total_num_color_neighbors_found += num_color_neighbors_found;
-          // if (num_color_neighbors_found == 0) {
-          //   return false;
-          // }
-        }
-       
-        if ((double)total_num_color_neighbors_found/indices.size() < 0.3) {
-            // printf("Total color neighbours found : %d\n", total_num_color_neighbors_found);
-            // printf("Fraction of points with color neighbours found : %f\n", (double)total_num_color_neighbors_found/indices.size());
-            return false;
-        } else {
-          printf("Total color neighbours found : %d\n", total_num_color_neighbors_found);
-          printf("Fraction of points with color neighbours found : %f\n", (double)total_num_color_neighbors_found/indices.size());
-        }
-      }
-      // if (env_params_.use_external_render == 1) {
-      //   int num_color_neighbors_found =
-      //       getNumColorNeighbours(point, indices, projected_cloud_);
-      //
-      //   printf("Color neighbours : %d\n", num_color_neighbors_found);
-      //
-      //   // if (num_color_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
-      //   if (num_color_neighbors_found == 0) {
-      //       return false;
-      //   }
-      // }
-    }
+  
+  if (num_neighbors_found < min_neighbor_points_for_valid_pose) {
+    // printf("Invalid 1, neighbours found : %d, radius %f\n",num_neighbors_found, search_rad);
+    return false;
   }
+  else {
+    // PrintPointCloud(obj_models_[model_id].downsampled_mesh_cloud(), 1, downsampled_mesh_cloud_topic);
+    // sensor_msgs::PointCloud2 output;
+    // pcl::PCLPointCloud2 outputPCL;
+    // pcl::toPCLPointCloud2( *obj_models_[model_id].downsampled_mesh_cloud() ,outputPCL);
+    // pcl::toPCLPointCloud2( *downsampled_projected_cloud_ ,outputPCL);
+    // pcl_conversions::fromPCL(outputPCL, output);
+    // output.header.frame_id = env_params_.reference_frame_;
+    // downsampled_mesh_cloud_topic.publish(output);
+    
+    if (kUseColorCost && !after_refinement && kUseColorPruning) {
+      // printf("Color pruning for model : %s\n", obj_models_[model_id].name().c_str());
+      int total_num_color_neighbors_found = 0;
+      for (int i = 0; i < indices.size(); i++)
+      {
+        // Find color matching points in observed point cloud
+        int num_color_neighbors_found =
+            getNumColorNeighboursCMC(
+              downsampled_projected_cloud_->points[indices[i]], obj_models_[model_id].downsampled_mesh_cloud()
+            );
+        total_num_color_neighbors_found += num_color_neighbors_found;
+        // if (num_color_neighbors_found == 0) {
+        //   return false;
+        // }
+      }
+      
+      if ((double)total_num_color_neighbors_found/indices.size() < 0.3) {
+          // printf("Total color neighbours found : %d\n", total_num_color_neighbors_found);
+          // printf("Fraction of points with color neighbours found : %f\n", (double)total_num_color_neighbors_found/indices.size());
+          return false;
+      } else {
+        printf("Total color neighbours found : %d\n", total_num_color_neighbors_found);
+        printf("Fraction of points with color neighbours found : %f\n", (double)total_num_color_neighbors_found/indices.size());
+      }
+    }
+    // if (env_params_.use_external_render == 1) {
+    //   int num_color_neighbors_found =
+    //       getNumColorNeighbours(point, indices, projected_cloud_);
+    //
+    //   printf("Color neighbours : %d\n", num_color_neighbors_found);
+    //
+    //   // if (num_color_neighbors_found < perch_params_.min_neighbor_points_for_valid_pose) {
+    //   if (num_color_neighbors_found == 0) {
+    //       return false;
+    //   }
+    // }
+  }
+  
 
   // TODO: revisit this and accomodate for collision model
   double rad_1, rad_2;
@@ -644,10 +657,11 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
                          false);
 
+  // hash_manager_.Print();
 
   // Sort in increasing order of cost for debugging
   // std::sort(cost_computation_output.begin(), cost_computation_output.end(), compareCostComputationOutput);
-  
+  printf("candidate_succ_ids.size() %d\n", candidate_succ_ids.size());
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
@@ -677,8 +691,13 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
                                input_unit.child_state);
 
-    if (adjusted_states_.find(candidate_succ_ids[ii]) != adjusted_states_.end()) {
-      invalid_state = true;
+    // if (env_params_.use_external_pose_list != 1) 
+    {
+      if (adjusted_states_.find(candidate_succ_ids[ii]) != adjusted_states_.end()) {
+        // The candidate successor graph state should not exist in adjusted_states_
+        // printf("Invalid state : %d\n", candidate_succ_ids[ii]);
+        invalid_state = true;
+      }
     }
 
     if (invalid_state) {
@@ -2237,10 +2256,23 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     const double validation_search_rad =
       obj_models_[last_obj_id].GetInflationFactor() *
       obj_models_[last_obj_id].GetCircumscribedRadius();
-    int num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
-                                                                validation_search_rad,
-                                                                validation_points,
-                                                                sqr_dists, kNumPixels);
+    
+    int num_validation_neighbors;
+    if (env_params_.use_external_pose_list == 1)
+    {
+      num_validation_neighbors = knn->radiusSearch(obj_center,
+                                                    validation_search_rad,
+                                                    validation_points,
+                                                    sqr_dists, kNumPixels);
+    }
+    else
+    {
+      num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
+                                                    validation_search_rad,
+                                                    validation_points,
+                                                    sqr_dists, kNumPixels);
+    }
+    
     assert(num_validation_neighbors >=
            perch_params_.min_neighbor_points_for_valid_pose);
 
@@ -2259,6 +2291,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     vector<Eigen::Vector3d> eig_points(validation_points.size());
     vector<Eigen::Vector2d> eig2d_points(validation_points.size());
 
+    // Points of observed cloud not counted
     for (size_t ii = 0; ii < validation_points.size(); ++ii) {
       PointT point = observed_cloud_->points[validation_points[ii]];
       eig_points[ii][0] = point.x;
@@ -2269,9 +2302,15 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       eig2d_points[ii][1] = point.y;
     }
 
-    // vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideMesh(eig_points, last_object.cont_pose());
-    vector<bool> inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
-                                   eig2d_points, last_object.cont_pose());
+    // From not counted points find which ones are inside the cylinder of object
+    vector<bool> inside_points;
+    if (env_params_.use_external_pose_list == 1) {
+      inside_points = obj_models_[last_obj_id].PointsInsideMesh(
+                                    eig_points, last_object.cont_pose());
+    } else {
+      inside_points = obj_models_[last_obj_id].PointsInsideFootprint(
+                                    eig2d_points, last_object.cont_pose());
+    }
 
     indices_to_consider.clear();
 
@@ -3451,6 +3490,15 @@ void EnvObjectRecognition::SetObservation(int num_objects,
     observed_cloud_ = DownsamplePointCloud(observed_cloud_, perch_params_.downsampling_leaf_size);
   }
 
+  // Remove outlier points - possible in 6D due to bad segmentation
+  if (env_params_.use_external_pose_list == 1) 
+  {
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
+    sor.setInputCloud (observed_cloud_);
+    sor.setMeanK (50);
+    sor.setStddevMulThresh (1.0);
+    sor.filter (*observed_cloud_);
+  }
 
   vector<int> nan_indices;
   downsampled_observed_cloud_ = DownsamplePointCloud(observed_cloud_, 0.01);
@@ -3979,8 +4027,9 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
       }
 
       cout << "Greedy ICP for model: " << model_id << endl;
-      #pragma omp parallel for
+      int model_succ_count = 0;
 
+      #pragma omp parallel for
       for (double x = env_params_.x_min; x <= env_params_.x_max;
            x += search_resolution) {
         #pragma omp parallel for
@@ -4010,6 +4059,9 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
 
             pcl::fromPCLPointCloud2(transformed_mesh->cloud, *cloud_in_xyz);
             copyPointCloud(*cloud_in_xyz, *cloud_in);
+            if (perch_params_.use_downsampling) {
+              cloud_in = DownsamplePointCloud(cloud_in, perch_params_.downsampling_leaf_size);
+            }
 
             double icp_fitness_score = GetICPAdjustedPose(cloud_in, p_in,
                                                           cloud_aligned, &p_out);
@@ -4036,6 +4088,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
             }
 
             succ_id++;
+            model_succ_count++;
 
             // Skip multiple orientations for symmetric objects
             if (obj_models_[model_id].symmetric() || model_meta_data.symmetry_mode == 2) {
@@ -4050,7 +4103,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
           }
         }
       }
-
+      printf("Processed %d succs for model %d\n", model_succ_count, model_id);
       committed_state.AppendObject(ObjectState(model_id,
                                                obj_models_[model_id].symmetric(),
                                                icp_adjusted_poses[model_id]));
@@ -4072,8 +4125,9 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
     return state1.id() < state2.id();
   });
 
-  string fname = debug_dir_ + "greedy_state.png";
-  PrintState(greedy_state, fname);
+  string fname = debug_dir_ + "depth_greedy_state.png";
+  string cname = debug_dir_ + "color_greedy_state.png";
+  PrintState(greedy_state, fname, cname);
   return greedy_state;
 }
 
@@ -4245,6 +4299,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
         //     }
         //   }
         // }
+        int succ_count = 0;
         while (getline(file, line))
         {
             std::vector<std::string> vec;
@@ -4303,15 +4358,43 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
             const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
             s.AppendObject(new_object);
 
-            if (env_params_.shift_pose_centroid == 1) {
+            GraphState s_render;
+            s_render.AppendObject(new_object);
+
+            if (env_params_.shift_pose_centroid == 1 || (perch_params_.vis_successors && s.object_states().size() == 1)) {
               vector<unsigned short> depth_image, last_obj_depth_image;
-              cv::Mat cv_depth_image, last_cv_obj_depth_image;
+              cv::Mat last_cv_obj_depth_image;
               vector<vector<unsigned char>> color_image, last_obj_color_image;
-              cv::Mat cv_color_image, last_cv_obj_color_image;
+              cv::Mat last_cv_obj_color_image;
               int num_occluders = 0;
+              bool shift_pose_centroid = env_params_.shift_pose_centroid == 1 ? true : false;
               GetDepthImage(s, &last_obj_depth_image, &last_obj_color_image,
-                                                last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, true);
+                                                last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, shift_pose_centroid);
+              
+              // const auto shifted_object_state = s_render.object_states()[0];
+              // s.AppendObject(shifted_object_state);
+
+              std::string color_image_path, depth_image_path;
+              std::stringstream ss1;
+              ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-color.png";
+              color_image_path = ss1.str();
+              ss1.clear();
+              ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-depth.png";
+              depth_image_path = ss1.str();
+
+              if (s.object_states().size() == 1 && perch_params_.vis_successors) 
+              {
+                // Write successors only once even if pruning is on
+                cv::imwrite(color_image_path, last_cv_obj_color_image);
+                if (IsMaster(mpi_comm_)) {
+                  PointCloudPtr cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+                  PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                  // cv::imshow("valid image", last_cv_obj_color_image);
+                }
+              }
             }
+
+            succ_count += 1;
 
             succ_states->push_back(s);
 

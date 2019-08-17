@@ -21,7 +21,7 @@
   <build_depend>pcl_ros</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>roslib</build_depend>
-  <build_depend>sbpl</build_depend>
+  <build_depend>sbpl_perch</build_depend>
   <build_depend>sbpl_utils</build_depend>
   <build_depend>libpcl-all-dev</build_depend>
   <build_depend>rospy</build_depend>
@@ -39,7 +39,7 @@
   <run_depend>pcl_ros</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>roslib</run_depend>
-  <run_depend>sbpl</run_depend>
+  <run_depend>sbpl_perch</run_depend>
   <run_depend>sbpl_utils</run_depend>
   <run_depend>libpcl-all</run_depend>
   <run_depend>libpcl-all-dev</run_depend>

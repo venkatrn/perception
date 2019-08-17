@@ -164,9 +164,33 @@ int main(int argc, char **argv) {
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
 
-  object_recognizer.LocalizeObjects(
-    input_global, &object_transforms, &preprocessing_object_transforms
-  );
+  if (true) {
+    // auto env_obj = object_recognizer.GetMutableEnvironment();
+    // object_recognizer.GetMutableEnvironment()->SetInput(input_global);
+    // auto greedy_state = env_obj->ComputeGreedyICPPoses();
+    object_recognizer.LocalizeObjectsGreedyICP(
+      input_global, &object_transforms, &preprocessing_object_transforms
+    );
+    // const auto &models = env_obj->obj_models_;
+    // object_transforms.resize(input_global.model_names.size());
+    // preprocessing_object_transforms.resize(input_global.model_names.size());
+    // int ii = 0;
+    // for (const auto &object_state : greedy_state.object_states()) {
+    //   auto pose = object_state.cont_pose();
+    //   cout << pose.x() << " " << pose.y() << " " << env_obj->GetTableHeight() << " "
+    //        << pose.yaw() << endl;
+    //   const auto &obj_model = models[ii];
+    //   object_transforms.at(ii) = obj_model.GetRawModelToSceneTransform(
+    //                                 pose);
+    //   preprocessing_object_transforms.at(ii) = obj_model.preprocessing_transform();
+    //   ii++;
+    // }
+  }
+  else {
+    object_recognizer.LocalizeObjects(
+      input_global, &object_transforms, &preprocessing_object_transforms
+    );
+  }
 
   world->barrier();
 
