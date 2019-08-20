@@ -438,9 +438,21 @@ class EnvObjectRecognition : public EnvironmentMHA {
               std::vector<std::vector<unsigned char>> *adjusted_child_color_image,
               std::vector<unsigned short> *unadjusted_child_depth_image,
               std::vector<std::vector<unsigned char>> *unadjusted_child_color_image);
+  int GetColorOnlyCost(const GraphState &source_state, const GraphState &child_state,
+              const std::vector<unsigned short> &source_depth_image,
+              const std::vector<std::vector<unsigned char>> &source_color_image,
+              const std::vector<int> &parent_counted_pixels,
+              std::vector<int> *child_counted_pixels,
+              GraphState *adjusted_child_state,
+              GraphStateProperties *state_properties,
+              std::vector<unsigned short> *adjusted_child_depth_image,
+              std::vector<std::vector<unsigned char>> *adjusted_child_color_image,
+              std::vector<unsigned short> *unadjusted_child_depth_image,
+              std::vector<std::vector<unsigned char>> *unadjusted_child_color_image);
 
   double getColorDistanceCMC(uint32_t rgb_1, uint32_t rgb_2) const;
   double getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const;
+  double getColorDistance(uint8_t r1,uint8_t g1,uint8_t b1,uint8_t r2,uint8_t g2,uint8_t b2) const;
   int getNumColorNeighboursCMC(PointT point, const PointCloudPtr point_cloud) const;
   int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud) const;
 
@@ -458,6 +470,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                        const ObjectState &last_object,
                        const std::vector<int> &counted_pixels,
                        std::vector<int> *updated_counted_pixels);
+  int GetColorCost(cv::Mat *cv_depth_image,cv::Mat *cv_color_image);
 
   // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any
   // additional renderings. This requires the true source depth image and

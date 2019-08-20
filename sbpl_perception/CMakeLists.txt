@@ -16,8 +16,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 #set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
+find_package(CUDA)
+set(OpenCV_DIR /usr/local/share/OpenCV)
 
-
+include_directories(${OpenCV_INCLUDE_DIRS})
 find_package(ZLIB)
 
 include_directories(${ZLIB_INCLUDE_DIRS})
@@ -171,6 +173,8 @@ target_link_libraries(demo ${PROJECT_NAME})
 #####################################################################
 # Needed only for experiments and debugging.
 #####################################################################
+add_executable(aaa src/aaa.cpp)
+target_link_libraries(aaa ${PROJECT_NAME} ${OpenCV_LIBRARIES})
 
 add_executable(heuristic_test src/experiments/heuristic_test.cpp)
 target_link_libraries(heuristic_test ${PROJECT_NAME})
@@ -192,15 +196,15 @@ target_link_libraries(heuristic_test ${PROJECT_NAME})
 
 add_executable(perch
   experiments/src/perch.cpp)
-target_link_libraries(perch ${PROJECT_NAME})
+target_link_libraries(perch ${PROJECT_NAME} ${ZLIB_LIBRARIES})
 
 add_executable(perch_fat
   experiments/src/perch_fat.cpp)
-target_link_libraries(perch_fat ${PROJECT_NAME})
+target_link_libraries(perch_fat ${PROJECT_NAME} ${ZLIB_LIBRARIES})
 
 add_executable(perch_single_object
   experiments/src/perch_single_object.cpp)
-target_link_libraries(perch_single_object ${PROJECT_NAME})
+target_link_libraries(perch_single_object ${PROJECT_NAME} ${ZLIB_LIBRARIES})
 
 # add_executable(greedy_icp
 #   experiments/src/greedy_icp.cpp)

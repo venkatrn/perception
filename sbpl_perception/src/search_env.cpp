@@ -749,8 +749,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       std::stringstream ssc;
       ssc.precision(20);
       ssc << debug_dir_ + "succ_color_" << candidate_succ_ids[ii] << ".png";
-      PrintImage(ss.str(), output_unit.depth_image);
-      // PrintState(output_unit.adjusted_state , ss.str(), ssc.str());
+      //PrintImage(ss.str(), output_unit.depth_image);
+      PrintState(output_unit.adjusted_state , ss.str(), ssc.str());
 
       uint8_t rgb[3] = {255,0,0};
       // auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
@@ -924,17 +924,29 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
       output_unit.cost = -1;
       continue;
     }
-
+    int color_only = 1;
     if (!lazy) {
-      output_unit.cost = GetCost(input_unit.source_state, input_unit.child_state,
-                                 source_depth_image,
-                                 source_color_image,
-                                 input_unit.source_counted_pixels,
-                                 &output_unit.child_counted_pixels, &output_unit.adjusted_state,
-                                 &output_unit.state_properties, &output_unit.depth_image,
-                                 &output_unit.color_image,
-                                 &output_unit.unadjusted_depth_image,
-                                 &output_unit.unadjusted_color_image);
+      if(color_only ==1){
+        output_unit.cost = GetColorOnlyCost(input_unit.source_state, input_unit.child_state,
+                                   source_depth_image,
+                                   source_color_image,
+                                   input_unit.source_counted_pixels,
+                                   &output_unit.child_counted_pixels, &output_unit.adjusted_state,
+                                   &output_unit.state_properties, &output_unit.depth_image,
+                                   &output_unit.color_image,
+                                   &output_unit.unadjusted_depth_image,
+                                   &output_unit.unadjusted_color_image);
+      }else{
+        output_unit.cost = GetCost(input_unit.source_state, input_unit.child_state,
+                                   source_depth_image,
+                                   source_color_image,
+                                   input_unit.source_counted_pixels,
+                                   &output_unit.child_counted_pixels, &output_unit.adjusted_state,
+                                   &output_unit.state_properties, &output_unit.depth_image,
+                                   &output_unit.color_image,
+                                   &output_unit.unadjusted_depth_image,
+                                   &output_unit.unadjusted_color_image);
+      }
     } else {
       if (input_unit.unadjusted_last_object_depth_image.empty()) {
         output_unit.cost = -1;
@@ -1739,7 +1751,144 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   printf("Cost of this state : %d\n", total_cost);
   return total_cost;
 }
+int EnvObjectRecognition::GetColorOnlyCost(const GraphState &source_state,
+                                  const GraphState &child_state,
+                                  const vector<unsigned short> &source_depth_image,
+                                  const vector<vector<unsigned char>> &source_color_image,
+                                  const vector<int> &parent_counted_pixels, vector<int> *child_counted_pixels,
+                                  GraphState *adjusted_child_state, GraphStateProperties *child_properties,
+                                  vector<unsigned short> *final_depth_image,
+                                  vector<vector<unsigned char>> *final_color_image,
+                                  vector<unsigned short> *unadjusted_depth_image,
+                                  vector<vector<unsigned char>> *unadjusted_color_image) {
+  std::cout << "GetCost() : Getting cost for state " << endl;
+  assert(child_state.NumObjects() > 0);
 
+  *adjusted_child_state = child_state;
+  child_properties->last_max_depth = kKinectMaxDepth;
+  child_properties->last_min_depth = 0;
+
+  const auto &last_object = child_state.object_states().back();
+  ContPose child_pose = last_object.cont_pose();
+  int last_object_id = last_object.id();
+
+  //initializing all containers for images and point clouds
+  vector<unsigned short> depth_image, last_obj_depth_image;
+  cv::Mat cv_depth_image, last_cv_obj_depth_image;
+  vector<vector<unsigned char>> color_image, last_obj_color_image;
+  cv::Mat cv_color_image, last_cv_obj_color_image;
+
+  const float *succ_depth_buffer;
+  ContPose pose_in(child_pose),
+           pose_out(child_pose);
+  // PointCloudPtr cloud_in(new PointCloud);
+  // PointCloudPtr succ_cloud(new PointCloud);
+  // PointCloudPtr cloud_out(new PointCloud);
+
+  // Begin ICP Adjustment
+  // Computing images after adding objects to scene
+  GraphState s_new_obj;
+  s_new_obj.AppendObject(ObjectState(last_object_id,
+                                     obj_models_[last_object_id].symmetric(), child_pose));
+  succ_depth_buffer = GetDepthImage(s_new_obj, &last_obj_depth_image, &last_obj_color_image,
+                                    &last_cv_obj_depth_image, &last_cv_obj_color_image);
+
+  unadjusted_depth_image->clear();
+  unadjusted_color_image->clear();
+  GetComposedDepthImage(source_depth_image, source_color_image,
+                        last_obj_depth_image, last_obj_color_image,
+                        unadjusted_depth_image, unadjusted_color_image);
+
+  unsigned short succ_min_depth_unused, succ_max_depth_unused;
+  vector<int> new_pixel_indices;
+
+  if (IsOccluded(source_depth_image, *unadjusted_depth_image, &new_pixel_indices,
+                 &succ_min_depth_unused,
+                 &succ_max_depth_unused)) {
+    // final_depth_image->clear();
+    // *final_depth_image = *unadjusted_depth_image;
+    printf("IsOccluded invalid\n");
+    // Can't add new objects that occlude previous ones
+    return -1;
+  }
+
+  
+  //child_properties->last_min_depth = succ_min_depth;
+  //child_properties->last_max_depth = succ_max_depth;
+
+  // Compute costs
+  const bool last_level = static_cast<int>(child_state.NumObjects()) ==
+                          env_params_.num_objects;
+  int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
+  target_cost = GetColorCost(&last_cv_obj_depth_image, &last_cv_obj_color_image);
+
+
+  // source_cost = GetSourceCost(succ_cloud,
+  //                             adjusted_child_state->object_states().back(),
+  //                             last_level, parent_counted_pixels, child_counted_pixels);
+  source_cost = 0;
+
+  // Aditya uncomment 
+  if (last_level) {
+    vector<int> updated_counted_pixels;
+    last_level_cost = 0;
+    // // NOTE: we won't include the points that lie outside the union of volumes.
+    // // Refer to the header for documentation on child_counted_pixels.
+    // *child_counted_pixels = updated_counted_pixels;
+    *child_counted_pixels = updated_counted_pixels;
+
+    // last_level_cost = 0;
+    // Aditya remove
+  }
+
+  total_cost = target_cost;
+
+  unadjusted_color_image->clear();
+  unadjusted_color_image->shrink_to_fit();
+  // unadjusted_depth_image->clear();
+  // unadjusted_depth_image->shrink_to_fit();
+
+  *final_depth_image = last_obj_depth_image;
+
+  // final_color_image->clear();
+  // final_color_image->shrink_to_fit();
+  // *final_color_image = color_image;
+
+  // cloud_out.reset();
+  // cloud_in.reset();
+  // succ_cloud.reset();
+
+  child_properties->target_cost = target_cost;
+  child_properties->source_cost = source_cost;
+  child_properties->last_level_cost = last_level_cost;
+
+  // std::stringstream cloud_ss;
+  // cloud_ss.precision(20);
+  // cloud_ss << debug_dir_ + "cloud_" << rand() << ".pcd";
+  // pcl::PCDWriter writer;
+  // writer.writeBinary (cloud_ss.str()  , *succ_cloud);
+
+  if (image_debug_) {
+    // cloud_out = GetGravityAlignedPointCloud(*final_depth_image);
+    // PrintPointCloud(cloud_out, last_object_id);
+
+    // PrintImage("Test", depth_image);
+    // std::stringstream ss1, ss2, ss3;
+    // ss1.precision(20);
+    // ss2.precision(20);
+    // ss1 << debug_dir_ + "cloud_" << child_id << ".pcd";
+    // ss2 << debug_dir_ + "cloud_aligned_" << child_id << ".pcd";
+    // ss3 << debug_dir_ + "cloud_succ_" << child_id << ".pcd";
+    // pcl::PCDWriter writer;
+    // writer.writeBinary (ss1.str()  , *cloud_in);
+    // writer.writeBinary (ss2.str()  , *cloud_out);
+    // writer.writeBinary (ss3.str()  , *succ_cloud);
+  }
+  printf("Cost of this state : %d\n", total_cost);
+  return total_cost;
+
+  
+}
 bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
                                       &parent_depth_image, const vector<unsigned short> &succ_depth_image,
                                       vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
@@ -1834,6 +1983,17 @@ double EnvObjectRecognition::getColorDistance(uint32_t rgb_1, uint32_t rgb_2) co
     return color_distance;
 
 }
+double EnvObjectRecognition::getColorDistance(uint8_t r1,uint8_t g1,uint8_t b1,uint8_t r2,uint8_t g2,uint8_t b2) const
+{
+    ColorSpace::Rgb point_1_color(r1, g1, b1);
+    ColorSpace::Rgb point_2_color(r2, g2, b2);
+
+    double color_distance =
+              ColorSpace::Cie2000Comparison::Compare(&point_1_color, &point_2_color);
+
+    return color_distance;
+
+}
 
 int EnvObjectRecognition::getNumColorNeighboursCMC(PointT point,
                                               const PointCloudPtr point_cloud) const
@@ -1871,6 +2031,79 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
         }
     }
     return num_color_neighbors_found;
+}
+int EnvObjectRecognition::GetColorCost(cv::Mat *cv_depth_image,cv::Mat *cv_color_image) {
+  
+    int cost = 0;
+    cv::Mat img(540, 960,CV_64F);
+    cv::Vec3b pixel1;
+    cv::Vec3b pixel2;
+    cv::Vec3b pixel_depth;
+    uint8_t r1;
+    uint8_t g1;
+    uint8_t b1;
+    uint8_t r2;
+    uint8_t g2;
+    uint8_t b2;
+    uint8_t depth;
+    int row;
+    int col;
+    double cur_dist;
+    bool valid;
+    for(int r = 0; r < cv_input_color_image.rows; ++r) {
+        for(int c = 0; c < cv_input_color_image.cols; ++c) {
+          valid = false;
+          pixel1 = cv_input_color_image.at<cv::Vec3b>(r,c);
+          
+          pixel_depth = cv_depth_image->at<cv::Vec3b>(r,c);
+          r1 = (uint8_t)pixel1[0];
+          g1 = (uint8_t)pixel1[1];
+          b1 = (uint8_t)pixel1[2];
+          
+          depth = (uint8_t)pixel_depth[0];
+          for(int i = -2; i <3;i++){
+            row = r+i;
+            col = c+i;
+            if(row >= 0 && row <cv_input_color_image.rows && col >= 0 && col <cv_input_color_image.cols){
+              pixel2 = cv_color_image->at<cv::Vec3b>(r,c);
+              r2 = (uint8_t)pixel2[0];
+              g2 = (uint8_t)pixel2[1];
+              b2 = (uint8_t)pixel2[2];
+              cur_dist = getColorDistance(r1,g1,b1,r2,g2,b2);
+              if(cur_dist < kColorDistanceThreshold){
+                valid = true;
+              }
+            }
+          }
+          // if(r2 != 0 || g2 != 0 || b2 != 0){
+          //   std::cout<< r << ":"<< c << std::endl;
+          //   std::cout<<cur_dist<<std::endl;
+          //   //std::cout<< unsigned(r2) << ","<< unsigned(g2) << ","<< unsigned(b2) << std::endl;
+          // }
+          
+          if(valid == false){
+            // cost += depth*depth;
+            img.at<double>(r,c) = cur_dist;
+            cost += 1;
+          }
+            
+        }
+    }
+    // std::stringstream ssc1;
+    // ssc1.precision(20);
+    // ssc1 << debug_dir_ << "input"<< cost <<".png";;
+    // std::stringstream ssc2;
+    // ssc2.precision(20);
+    // ssc2 << debug_dir_ << "generated"<< cost <<".png";;
+    // cv::imwrite(ssc1.str().c_str(), cv_input_color_image);
+    // cv::imwrite(ssc2.str().c_str(), *cv_color_image);
+    // std::stringstream color_mismatch;
+    // color_mismatch.precision(20);
+    // color_mismatch << debug_dir_ << "mismatch"<< cost <<".png";
+    // cv::imwrite(color_mismatch.str().c_str(), img);
+    // std::cout << "M = "<< std::endl << " "  << img << std::endl << std::endl;
+    std::cout<< "cost !!!!!!!!!!!!!!!!!!!!"<< cost <<std::endl;
+    return cost;
 }
 
 int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
@@ -4067,12 +4300,12 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
                 // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
                 ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
+                //check valid poses need to check!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                // if (!IsValidPose(source_state, ii, p)) {
+                //   // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
 
-                if (!IsValidPose(source_state, ii, p)) {
-                  // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
-
-                  continue;
-                }
+                //   continue;
+                // }
                 // std::cout << "Valid pose for theta : " << theta << endl;
 
                 GraphState s = source_state; // Can only add objects, not remove them
@@ -4145,8 +4378,8 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                     printf("Histogram comparison : %f\n", base_test1);
                     
                     
-
-                    if (base_test1 <= 0.90) {
+//////////////////////////////////////punning param!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    if (base_test1 <= 0.65) {
                       if (s.object_states().size() == 1 && perch_params_.vis_successors) 
                       {
                         // Write successors only once even if pruning is on
@@ -4283,14 +4516,14 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
                 // If symmetric object, don't iterate over all thetas
                 if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
-                  break;
+                  //break;
                 }
 
                 // If 180 degree symmetric, then iterate only between 0 and 180.
                 if (model_meta_data.symmetry_mode == 1 &&
                     theta > (M_PI + env_params_.theta_res)) {
                   printf("Semi-symmetric object\n");
-                  break;
+                  //break;
                 }
 
                 // }
