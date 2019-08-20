@@ -68,7 +68,11 @@ bool ContPose::operator==(const ContPose &other) const {
          fabs(z_ - other.z()) < kFloatingPointTolerance &&
          fabs(roll_ - other.roll()) < kFloatingPointTolerance &&
          fabs(pitch_ - other.pitch()) < kFloatingPointTolerance &&
-         fabs(yaw_ - other.yaw()) < kFloatingPointTolerance;
+         fabs(yaw_ - other.yaw()) < kFloatingPointTolerance &&
+         fabs(qx_ - other.qx()) < kFloatingPointTolerance &&
+         fabs(qy_ - other.qy()) < kFloatingPointTolerance &&
+         fabs(qz_ - other.qz()) < kFloatingPointTolerance &&
+         fabs(qw_ - other.qw()) < kFloatingPointTolerance;
 }
 
 bool ContPose::operator!=(const ContPose &other) const {
@@ -92,6 +96,7 @@ Eigen::Isometry3d ContPose::GetTransform() const {
 }
 
 Eigen::Matrix4f ContPose::GetTransformMatrix() const {
+  // Aditya
   Eigen::Quaterniond quaternion = Eigen::Quaterniond(qw_, qx_, qy_, qz_);
   Eigen::Matrix3f rotation = quaternion.normalized().toRotationMatrix().cast<float>();
   Eigen::Matrix4f transform;
@@ -109,6 +114,7 @@ Eigen::Matrix4f ContPose::GetTransformMatrix() const {
 }
 
 Eigen::Affine3f ContPose::GetTransformAffine3f() const {
+  // Aditya
   Eigen::Affine3f transform = Eigen::Affine3f::Identity();
   Eigen::Quaterniond quaternion = Eigen::Quaterniond(qw_, qx_, qy_, qz_);
   transform.translation() << x_, y_, z_;

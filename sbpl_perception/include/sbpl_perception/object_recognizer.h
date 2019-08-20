@@ -1,11 +1,12 @@
 #pragma once
 
-#include <sbpl/headers.h>
+#include <sbpl_perch/headers.h>
 #include <sbpl_perception/search_env.h>
 
 #include <memory>
 
 #include <Eigen/Core>
+#include <chrono>
 
 namespace sbpl_perception {
 class ObjectRecognizer {
@@ -18,6 +19,10 @@ class ObjectRecognizer {
   bool LocalizeObjects(const RecognitionInput &input,
                        std::vector<Eigen::Affine3f> *object_transforms,
                        std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const;
+  
+  bool LocalizeObjectsGreedyICP(const RecognitionInput &input,
+                      std::vector<Eigen::Affine3f> *object_transforms,
+                      std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const;
   // Ditto as above, but return the (x,y,\theta) pose for every object in the
   // world frame, rather than the transforms.
   bool LocalizeObjects(const RecognitionInput &input,

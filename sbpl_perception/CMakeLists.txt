@@ -31,7 +31,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_ros
   roscpp
   roslib
-  sbpl
+  sbpl_perch
   eigen_conversions
   visualization_msgs
   rospy
@@ -62,7 +62,7 @@ find_package(Boost 1.58.0 REQUIRED mpi serialization system)
 #find_package(MPI REQUIRED)
 
 #find_package(PkgConfig REQUIRED)
-#pkg_check_modules(SBPL REQUIRED sbpl)
+#pkg_check_modules(SBPL REQUIRED sbpl_perch)
 #include_directories(${SBPL_INCLUDE_DIRS})
 #link_directories(${SBPL_LIBRARY_DIRS})
 
@@ -105,7 +105,7 @@ catkin_package(
     pcl_ros
     roscpp
     roslib
-    sbpl
+    sbpl_perch
     sbpl_utils
     rospy
     eigen_conversions
