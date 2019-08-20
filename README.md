@@ -21,7 +21,7 @@ Setup (For running with a robot camera or bagfile recorded from robot)
 1. Create a catkin_ws and clone the following (clone realsense package to work with real camera) into the src folder:
 ```
 https://github.com/SBPL-Cruz/improved-mha-planner -b renamed
-https://github.com/venkatrn/sbpl_utils.git -b renamed
+https://github.com/SBPL-Cruz/sbpl_utils.git -b renamed
 https://github.com/IntelRealSense/realsense-ros
 https://github.com/SBPL-Cruz/ros-keyboard
 ```
