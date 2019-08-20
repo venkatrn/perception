@@ -30,7 +30,7 @@ https://github.com/SBPL-Cruz/ros-keyboard
 git clone https://github.com/SBPL-Cruz/perception -b roman_devel
 ```
 3. Install Open CV 2.4 if not already installed. You can follow steps on the <a href="https://docs.opencv.org/2.4/doc/tutorials/introduction/linux_install/linux_install.html">Open CV website</a>
-4. Install gsl, vtk library :
+4. Install gsl, vtk library etc.:
 ```
 sudo apt-get install libgsl-dev libvtk6-dev libglew-dev libsdl2-dev
 ```
