@@ -51,7 +51,7 @@
 #include <ColorSpace/Comparison.h>
 #include <chrono>
 
-
+int *difffilter(const cv::Mat& input,const cv::Mat& input1, cv::Mat& output);
 namespace sbpl_perception {
 
 struct EnvConfig {

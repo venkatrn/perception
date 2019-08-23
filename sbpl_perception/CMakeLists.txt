@@ -16,7 +16,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 #set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
-find_package(CUDA)
+find_package(CUDA REQUIRED)
 set(OpenCV_DIR /usr/local/share/OpenCV)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -154,8 +154,7 @@ target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Z
 #add_executable(sim_test src/experiments/sim_test.cpp)
 #target_link_libraries(sim_test ${PROJECT_NAME})
 
-add_executable(demo src/experiments/demo.cpp)
-target_link_libraries(demo ${PROJECT_NAME})
+
 
   include(CMakeForceCompiler)
   #CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
@@ -173,11 +172,25 @@ target_link_libraries(demo ${PROJECT_NAME})
 #####################################################################
 # Needed only for experiments and debugging.
 #####################################################################
-add_executable(aaa src/aaa.cpp)
-target_link_libraries(aaa ${PROJECT_NAME} ${OpenCV_LIBRARIES})
+set(CUDA_NVCC_FLAGS "-arch=compute_30" CACHE STRING "nvcc flags" FORCE)
+set(CUDA_VERBOSE_BUILD ON CACHE BOOL "nvcc verbose" FORCE) 
+set(LIB_TYPE STATIC)
+cuda_add_library(CUDA_getCost ${LIB_TYPE} src/compute_cost.cu)
+add_executable(roscuda_basic_node src/aaa.cpp)
+
+add_dependencies(roscuda_basic_node CUDA_getCost)
+TARGET_LINK_LIBRARIES(roscuda_basic_node
+${catkin_LIBRARIES}
+CUDA_getCost
+)
+
+add_executable(demo src/experiments/demo.cpp)
+add_dependencies(demo CUDA_getCost)
+target_link_libraries(demo ${PROJECT_NAME} CUDA_getCost)
 
 add_executable(heuristic_test src/experiments/heuristic_test.cpp)
-target_link_libraries(heuristic_test ${PROJECT_NAME})
+add_dependencies(heuristic_test CUDA_getCost)
+target_link_libraries(heuristic_test ${PROJECT_NAME} CUDA_getCost)
 
 # add_executable(generate_dataset src/utils/generate_dataset.cpp)
 # target_link_libraries(generate_dataset ${PROJECT_NAME})
@@ -196,15 +209,18 @@ target_link_libraries(heuristic_test ${PROJECT_NAME})
 
 add_executable(perch
   experiments/src/perch.cpp)
-target_link_libraries(perch ${PROJECT_NAME} ${ZLIB_LIBRARIES})
+add_dependencies(perch CUDA_getCost)
+target_link_libraries(perch ${PROJECT_NAME} ${ZLIB_LIBRARIES} CUDA_getCost)
 
 add_executable(perch_fat
   experiments/src/perch_fat.cpp)
-target_link_libraries(perch_fat ${PROJECT_NAME} ${ZLIB_LIBRARIES})
+add_dependencies(perch_fat CUDA_getCost)
+target_link_libraries(perch_fat ${PROJECT_NAME} ${ZLIB_LIBRARIES} CUDA_getCost)
 
 add_executable(perch_single_object
   experiments/src/perch_single_object.cpp)
-target_link_libraries(perch_single_object ${PROJECT_NAME} ${ZLIB_LIBRARIES})
+add_dependencies(perch_single_object CUDA_getCost)
+target_link_libraries(perch_single_object ${PROJECT_NAME} ${ZLIB_LIBRARIES} CUDA_getCost)
 
 # add_executable(greedy_icp
 #   experiments/src/greedy_icp.cpp)

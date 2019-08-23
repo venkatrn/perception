@@ -741,7 +741,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
     succ_cache[source_state_id].push_back(candidate_succ_ids[ii]);
     costs->push_back(candidate_costs[ii]);
-
+    image_debug_=false;
     if (image_debug_) {
       std::stringstream ss;
       ss.precision(20);
@@ -2035,7 +2035,14 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
 int EnvObjectRecognition::GetColorCost(cv::Mat *cv_depth_image,cv::Mat *cv_color_image) {
   
     int cost = 0;
-    cv::Mat img(540, 960,CV_64F);
+    cv::Mat lab;
+    cv::Mat lab1;
+    cv::cvtColor(*cv_color_image,lab,cv::COLOR_BGR2Lab);
+    cv::cvtColor(cv_input_color_image,lab1,cv::COLOR_BGR2Lab);
+    cv::Mat destiny = cv::Mat::zeros( cv_color_image->size(), CV_8UC1);
+    difffilter(lab,lab1,destiny);
+    cost = sum(destiny)[0];
+    /*cv::Mat img(540, 960,CV_64F);
     cv::Vec3b pixel1;
     cv::Vec3b pixel2;
     cv::Vec3b pixel_depth;
@@ -2088,7 +2095,7 @@ int EnvObjectRecognition::GetColorCost(cv::Mat *cv_depth_image,cv::Mat *cv_color
           }
             
         }
-    }
+    }*/
     // std::stringstream ssc1;
     // ssc1.precision(20);
     // ssc1 << debug_dir_ << "input"<< cost <<".png";;

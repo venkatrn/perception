@@ -25,7 +25,7 @@ bugs.txt
 *ycm_extra_conf*
 tags
 
-
+sbpl_perception/visualization
 heuristics/
 *_results/
 rcnn/
