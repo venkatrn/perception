@@ -68,11 +68,12 @@ bool ContPose::operator==(const ContPose &other) const {
          fabs(z_ - other.z()) < kFloatingPointTolerance &&
          fabs(roll_ - other.roll()) < kFloatingPointTolerance &&
          fabs(pitch_ - other.pitch()) < kFloatingPointTolerance &&
-         fabs(yaw_ - other.yaw()) < kFloatingPointTolerance &&
-         fabs(qx_ - other.qx()) < kFloatingPointTolerance &&
-         fabs(qy_ - other.qy()) < kFloatingPointTolerance &&
-         fabs(qz_ - other.qz()) < kFloatingPointTolerance &&
-         fabs(qw_ - other.qw()) < kFloatingPointTolerance;
+         fabs(yaw_ - other.yaw()) < kFloatingPointTolerance;
+         //fabs(yaw_ - other.yaw()) < kFloatingPointTolerance &&
+         //fabs(qx_ - other.qx()) < kFloatingPointTolerance &&
+         //fabs(qy_ - other.qy()) < kFloatingPointTolerance &&
+         //fabs(qz_ - other.qz()) < kFloatingPointTolerance &&
+         //fabs(qw_ - other.qw()) < kFloatingPointTolerance;
 }
 
 bool ContPose::operator!=(const ContPose &other) const {

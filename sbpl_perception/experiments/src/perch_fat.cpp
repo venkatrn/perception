@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
   // string config_file = config_file_path.string();
   // cout << config_file << endl;
 
-  bool image_debug = true;
+  bool image_debug = false;
 
   string experiment_dir = kDebugDir + output_dir_name.stem().string() + "/";
   string debug_dir = kDebugDir + output_dir_name.stem().string() + "/";
@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
 
-  if (true) {
+  if (false) {
     // auto env_obj = object_recognizer.GetMutableEnvironment();
     // object_recognizer.GetMutableEnvironment()->SetInput(input_global);
     // auto greedy_state = env_obj->ComputeGreedyICPPoses();
@@ -300,7 +300,7 @@ int main(int argc, char **argv) {
     
     fs_stats << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
     fs_stats << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
-           << "Cost" << endl;
+             << "Cost" << endl;
     fs_stats << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
              <<
              stats_vector[0].expands
