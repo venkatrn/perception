@@ -663,7 +663,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   // Sort in increasing order of cost for debugging
   // std::sort(cost_computation_output.begin(), cost_computation_output.end(), compareCostComputationOutput);
-  printf("candidate_succ_ids.size() %d\n", candidate_succ_ids.size());
+  // printf("candidate_succ_ids.size() %d\n", candidate_succ_ids.size());
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
@@ -693,14 +693,15 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
                                input_unit.child_state);
 
-    // if (env_params_.use_external_pose_list != 1)
-    {
-      if (adjusted_states_.find(candidate_succ_ids[ii]) != adjusted_states_.end()) {
-        // The candidate successor graph state should not exist in adjusted_states_
-        // printf("Invalid state : %d\n", candidate_succ_ids[ii]);
-        invalid_state = true;
-      }
+
+    // if (env_params_.use_external_pose_list != 1) 
+    // {
+    if (adjusted_states_.find(candidate_succ_ids[ii]) != adjusted_states_.end()) {
+      // The candidate successor graph state should not exist in adjusted_states_
+      // printf("Invalid state : %d\n", candidate_succ_ids[ii]);
+      invalid_state = true;
     }
+    // }
 
     if (invalid_state) {
       candidate_costs[ii] = -1;
@@ -2144,6 +2145,10 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   double nn_color_score = 0;
   int total_color_neighbours = 0;
   // Searching in observed cloud for every point in rendered cloud
+  using milli = std::chrono::milliseconds;
+  auto start = std::chrono::high_resolution_clock::now();
+  printf("GetTargetCost()\n");
+
   for (size_t ii = 0; ii < partial_rendered_cloud->points.size(); ++ii) {
     // A rendered point will get cost as 1 if there are no points in neighbourhood or if
     // neighbourhoold points dont match the color of the point
@@ -2218,6 +2223,10 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   } else {
     target_cost = static_cast<int>(nn_score);
   }
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "GetTargetCost() took "
+            << std::chrono::duration_cast<milli>(finish - start).count()
+            << " milliseconds\n";
   return target_cost;
 }
 
@@ -4021,7 +4030,122 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
 
   int succ_id = 0;
 
-  do {
+  if (env_params_.use_external_pose_list != 1) 
+  {
+    do {
+      vector<double> icp_scores; //smaller, the better
+      vector<ContPose> icp_adjusted_poses;
+      // icp_scores.resize(env_params_.num_models, numeric_limits<double>::max());
+      icp_scores.resize(env_params_.num_models, 100.0);
+      icp_adjusted_poses.resize(env_params_.num_models);
+
+      GraphState empty_state;
+      GraphState committed_state;
+      double total_score = 0;
+      #pragma omp parallel for
+
+      for (int model_id : model_ids) {
+
+        auto model_bank_it = model_bank_.find(obj_models_[model_id].name());
+        assert (model_bank_it != model_bank_.end());
+        const auto &model_meta_data = model_bank_it->second;
+        double search_resolution = 0;
+
+        if (perch_params_.use_model_specific_search_resolution) {
+          search_resolution = model_meta_data.search_resolution;
+        } else {
+          search_resolution = env_params_.res;
+        }
+
+        cout << "Greedy ICP for model: " << model_id << endl;
+        int model_succ_count = 0;
+
+        #pragma omp parallel for
+        for (double x = env_params_.x_min; x <= env_params_.x_max;
+            x += search_resolution) {
+          #pragma omp parallel for
+
+          for (double y = env_params_.y_min; y <= env_params_.y_max;
+              y += search_resolution) {
+            #pragma omp parallel for
+
+            for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
+              ContPose p_in(x, y, env_params_.table_height, 0.0, 0.0, theta);
+              ContPose p_out = p_in;
+
+              GraphState succ_state;
+              const ObjectState object_state(model_id, obj_models_[model_id].symmetric(),
+                                            p_in);
+              succ_state.AppendObject(object_state);
+
+              if (!IsValidPose(committed_state, model_id, p_in)) {
+                continue;
+              }
+
+              auto transformed_mesh = obj_models_[model_id].GetTransformedMesh(p_in);
+              PointCloudPtr cloud_in(new PointCloud);
+              PointCloudPtr cloud_aligned(new PointCloud);
+              pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_xyz (new
+                                                                pcl::PointCloud<pcl::PointXYZ>);
+
+              pcl::fromPCLPointCloud2(transformed_mesh->cloud, *cloud_in_xyz);
+              copyPointCloud(*cloud_in_xyz, *cloud_in);
+              if (perch_params_.use_downsampling) {
+                cloud_in = DownsamplePointCloud(cloud_in, perch_params_.downsampling_leaf_size);
+              }
+
+              double icp_fitness_score = GetICPAdjustedPose(cloud_in, p_in,
+                                                            cloud_aligned, &p_out);
+
+              // Check *after* icp alignment
+              if (!IsValidPose(committed_state, model_id, p_out)) {
+                continue;
+              }
+
+              const auto old_state = succ_state.object_states()[0];
+              succ_state.mutable_object_states()[0] = ObjectState(old_state.id(),
+                                                                  old_state.symmetric(), p_out);
+
+              if (image_debug_) {
+                string fname = debug_dir_ + "succ_" + to_string(succ_id) + ".png";
+                PrintState(succ_state, fname);
+                printf("%d: %f\n", succ_id, icp_fitness_score);
+              }
+
+              if (icp_fitness_score < icp_scores[model_id]) {
+                icp_scores[model_id] = icp_fitness_score;
+                icp_adjusted_poses[model_id] = p_out;
+                total_score += icp_fitness_score;
+              }
+
+              succ_id++;
+              model_succ_count++;
+
+              // Skip multiple orientations for symmetric objects
+              if (obj_models_[model_id].symmetric() || model_meta_data.symmetry_mode == 2) {
+                break;
+              }
+
+              // If 180 degree symmetric, then iterate only between 0 and 180.
+              if (model_meta_data.symmetry_mode == 1 &&
+                  theta > (M_PI + env_params_.theta_res)) {
+                break;
+              }
+            }
+          }
+        }
+        printf("Processed %d succs for model %d\n", model_succ_count, model_id);
+        committed_state.AppendObject(ObjectState(model_id,
+                                                obj_models_[model_id].symmetric(),
+                                                icp_adjusted_poses[model_id]));
+      }
+
+      permutation_scores.push_back(total_score);
+      permutation_states.push_back(committed_state);
+    } while (std::next_permutation(model_ids.begin(), model_ids.end()));
+  }
+  else
+  {
     vector<double> icp_scores; //smaller, the better
     vector<ContPose> icp_adjusted_poses;
     // icp_scores.resize(env_params_.num_models, numeric_limits<double>::max());
@@ -4032,7 +4156,6 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
     GraphState committed_state;
     double total_score = 0;
     #pragma omp parallel for
-
     for (int model_id : model_ids) {
 
       auto model_bank_it = model_bank_.find(obj_models_[model_id].name());
@@ -4049,89 +4172,95 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
       cout << "Greedy ICP for model: " << model_id << endl;
       int model_succ_count = 0;
 
-      #pragma omp parallel for
-      for (double x = env_params_.x_min; x <= env_params_.x_max;
-           x += search_resolution) {
-        #pragma omp parallel for
+      printf("States for model : %s\n", obj_models_[model_id].name().c_str());
+      string render_states_dir;
+      string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
+      string render_states_path_parent = render_states_path;
+      std::stringstream ss;
+      ss << render_states_path << "/" << obj_models_[model_id].name();
+      render_states_dir = ss.str();
+      std::stringstream sst;
+      sst << render_states_path << "/" << obj_models_[model_id].name() << "/" << "poses.txt";
+      render_states_path = sst.str();
+      // printf("Path for rendered states : %s\n", render_states_path.c_str());
 
-        for (double y = env_params_.y_min; y <= env_params_.y_max;
-             y += search_resolution) {
-          #pragma omp parallel for
+      std::ifstream file(render_states_path);
 
-          for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-            ContPose p_in(x, y, env_params_.table_height, 0.0, 0.0, theta);
-            ContPose p_out = p_in;
+      std::vector<std::vector<std::string> > dataList;
 
-            GraphState succ_state;
-            const ObjectState object_state(model_id, obj_models_[model_id].symmetric(),
-                                           p_in);
-            succ_state.AppendObject(object_state);
+      std::string line = "";
+      while (getline(file, line))
+      {
+          std::vector<std::string> vec;
+          boost::algorithm::split(vec, line, boost::is_any_of(" "));
+          // cout << vec.size();
+          std::vector<double> doubleVector(vec.size());
 
-            if (!IsValidPose(committed_state, model_id, p_in)) {
-              continue;
-            }
+          std::transform(vec.begin(), vec.end(), doubleVector.begin(), [](const std::string& val)
+          {
+              return std::stod(val);
+          });
+          ContPose p_in(
+            doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], doubleVector[5], doubleVector[6]
+          );
+          ContPose p_out = p_in;
+          GraphState succ_state;
+          const ObjectState object_state(model_id, obj_models_[model_id].symmetric(),
+                                        p_in);
+          succ_state.AppendObject(object_state);
 
-            auto transformed_mesh = obj_models_[model_id].GetTransformedMesh(p_in);
-            PointCloudPtr cloud_in(new PointCloud);
-            PointCloudPtr cloud_aligned(new PointCloud);
-            pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_xyz (new
-                                                              pcl::PointCloud<pcl::PointXYZ>);
-
-            pcl::fromPCLPointCloud2(transformed_mesh->cloud, *cloud_in_xyz);
-            copyPointCloud(*cloud_in_xyz, *cloud_in);
-            if (perch_params_.use_downsampling) {
-              cloud_in = DownsamplePointCloud(cloud_in, perch_params_.downsampling_leaf_size);
-            }
-
-            double icp_fitness_score = GetICPAdjustedPose(cloud_in, p_in,
-                                                          cloud_aligned, &p_out);
-
-            // Check *after* icp alignment
-            if (!IsValidPose(committed_state, model_id, p_out)) {
-              continue;
-            }
-
-            const auto old_state = succ_state.object_states()[0];
-            succ_state.mutable_object_states()[0] = ObjectState(old_state.id(),
-                                                                old_state.symmetric(), p_out);
-
-            if (image_debug_) {
-              string fname = debug_dir_ + "succ_" + to_string(succ_id) + ".png";
-              PrintState(succ_state, fname);
-              printf("%d: %f\n", succ_id, icp_fitness_score);
-            }
-
-            if (icp_fitness_score < icp_scores[model_id]) {
-              icp_scores[model_id] = icp_fitness_score;
-              icp_adjusted_poses[model_id] = p_out;
-              total_score += icp_fitness_score;
-            }
-
-            succ_id++;
-            model_succ_count++;
-
-            // Skip multiple orientations for symmetric objects
-            if (obj_models_[model_id].symmetric() || model_meta_data.symmetry_mode == 2) {
-              break;
-            }
-
-            // If 180 degree symmetric, then iterate only between 0 and 180.
-            if (model_meta_data.symmetry_mode == 1 &&
-                theta > (M_PI + env_params_.theta_res)) {
-              break;
-            }
+          if (!IsValidPose(committed_state, model_id, p_in)) {
+            continue;
           }
-        }
-      }
+
+          auto transformed_mesh = obj_models_[model_id].GetTransformedMesh(p_in);
+          PointCloudPtr cloud_in(new PointCloud);
+          PointCloudPtr cloud_aligned(new PointCloud);
+          pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_in_xyz (new
+                                                            pcl::PointCloud<pcl::PointXYZ>);
+
+          pcl::fromPCLPointCloud2(transformed_mesh->cloud, *cloud_in_xyz);
+          copyPointCloud(*cloud_in_xyz, *cloud_in);
+          if (perch_params_.use_downsampling) {
+            cloud_in = DownsamplePointCloud(cloud_in, perch_params_.downsampling_leaf_size);
+          }
+
+          double icp_fitness_score = GetICPAdjustedPose(cloud_in, p_in,
+                                                        cloud_aligned, &p_out);
+
+          // Check *after* icp alignment
+          if (!IsValidPose(committed_state, model_id, p_out)) {
+            continue;
+          }
+
+          const auto old_state = succ_state.object_states()[0];
+          succ_state.mutable_object_states()[0] = ObjectState(old_state.id(),
+                                                              old_state.symmetric(), p_out);
+
+          if (image_debug_) {
+            string fname = debug_dir_ + "succ_" + to_string(succ_id) + ".png";
+            PrintState(succ_state, fname);
+            printf("%d: %f\n", succ_id, icp_fitness_score);
+          }
+
+          if (icp_fitness_score < icp_scores[model_id]) {
+            icp_scores[model_id] = icp_fitness_score;
+            icp_adjusted_poses[model_id] = p_out;
+            total_score += icp_fitness_score;
+          }
+          succ_id++;
+          model_succ_count++;
+          
+      } // all states for given model done
       printf("Processed %d succs for model %d\n", model_succ_count, model_id);
       committed_state.AppendObject(ObjectState(model_id,
-                                               obj_models_[model_id].symmetric(),
-                                               icp_adjusted_poses[model_id]));
-    }
-
+                                                obj_models_[model_id].symmetric(),
+                                                icp_adjusted_poses[model_id]));
+    } // all models done
     permutation_scores.push_back(total_score);
     permutation_states.push_back(committed_state);
-  } while (std::next_permutation(model_ids.begin(), model_ids.end()));
+
+  }
 
   // Take the first 'k'
   auto min_element_it = std::min_element(permutation_scores.begin(),
@@ -4380,6 +4509,12 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
             GraphState s_render;
             s_render.AppendObject(new_object);
+            // if object states are same and in same order id will be same
+
+            // int succ_id = hash_manager_.GetStateIDForceful(s_render);
+            // printf("Succ id : %d\n", succ_id);
+
+
 
             if (env_params_.shift_pose_centroid == 1 || (perch_params_.vis_successors && s.object_states().size() == 1)) {
               vector<unsigned short> depth_image, last_obj_depth_image;
@@ -4462,6 +4597,11 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 GraphState s = source_state; // Can only add objects, not remove them
                 const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
                 s.AppendObject(new_object);
+
+
+                // int succ_id = hash_manager_.GetStateIDForceful(s);
+                // if object states are same and in same order id will be same
+                // printf("Succ id : %d\n", succ_id);
 
                 GraphState s_render;
                 s_render.AppendObject(new_object);
