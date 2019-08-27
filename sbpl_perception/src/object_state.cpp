@@ -215,6 +215,10 @@ bool ObjectState::operator==(const ObjectState &other) const {
     return false;
   }
 
+  if (!symmetric_ && cont_pose_ != other.cont_pose()) {
+    return false;
+  }
+
   if (symmetric_ && !disc_pose_.EqualsPosition(other.disc_pose())) {
     return false;
   }
