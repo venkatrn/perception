@@ -283,7 +283,7 @@ int main(int argc, char **argv) {
     
     fs_stats << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
     fs_stats << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
-           << "Cost" << endl;
+             << "Cost" << endl;
     fs_stats << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
              <<
              stats_vector[0].expands
