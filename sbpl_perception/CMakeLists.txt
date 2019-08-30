@@ -17,7 +17,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
 
-option(CUSTOM_BOOST_MPI "Use custom boost and mpi build" OFF)
+set(CUSTOM_BOOST_MPI ON)
+message(WARNING CUSTOM_BOOST_MPI)
+message(WARNING ${CUSTOM_BOOST_MPI})
 
 find_package(ZLIB)
 
@@ -44,7 +46,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 #find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
 
-if (CUSTOM_BOOST_MPI)
+if (${CUSTOM_BOOST_MPI})
   set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
   set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
   set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
@@ -94,7 +96,7 @@ include_directories(include ${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${FCL_INCLUDE_DIRS})
 
 # include_directories(${MPI_INCLUDE_PATH})
-if (CUSTOM_BOOST_MPI)
+if (${CUSTOM_BOOST_MPI})
   set (MPI_INCLUDE /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/include)
   set (CXX_PATH /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpicxx)
 else()

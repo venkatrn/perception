@@ -66,13 +66,13 @@ namespace {
 
   constexpr double kColorDistanceThreshold = 20; // m
 
-  bool kUseColorCost = false;
+  bool kUseColorCost = true;
 
   bool kUseColorPruning = false;
 
   bool kUseHistogramPruning = false;
 
-  bool kUseHistogramLazy = false;
+  bool kUseHistogramLazy = true;
 
   double kHistogramLazyScoreThresh = 0.85;
 
@@ -1348,9 +1348,13 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
   }
 }
 
-bool EnvObjectRecognition::IsValidHistogram(
+bool EnvObjectRecognition::IsValidHistogram(int object_model_id,
         cv::Mat last_cv_obj_color_image, double threshold, double &base_distance)
 {
+  if (obj_models_[object_model_id].name().compare("pepsi_can") == 0) {
+    printf("Pepsi model hack\n");
+    threshold = 0.9;
+  }
   // Get mask corresponding to non-zero pixels in rendered image
   cv::Mat mask, observed_image_segmented;
   cv::cvtColor(last_cv_obj_color_image, mask, CV_BGR2GRAY);
@@ -1579,7 +1583,7 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
       // Did ICP for occlusion case, need to recompute histogram
       printf("Recomputing histogram score because of occlusion in GetLazyCost()\n");
       double histogram_distance;
-      if (!IsValidHistogram(last_cv_obj_color_image, kHistogramLazyScoreThresh, histogram_distance)) {
+      if (!IsValidHistogram(last_object_id, last_cv_obj_color_image, kHistogramLazyScoreThresh, histogram_distance)) {
         printf("Rejecting because of low histogram score in GetLazyCost()\n");
         return -1;
       }
@@ -1751,7 +1755,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   if (kUseHistogramLazy && child_state.NumObjects() == 1)
   // if (kUseHistogramLazy)
   {
-    if (!IsValidHistogram(last_cv_obj_color_image, kHistogramLazyScoreThresh, histogram_score)) {
+    if (!IsValidHistogram(last_object_id, last_cv_obj_color_image, kHistogramLazyScoreThresh, histogram_score)) {
       printf("Rejecting because of histogram from GetCost()\n");
       return -2;
     }
@@ -4632,7 +4636,9 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                   if (kUseHistogramPruning)
                   {
                     double histogram_distance;
-                    if (IsValidHistogram(last_cv_obj_color_image, 0.85, histogram_distance))
+                    double score = 0.85;
+              
+                    if (IsValidHistogram(ii, last_cv_obj_color_image, score, histogram_distance))
                     {
                       if (s.object_states().size() == 1 && perch_params_.vis_successors)
                       {
