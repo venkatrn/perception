@@ -1,4 +1,4 @@
-# Deliberative Perception for Multi-Object Recognition and Localization
+# Deliberative Perception for Multi-Object Pose Estimation
 
 Overview
 --------
