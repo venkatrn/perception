@@ -66,13 +66,13 @@ namespace {
 
   constexpr double kColorDistanceThreshold = 20; // m
 
-  bool kUseColorCost = true;
+  bool kUseColorCost = false;
 
   bool kUseColorPruning = false;
 
   bool kUseHistogramPruning = false;
 
-  bool kUseHistogramLazy = true;
+  bool kUseHistogramLazy = false;
 
   double kHistogramLazyScoreThresh = 0.85;
 
@@ -4424,153 +4424,171 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     if (env_params_.use_external_render == 1 || env_params_.use_external_pose_list == 1)
     {
         printf("States for model : %s\n", obj_models_[ii].name().c_str());
-        string render_states_dir;
-        string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
-        string render_states_path_parent = render_states_path;
-        std::stringstream ss;
-        ss << render_states_path << "/" << obj_models_[ii].name();
-        render_states_dir = ss.str();
-        std::stringstream sst;
-        sst << render_states_path << "/" << obj_models_[ii].name() << "/" << "poses.txt";
-        render_states_path = sst.str();
-        // printf("Path for rendered states : %s\n", render_states_path.c_str());
-
-        std::ifstream file(render_states_path);
-
-        std::vector<std::vector<std::string> > dataList;
-
-        std::string line = "";
-        // Iterate through each line and split the content using delimeter
-        int external_pose_id = 0;
-        // for (double x = env_params_.x_min; x <= env_params_.x_max;
-        //      x += res) {
-        //   for (double y = env_params_.y_min; y <= env_params_.y_max;
-        //        y += res) {
-        //     // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
-        //     for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
-        //       std::cout << "Internal poses : " << x << " " << y <<  " " << theta <<  endl;
-        //     }
-        //   }
-        // }
-        int succ_count = 0;
-        while (getline(file, line))
+        // if (source_state.object_states().size() == 0)
         {
-            std::vector<std::string> vec;
-            boost::algorithm::split(vec, line, boost::is_any_of(" "));
-            // cout << vec.size();
-            std::vector<double> doubleVector(vec.size());
+          string render_states_dir;
+          string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
+          string render_states_path_parent = render_states_path;
+          std::stringstream ss;
+          ss << render_states_path << "/" << obj_models_[ii].name();
+          render_states_dir = ss.str();
+          std::stringstream sst;
+          sst << render_states_path << "/" << obj_models_[ii].name() << "/" << "poses.txt";
+          render_states_path = sst.str();
+          // printf("Path for rendered states : %s\n", render_states_path.c_str());
 
-            std::transform(vec.begin(), vec.end(), doubleVector.begin(), [](const std::string& val)
-            {
-                return std::stod(val);
-            });
-            // double theta = doubleVector[5];
+          std::ifstream file(render_states_path);
 
-            // ContPose p(external_pose_id, render_states_path_parent,
-                        // doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[4], doubleVector[5], doubleVector[6]);
-            // ContPose p(doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], doubleVector[5]);
-            ContPose p(doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], doubleVector[5], doubleVector[6]);
-            external_pose_id++;
-            // std::cout << "File Pose : " << doubleVector[0] << " " <<
-            //   doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[3] <<  " " << doubleVector[4] << " " << doubleVector[5] << " " << endl;
+          std::vector<std::vector<std::string> > dataList;
 
-            std::cout << "Cont Pose : " << p << endl;
+          std::string line = "";
+          // Iterate through each line and split the content using delimeter
+          int external_pose_id = 0;
+          // for (double x = env_params_.x_min; x <= env_params_.x_max;
+          //      x += res) {
+          //   for (double y = env_params_.y_min; y <= env_params_.y_max;
+          //        y += res) {
+          //     // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
+          //     for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
+          //       std::cout << "Internal poses : " << x << " " << y <<  " " << theta <<  endl;
+          //     }
+          //   }
+          // }
+          int succ_count = 0;
+          while (getline(file, line))
+          {
+              std::vector<std::string> vec;
+              boost::algorithm::split(vec, line, boost::is_any_of(" "));
+              // cout << vec.size();
+              std::vector<double> doubleVector(vec.size());
 
-            // cout << doubleVector[0];
-            if (!IsValidPose(source_state, ii, p)) {
-              std::cout << "Invalid pose " << p << endl;
-              // std::cout << "Not a valid pose for theta : " << doubleVector[0] << " " <<
-              // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
-
-              // std::stringstream ss1;
-              // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
-              // std::string color_image_path = ss1.str();
-              // // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), color_image_path.c_str());
-              //
-              // cv::Mat cv_color_image = cv::imread(color_image_path, CV_LOAD_IMAGE_COLOR);
-              // cv::imshow("invalid image", cv_color_image);
-              // cv::waitKey(1);
-
-              continue;
-            }
-            else {
-              // // std::cout << "Valid pose for theta : " << doubleVector[0] << " " <<
-              // // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
-              // std::stringstream ss1;
-              // // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
-              // ss1 << p.external_render_path() << "/" << obj_models_[ii].name() << "/" << p.external_pose_id() << "-color.png";
-              // std::string color_image_path = ss1.str();
-              // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), color_image_path.c_str());
-
-              // cv::Mat cv_color_image = cv::imread(color_image_path, CV_LOAD_IMAGE_COLOR);
-              // cv::imshow("valid image", cv_color_image);
-              // cv::waitKey(50);
-            }
-
-            GraphState s = source_state; // Can only add objects, not remove them
-            const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
-            s.AppendObject(new_object);
-
-            GraphState s_render;
-            s_render.AppendObject(new_object);
-            // if object states are same and in same order id will be same
-
-            // int succ_id = hash_manager_.GetStateIDForceful(s_render);
-            // printf("Succ id : %d\n", succ_id);
-
-
-
-            if (env_params_.shift_pose_centroid == 1 || (perch_params_.vis_successors && s.object_states().size() == 1)) {
-              vector<unsigned short> depth_image, last_obj_depth_image;
-              cv::Mat last_cv_obj_depth_image;
-              vector<vector<unsigned char>> color_image, last_obj_color_image;
-              cv::Mat last_cv_obj_color_image;
-              int num_occluders = 0;
-              bool shift_pose_centroid = env_params_.shift_pose_centroid == 1 ? true : false;
-              GetDepthImage(s, &last_obj_depth_image, &last_obj_color_image,
-                                                last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, shift_pose_centroid);
-
-              // const auto shifted_object_state = s_render.object_states()[0];
-              // s.AppendObject(shifted_object_state);
-
-              std::string color_image_path, depth_image_path;
-              std::stringstream ss1;
-              ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-color.png";
-              color_image_path = ss1.str();
-              ss1.clear();
-              ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-depth.png";
-              depth_image_path = ss1.str();
-
-              if (s.object_states().size() == 1 && perch_params_.vis_successors)
+              std::transform(vec.begin(), vec.end(), doubleVector.begin(), [](const std::string& val)
               {
-                // Write successors only once even if pruning is on
-                cv::imwrite(color_image_path, last_cv_obj_color_image);
-                if (IsMaster(mpi_comm_)) {
-                  PointCloudPtr cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
-                  PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
-                  // cv::imshow("valid image", last_cv_obj_color_image);
+                  return std::stod(val);
+              });
+              // double theta = doubleVector[5];
+
+              // ContPose p(external_pose_id, render_states_path_parent,
+                          // doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[4], doubleVector[5], doubleVector[6]);
+              // ContPose p(doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], doubleVector[5]);
+              ContPose p(doubleVector[0], doubleVector[1], doubleVector[2], doubleVector[3], doubleVector[4], doubleVector[5], doubleVector[6]);
+              external_pose_id++;
+              // std::cout << "File Pose : " << doubleVector[0] << " " <<
+              //   doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[3] <<  " " << doubleVector[4] << " " << doubleVector[5] << " " << endl;
+
+              std::cout << "Cont Pose : " << p << endl;
+
+              // cout << doubleVector[0];
+              if (!IsValidPose(source_state, ii, p)) {
+                std::cout << "Invalid pose " << p << endl;
+                // std::cout << "Not a valid pose for theta : " << doubleVector[0] << " " <<
+                // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
+
+                // std::stringstream ss1;
+                // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
+                // std::string color_image_path = ss1.str();
+                // // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_model.name().c_str(), color_image_path.c_str());
+                //
+                // cv::Mat cv_color_image = cv::imread(color_image_path, CV_LOAD_IMAGE_COLOR);
+                // cv::imshow("invalid image", cv_color_image);
+                // cv::waitKey(1);
+
+                continue;
+              }
+              else {
+                // // std::cout << "Valid pose for theta : " << doubleVector[0] << " " <<
+                // // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
+                // std::stringstream ss1;
+                // // ss1 << p.external_render_path() << "/" << p.external_pose_id() << "-color.png";
+                // ss1 << p.external_render_path() << "/" << obj_models_[ii].name() << "/" << p.external_pose_id() << "-color.png";
+                // std::string color_image_path = ss1.str();
+                // printf("State : %d, Path for rendered state's image of %s : %s\n", ii, obj_models_[ii].name().c_str(), color_image_path.c_str());
+
+                // cv::Mat cv_color_image = cv::imread(color_image_path, CV_LOAD_IMAGE_COLOR);
+                // cv::imshow("valid image", cv_color_image);
+                // cv::waitKey(50);
+              }
+
+              GraphState s = source_state; // Can only add objects, not remove them
+              const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+              if (env_params_.shift_pose_centroid == 0)
+                s.AppendObject(new_object);
+
+              GraphState s_render;
+              s_render.AppendObject(new_object);
+              // if object states are same and in same order id will be same
+
+              // int succ_id = hash_manager_.GetStateIDForceful(s_render);
+              // printf("Succ id : %d\n", succ_id);
+
+
+
+              if (env_params_.shift_pose_centroid == 1 || (perch_params_.vis_successors && s.object_states().size() == 1)) {
+                vector<unsigned short> depth_image, last_obj_depth_image;
+                cv::Mat last_cv_obj_depth_image;
+                vector<vector<unsigned char>> color_image, last_obj_color_image;
+                cv::Mat last_cv_obj_color_image;
+                int num_occluders = 0;
+                bool shift_pose_centroid = env_params_.shift_pose_centroid == 1 ? true : false;
+                GetDepthImage(s_render, &last_obj_depth_image, &last_obj_color_image,
+                                                  last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, shift_pose_centroid);
+
+                const auto shifted_object_state = s_render.object_states()[0];
+                s.AppendObject(shifted_object_state);
+                valid_succ_cache[ii].push_back(shifted_object_state);
+
+                std::string color_image_path, depth_image_path;
+                std::stringstream ss1;
+                ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-color.png";
+                color_image_path = ss1.str();
+                ss1.clear();
+                ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-depth.png";
+                depth_image_path = ss1.str();
+
+                if (s.object_states().size() == 1 && perch_params_.vis_successors)
+                {
+                  // Write successors only once even if pruning is on
+                  cv::imwrite(color_image_path, last_cv_obj_color_image);
+                  if (IsMaster(mpi_comm_)) {
+                    PointCloudPtr cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+                    PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                    // cv::imshow("valid image", last_cv_obj_color_image);
+                  }
                 }
               }
-            }
 
-            succ_count += 1;
+              succ_count += 1;
 
-            succ_states->push_back(s);
+              succ_states->push_back(s);
 
-            // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
-            // If symmetric object, don't iterate over all thetas
-            // if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
-            //   break;
-            // }
-            //
-            // // If 180 degree symmetric, then iterate only between 0 and 180.
-            // if (model_meta_data.symmetry_mode == 1 &&
-            //     theta > (M_PI + env_params_.theta_res)) {
-            //   break;
-            // }
+              // const ObjectState &modified_last_obect_state = s.object_states().back();
+              // valid_succ_cache[ii].push_back(modified_last_obect_state);
+              // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
+              // If symmetric object, don't iterate over all thetas
+              // if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
+              //   break;
+              // }
+              //
+              // // If 180 degree symmetric, then iterate only between 0 and 180.
+              // if (model_meta_data.symmetry_mode == 1 &&
+              //     theta > (M_PI + env_params_.theta_res)) {
+              //   break;
+              // }
+          }
+          // Close the File
+          file.close();
         }
-        // Close the File
-        file.close();
+        // else
+        // {
+        //   printf("GenerateSuccessorStates() from cache\n");
+        //   for (size_t i = 0; i < valid_succ_cache[ii].size(); i++)
+        //   {
+        //     // const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+        //     GraphState s = source_state; // Can only add objects, not remove them
+        //     s.AppendObject(valid_succ_cache[ii][i]);
+        //     succ_states->push_back(s);
+        //   }
+        // }
 
     }
     else
