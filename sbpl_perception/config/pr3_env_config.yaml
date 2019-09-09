@@ -34,6 +34,6 @@ perch_params:
 
   ## Visualization and Debugging
   visualize_expanded_states: false
-  visualize_successors: false
+  visualize_successors: true
   print_expanded_states: true
   debug_verbose: false # unused
