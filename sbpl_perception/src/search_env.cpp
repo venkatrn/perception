@@ -74,7 +74,7 @@ namespace {
 
   bool kUseHistogramLazy = true;
 
-  double kHistogramLazyScoreThresh = 0.85;
+  double kHistogramLazyScoreThresh = 0.8;
 
   bool kUseOctomapPruning = false;
 }  // namespace
@@ -1351,7 +1351,8 @@ int EnvObjectRecognition::GetGoalHeuristic(int q_id, int state_id) {
 bool EnvObjectRecognition::IsValidHistogram(int object_model_id,
         cv::Mat last_cv_obj_color_image, double threshold, double &base_distance)
 {
-  if (obj_models_[object_model_id].name().compare("pepsi_can") == 0) {
+  if (obj_models_[object_model_id].name().compare("pepsi_can") == 0 ||
+      obj_models_[object_model_id].name().compare("7up_can") == 0) {
     printf("Pepsi model hack\n");
     threshold = 0.9;
   }
@@ -1603,7 +1604,13 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     // RGB Aditya
     if (kUseHistogramLazy) {
       printf("Got cached histogram score : %f\n", adjusted_last_object_histogram_score);
-      if (adjusted_last_object_histogram_score > kHistogramLazyScoreThresh) {
+      double threshold = kHistogramLazyScoreThresh;
+      if (obj_models_[last_object_id].name().compare("pepsi_can") == 0 ||
+      obj_models_[last_object_id].name().compare("7up_can") == 0) {
+        printf("Pepsi model hack\n");
+        threshold = 0.9;
+      }
+      if (adjusted_last_object_histogram_score > threshold) {
         printf("Rejecting because of low histogram score in GetLazyCost()\n");
         return -1;
       }
