@@ -55,7 +55,7 @@ sbpl_perception/config/roman_camera_config.yaml
 ```
 roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=false
 ```
-10. The command ```rostopic pub /requested_object std_msgs/String "data: 'test'"``` needs to be run to launch the code. This will start the algorithm once input point cloud and transform between camera and robot base has been received. The input point cloud, successors and output pose of crate (the crate model is published as a marker with the detected pose) can be seen in RVIZ. The config file for rviz that needs to be loaded is stored in ```object_recognition_node/rviz/realsense_camera_robot.rviz```.
+10. The command ```rostopic pub /requested_object std_msgs/String "data: 'crate'"``` needs to be run to launch the code. This will start the algorithm once input point cloud and transform between camera and robot base has been received. The input point cloud, successors and output pose of crate (the crate model is published as a marker with the detected pose) can be seen in RVIZ. The config file for rviz that needs to be loaded is stored in ```object_recognition_node/rviz/realsense_camera_robot.rviz```.
 
 11. With the sample bag file and 4 cores, runtime should be ~12s for Bag 1 and ~9s for Bag 2.
 
