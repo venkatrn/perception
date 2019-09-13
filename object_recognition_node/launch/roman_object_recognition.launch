@@ -22,6 +22,9 @@
       <rosparam command="load" file="$(find sbpl_perception)/config/roman_camera_config.yaml" />
       <param name="image_debug" value="$(arg image_debug)"/>
       <param name="use_external_render" value="0"/>
+      <param name="use_external_pose_list" value="0"/>
+      <param name="use_icp" value="1"/>
+      <param name="use_input_images" value="0"/>
   </node>
 
   <node pkg="object_recognition_node" type="obj_rec_node" name="object_recognition_node" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false">
@@ -29,6 +32,9 @@
     <remap from="input_cloud" to="/camera/depth_registered/points"/>
     <param name="pcl_visualization" value="false"/>
     <param name="use_external_render" value="0"/>
+    <param name="use_external_pose_list" value="0"/>
+    <param name="use_icp" value="1"/>
+    <param name="use_input_images" value="0"/>
 
     <!-- <param name="table_height" value="1.127"/> <!&#45;&#45;1.13&#45;&#45;> -->
 

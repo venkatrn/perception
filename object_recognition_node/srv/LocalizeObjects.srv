@@ -31,7 +31,9 @@ sensor_msgs/PointCloud2 constraint_cloud
 string reference_frame_
 
 bool use_external_render
-
+bool use_external_pose_list
+bool use_icp
+bool use_input_images
 ---
 
 # An array of 4x4 homogeneous matrix transformations from 3D model to object pose in the

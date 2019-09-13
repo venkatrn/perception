@@ -18,6 +18,14 @@
       0.06,
       1
       ],
+      [004_sugar_box,
+      /media/sbpl/Data/Aditya/datasets/ycb/models/004_sugar_box/textured.ply,
+      false,
+      false,
+      1,
+      0.06,
+      1
+      ],
     ]
   </rosparam>
 </launch>

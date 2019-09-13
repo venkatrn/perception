@@ -1,6 +1,8 @@
 search_resolution_translation: 0.07 # m 0.04
 search_resolution_yaw: 0.2526991 # rad
 # use_external_render : 0
+# use_external_pose_list : 0
+# use_icp : 1
 # use_full_object_point_cloud: true
 
 perch_params:

@@ -62,8 +62,10 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   private_nh.param("ymax", ymax_, 0.0);
   private_nh.param("reference_frame", reference_frame_,
                    std::string("/map"));
-  private_nh.param("use_external_render", use_external_render,
-                   0);
+  private_nh.param("use_external_render", use_external_render,0);
+  private_nh.param("use_external_pose_list", use_external_pose_list,0);
+  private_nh.param("use_input_images", use_input_images,0);
+  private_nh.param("use_icp", use_icp, 1);
   private_nh.param("camera_frame", camera_frame_,
                    std::string("/head_mount_kinect_rgb_link"));
   private_nh.param("camera_optical_frame", camera_optical_frame_,
@@ -343,6 +345,9 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.object_ids = latest_requested_objects_;
   req.reference_frame_ = reference_frame_;
   req.use_external_render = use_external_render;
+  req.use_external_pose_list = use_external_pose_list;
+  req.use_icp = use_icp;
+  req.use_input_images = use_input_images;
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
@@ -468,10 +473,10 @@ void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
                                              &object_name) {
   cout << "[Perception Interface]: Got request to identify " << object_name.data
        << endl;
-  // latest_requested_objects_ = vector<string>({object_name.data});
+  latest_requested_objects_ = vector<string>({object_name.data});
   // latest_requested_objects_ = {"004_sugar_box", "035_power_drill"};
   // latest_requested_objects_ = {"004_sugar_box"};
-  latest_requested_objects_ = {"crate"};
+  // latest_requested_objects_ = {"crate"};
   capture_kinect_ = true;
   recent_observations_.clear();
   return;

@@ -30,6 +30,9 @@ bool ObjectLocalizerService::LocalizerCallback(LocalizeObjects::Request &req,
   recognition_input.table_height = req.support_surface_height;
   recognition_input.heuristics_dir = req.heuristics_dir;
   recognition_input.use_external_render = req.use_external_render;
+  recognition_input.use_external_pose_list = req.use_external_pose_list;
+  recognition_input.use_icp = req.use_icp;
+  recognition_input.use_input_images = req.use_input_images;
   ROS_DEBUG("External Render : %d\n", recognition_input.use_external_render);
   recognition_input.reference_frame_ = req.reference_frame_;
 
