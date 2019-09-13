@@ -30,7 +30,7 @@
   <node pkg="object_recognition_node" type="obj_rec_node" name="object_recognition_node" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false">
     <!-- <remap from="/keypress_topic" to="/obj_recognition_keyboard_listener/keydown"/> -->
     <!-- <remap from="input_cloud" to="/roman1/center_realsense/depth_registered/points"/> -->
-    <remap from="input_cloud" to="/roman1/center_realsense/depth_registered/points"/>
+    <remap from="input_cloud" to="/roman1/head_realsense/depth_registered/points"/>
     <param name="pcl_visualization" value="false"/>
     <param name="use_external_render" value="0"/>
 
@@ -49,10 +49,10 @@
     <param name="ymin" value="-0.30"/> <!--1.13-->
     <param name="ymax" value="0.30"/> <!--1.13-->
 
-    <param name="reference_frame" value="/roman1/map"/>
-    <param name="camera_optical_frame" value="/roman1/center_realsense_color_optical_frame"/>
-    <param name="camera_frame" value="/roman1/center_realsense_depth_frame"/>
-    <!-- <param name="camera_frame" value="/roman1/center_realsense_depth_frame"/> -->
+    <param name="reference_frame" value="/roman1/base"/>
+    <param name="camera_optical_frame" value="/roman1/head_realsense_color_optical_frame"/>
+    <param name="camera_frame" value="/roman1/head_realsense_depth_frame"/>
+    <!-- <param name="camera_frame" value="/roman1/head_realsense_depth_frame"/> -->
   </node>
 
   <!-- <node pkg="keyboard" type="keyboard" name="obj_recognition_keyboard_listener" output="screen"> -->
