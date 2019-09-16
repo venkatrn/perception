@@ -387,7 +387,7 @@ void ObjectModel::SetObjectProperties() {
   cv::fillConvexPoly(footprint_raster_, cv_points.data(), cv_points.size(), 255);
   cv::imwrite(kDebugDir + string("footprint_") + name_ + string(".png"),
               footprint_raster_);
-  
+
 
   // Downsample point cloud
   // pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
@@ -399,7 +399,7 @@ void ObjectModel::SetObjectProperties() {
   // sor.filter (*cloud_filtered);
   // pcl::fromPCLPointCloud2(*cloud_filtered, *downsampled_mesh_cloud_);
   // printf("Points in downsampled cloud : %d\n", downsampled_mesh_cloud_->points.size());
-  
+
   // Get list of unique colors
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_color (new
                                              pcl::PointCloud<pcl::PointXYZRGB>);
@@ -412,17 +412,17 @@ void ObjectModel::SetObjectProperties() {
     unique_rgb.push_back(*reinterpret_cast<int*>(&cloud_color->points[i].rgb));
   }
 
-  vector<uint32_t>::iterator ip; 
+  vector<uint32_t>::iterator ip;
 
-  // Using std::unique 
-  // ip = std::unique(unique_rgb.begin(), unique_rgb.begin() + unique_rgb.size()); 
+  // Using std::unique
+  // ip = std::unique(unique_rgb.begin(), unique_rgb.begin() + unique_rgb.size());
   ip = std::unique_copy (unique_rgb.begin(), unique_rgb.begin() + unique_rgb.size(), unique_rgb.begin(), getColorEquivalence);
 
-  // Now v becomes {1 3 10 1 3 7 8 * * * * *} 
-  // * means undefined 
+  // Now v becomes {1 3 10 1 3 7 8 * * * * *}
+  // * means undefined
 
-  // Resizing the vector so as to remove the undefined terms 
-  unique_rgb.resize(std::distance(unique_rgb.begin(), ip)); 
+  // Resizing the vector so as to remove the undefined terms
+  unique_rgb.resize(std::distance(unique_rgb.begin(), ip));
   printf("Points in  cloud : %d\n", cloud_color->points.size());
   printf("Unique colors in model : %d\n", unique_rgb.size());
 }

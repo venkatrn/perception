@@ -428,9 +428,15 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
           // marker.scale.x = 0.01;
           // marker.scale.y = 0.01;
           // marker.scale.z = 0.01;
-          marker.scale.x = 1;
-          marker.scale.y = 1;
-          marker.scale.z = 1;
+          if (kMeshInMillimeters) {
+            marker.scale.x = kMeshScalingFactor;
+            marker.scale.y = kMeshScalingFactor;
+            marker.scale.z = kMeshScalingFactor;
+          } else {
+            marker.scale.x = 1;
+            marker.scale.y = 1;
+            marker.scale.z = 1;
+          }
           marker.color.a = 0.8; // Don't forget to set the alpha!
           marker.color.r = red;
           marker.color.g = green;
@@ -474,7 +480,7 @@ void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
   cout << "[Perception Interface]: Got request to identify " << object_name.data
        << endl;
   latest_requested_objects_ = vector<string>({object_name.data});
-  // latest_requested_objects_ = {"004_sugar_box", "035_power_drill"};
+  // latest_requested_objects_ = {"pepsi_can", "sprite_can", "coke_bottle"};
   // latest_requested_objects_ = {"004_sugar_box"};
   // latest_requested_objects_ = {"crate"};
   capture_kinect_ = true;

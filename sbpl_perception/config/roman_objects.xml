@@ -26,6 +26,30 @@
       0.06,
       1
       ],
+      [pepsi_can,
+      /media/sbpl/Data/Aditya/datasets/turbosquid/models/pepsi_can/textured.ply,
+      false,
+      false,
+      2,
+      0.06,
+      1
+      ],
+      [sprite_can,
+      /media/sbpl/Data/Aditya/datasets/turbosquid/models/sprite_can/textured.ply,
+      false,
+      false,
+      2,
+      0.06,
+      1
+      ],
+      [coke_bottle,
+      /media/sbpl/Data/Aditya/datasets/turbosquid/models/coke_bottle/textured.ply,
+      false,
+      false,
+      2,
+      0.06,
+      1
+      ]
     ]
   </rosparam>
 </launch>
