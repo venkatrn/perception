@@ -66,17 +66,19 @@ namespace {
 
   constexpr double kColorDistanceThreshold = 20; // m
 
-  bool kUseColorCost = false;
+  bool kUseColorCost = true;
 
   bool kUseColorPruning = false;
 
   bool kUseHistogramPruning = false;
 
-  bool kUseHistogramLazy = false;
+  bool kUseHistogramLazy = true;
 
   double kHistogramLazyScoreThresh = 0.8;
 
   bool kUseOctomapPruning = false;
+
+  bool cost_debug_msgs = false;
 }  // namespace
 
 namespace sbpl_perception {
@@ -694,7 +696,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
                                input_unit.child_state);
 
 
-    // if (env_params_.use_external_pose_list != 1) 
+    // if (env_params_.use_external_pose_list != 1)
     // {
     if (adjusted_states_.find(candidate_succ_ids[ii]) != adjusted_states_.end()) {
       // The candidate successor graph state should not exist in adjusted_states_
@@ -912,13 +914,15 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
   int original_count = 0;
   // auto appended_input = input;
   const int num_processors = static_cast<int>(mpi_comm_->size());
-  printf("num_processors : %d\n", num_processors);
+  if (cost_debug_msgs)
+    printf("num_processors : %d\n", num_processors);
 
   if (mpi_comm_->rank() == kMasterRank) {
     original_count = count = input.size();
 
     if (count % num_processors != 0) {
-      printf("resizing input\n");
+      if (cost_debug_msgs)
+        printf("resizing input\n");
       count += num_processors - count % num_processors;
       CostComputationInput dummy_input;
       dummy_input.source_id = -1;
@@ -954,9 +958,10 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
                 &source_depth_image, &source_color_image,
                 &source_cv_depth_image, &source_cv_color_image);
 
-  printf("recvcount : %d\n", recvcount);
+  // printf("recvcount : %d\n", recvcount);
   for (int ii = 0; ii < recvcount; ++ii) {
-    printf("State number being processed : %d\n", ii);
+    if (cost_debug_msgs)
+      printf("State number being processed : %d\n", ii);
     const auto &input_unit = input_partition[ii];
     auto &output_unit = output_partition[ii];
 
@@ -1678,7 +1683,8 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
   child_properties->last_level_cost = 0;
 
   total_cost = source_cost + target_cost + last_level_cost;
-  printf("Cost of this state : %d\n", total_cost);
+  if (cost_debug_msgs)
+    printf("Cost of this state : %d\n", total_cost);
 
   // std::stringstream cloud_ss;
   // cloud_ss.precision(20);
@@ -1727,8 +1733,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                   vector<unsigned short> *unadjusted_depth_image,
                                   vector<vector<unsigned char>> *unadjusted_color_image,
                                   double &histogram_score) {
-
-  std::cout << "GetCost() : Getting cost for state " << endl;
+  if (cost_debug_msgs)
+    std::cout << "GetCost() : Getting cost for state " << endl;
   assert(child_state.NumObjects() > 0);
 
   *adjusted_child_state = child_state;
@@ -1782,7 +1788,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                  &succ_max_depth_unused)) {
     // final_depth_image->clear();
     // *final_depth_image = *unadjusted_depth_image;
-    printf("IsOccluded invalid\n");
+    if (cost_debug_msgs)
+      printf("IsOccluded invalid\n");
     // Can't add new objects that occlude previous ones
     return -1;
   }
@@ -1833,16 +1840,20 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
                                          last_object.symmetric(), pose_out);
   adjusted_child_state->mutable_object_states()[last_idx] = modified_last_object;
   // End ICP Adjustment
+
+  if (cost_debug_msgs) {
   printf("pose before icp");
   std::cout << pose_in << endl;
   printf("pose after icp");
   std::cout << pose_out << endl;
+  }
 
   // std::cout<<adjusted_child_state->object_states().back().cont_pose()<<endl;
   // Check again after icp
   if (!IsValidPose(source_state, last_object_id,
                    adjusted_child_state->object_states().back().cont_pose(), true)) {
-    printf(" state %d is invalid after icp\n ", source_state);
+    if (cost_debug_msgs)
+      printf(" state %d is invalid after icp\n ", source_state);
 
     // succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
     // final_depth_image->clear();
@@ -2007,7 +2018,8 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     // writer.writeBinary (ss2.str()  , *cloud_out);
     // writer.writeBinary (ss3.str()  , *succ_cloud);
   }
-  printf("Cost of this state : %d\n", total_cost);
+  if (cost_debug_msgs)
+    printf("Cost of this state : %d\n", total_cost);
   return total_cost;
 }
 
@@ -2158,7 +2170,8 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
   // Searching in observed cloud for every point in rendered cloud
   using milli = std::chrono::milliseconds;
   auto start = std::chrono::high_resolution_clock::now();
-  printf("GetTargetCost()\n");
+  if (cost_debug_msgs)
+    printf("GetTargetCost()\n");
 
   for (size_t ii = 0; ii < partial_rendered_cloud->points.size(); ++ii) {
     // A rendered point will get cost as 1 if there are no points in neighbourhood or if
@@ -2217,7 +2230,8 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
 
   // distance score might be low but rgb score can still be high
   // color score tells how many points which were depth explained mismatched
-  printf("Color score for this state : %f with distance score : %f, color neighbours : %d\n", nn_color_score, nn_score, total_color_neighbours);
+  if (cost_debug_msgs)
+    printf("Color score for this state : %f with distance score : %f, color neighbours : %d\n", nn_color_score, nn_score, total_color_neighbours);
 
   int target_cost = 0;
   int target_color_cost = 0;
@@ -2235,9 +2249,10 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
     target_cost = static_cast<int>(nn_score);
   }
   auto finish = std::chrono::high_resolution_clock::now();
-  std::cout << "GetTargetCost() took "
-            << std::chrono::duration_cast<milli>(finish - start).count()
-            << " milliseconds\n";
+  if (cost_debug_msgs)
+    std::cout << "GetTargetCost() took "
+              << std::chrono::duration_cast<milli>(finish - start).count()
+              << " milliseconds\n";
   return target_cost;
 }
 
@@ -2360,7 +2375,8 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       }
     }
 
-    printf("Points inside: %zu, total points: %zu\n", indices_to_consider.size(), eig_points.size());
+    if (cost_debug_msgs)
+      printf("Points inside: %zu, total points: %zu\n", indices_to_consider.size(), eig_points.size());
 
     // The points within the inscribed cylinder are the ones made
     // "infeasible".
@@ -2690,7 +2706,8 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
 
     using milli = std::chrono::milliseconds;
     auto start = std::chrono::high_resolution_clock::now();
-    printf("GetGravityAlignedPointCloud with depth and color\n");
+    if (cost_debug_msgs)
+      printf("GetGravityAlignedPointCloud with depth and color\n");
     PointCloudPtr cloud(new PointCloud);
     // TODO
     for (int ii = 0; ii < kNumPixels; ++ii) {
@@ -2752,13 +2769,15 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
     cloud->is_dense = false;
 
     auto finish = std::chrono::high_resolution_clock::now();
-    std::cout << "GetGravityAlignedPointCloud() took "
-              << std::chrono::duration_cast<milli>(finish - start).count()
-              << " milliseconds\n";
+    if (cost_debug_msgs)
+      std::cout << "GetGravityAlignedPointCloud() took "
+                << std::chrono::duration_cast<milli>(finish - start).count()
+                << " milliseconds\n";
     if (perch_params_.use_downsampling) {
       cloud = DownsamplePointCloud(cloud, perch_params_.downsampling_leaf_size);
     }
-    printf("GetGravityAlignedPointCloud with depth and color, cloud size : %d \n", cloud->points.size());
+    if (cost_debug_msgs)
+      printf("GetGravityAlignedPointCloud with depth and color, cloud size : %d \n", cloud->points.size());
 
     return cloud;
 }
@@ -3247,7 +3266,8 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
   scene_->clear();
 
   auto &object_states = s.mutable_object_states();
-  printf("GetDepthImage() for number of objects : %d\n", object_states.size());
+  if (cost_debug_msgs)
+    printf("GetDepthImage() for number of objects : %d\n", object_states.size());
 
   // cout << "External Render :" << env_params_.use_external_render;
 
@@ -3883,8 +3903,8 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
                                                 const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
-
-  printf("GetICPAdjustedPose()\n");
+  if (cost_debug_msgs)
+    printf("GetICPAdjustedPose()\n");
   auto start = std::chrono::high_resolution_clock::now();
 
 
@@ -4013,9 +4033,10 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
 
 
   auto finish = std::chrono::high_resolution_clock::now();
-  std::cout << "GetICPAdjustedPose() took "
-            << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()
-            << " milliseconds\n";
+  if (cost_debug_msgs)
+    std::cout << "GetICPAdjustedPose() took "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()
+              << " milliseconds\n";
 
   return score;
 }
@@ -4041,7 +4062,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
 
   int succ_id = 0;
 
-  if (env_params_.use_external_pose_list != 1) 
+  if (env_params_.use_external_pose_list != 1)
   {
     do {
       vector<double> icp_scores; //smaller, the better
@@ -4261,7 +4282,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
           }
           succ_id++;
           model_succ_count++;
-          
+
       } // all states for given model done
       printf("Processed %d succs for model %d\n", model_succ_count, model_id);
       committed_state.AppendObject(ObjectState(model_id,
@@ -4662,7 +4683,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                   {
                     double histogram_distance;
                     double score = 0.85;
-              
+
                     if (IsValidHistogram(ii, last_cv_obj_color_image, score, histogram_distance))
                     {
                       if (s.object_states().size() == 1 && perch_params_.vis_successors)
@@ -4896,7 +4917,8 @@ bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short> &s
                                                  vector<unsigned short> *composed_depth_image,
                                                  vector<vector<unsigned char>> *composed_color_image) {
 
-  printf("GetComposedDepthImage() with color and depth\n");
+  if (cost_debug_msgs)
+    printf("GetComposedDepthImage() with color and depth\n");
   // printf("source_depth_image : %f\n", source_depth_image.size());
 
   composed_depth_image->clear();
@@ -4928,8 +4950,8 @@ bool EnvObjectRecognition::GetComposedDepthImage(const vector<unsigned short> &s
       }
     }
   }
-
-  printf("GetComposedDepthImage() Done\n");
+  if (cost_debug_msgs)
+    printf("GetComposedDepthImage() Done\n");
   return true;
 }
 
