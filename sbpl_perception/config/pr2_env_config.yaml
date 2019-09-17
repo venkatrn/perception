@@ -14,11 +14,11 @@ perch_params:
   use_model_specific_search_resolution: false
 
   ## RGB
-  use_color_cost: true
+  use_color_cost: false
 
   ## With Downsampling
   use_downsampling: true
-  sensor_resolution_radius: 0.015 #m
+  sensor_resolution_radius: 0.018 #m
   # sensor_resolution_radius: 0.005 #m
   min_neighbor_points_for_valid_pose: 25 #50
   downsampling_leaf_size: 0.02
