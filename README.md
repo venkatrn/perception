@@ -63,5 +63,11 @@ roslaunch object_recognition_node roman_object_recognition_robot.launch urdf:=fa
 
 ![Image of Yaktocat](images/rviz_output.png)
 
+Tweaking Params
+------------
+1. Tweek table_height such that no points of the table or floor are visible in /perch/input_point_cloud
+2. Tweak xmin, xmax, ymin, ymax such that no visible points of required objects get excluded from the point cloud
+3. Tweak downsampling leaf size to get desired speed and accuracy
+
 
 
