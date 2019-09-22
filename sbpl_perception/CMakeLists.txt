@@ -25,10 +25,10 @@ find_package(ZLIB)
 include_directories(${ZLIB_INCLUDE_DIRS})
 # Load catkin and all dependencies required for this package
 
-
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   kinect_sim
+  cuda_renderer
   perception_utils
   pcl_ros
   roscpp
@@ -100,6 +100,7 @@ catkin_package(
   CATKIN_DEPENDS
     cv_bridge
     kinect_sim
+    cuda_renderer
     perception_utils
     pcl_ros
     roscpp

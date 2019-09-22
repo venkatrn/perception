@@ -237,6 +237,8 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
 
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFilePLY (model_meta_data.file.c_str(), mesh);
+    cuda_renderer::Model render_model(model_meta_data.file.c_str()); 
+    render_models_.push_back(render_model);
     // pcl::io::loadPolygonFileOBJ (model_meta_data.file.c_str(), mesh);
 
     // pcl::PolygonMesh meshT;
@@ -1820,9 +1822,10 @@ int EnvObjectRecognition::GetColorOnlyCost(const GraphState &source_state,
   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
                           env_params_.num_objects;
   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
+  auto start = chrono::steady_clock::now();
   target_cost = GetColorCost(&last_cv_obj_depth_image, &last_cv_obj_color_image);
-
-
+  auto end = chrono::steady_clock::now();
+  std::cout<< "time for the cost: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << std::endl;
   // source_cost = GetSourceCost(succ_cloud,
   //                             adjusted_child_state->object_states().back(),
   //                             last_level, parent_counted_pixels, child_counted_pixels);
@@ -2040,6 +2043,7 @@ int EnvObjectRecognition::GetColorCost(cv::Mat *cv_depth_image,cv::Mat *cv_color
     cv::cvtColor(*cv_color_image,lab,cv::COLOR_BGR2Lab);
     cv::cvtColor(cv_input_color_image,lab1,cv::COLOR_BGR2Lab);
     cv::Mat destiny = cv::Mat::zeros( cv_color_image->size(), CV_8UC1);
+    
     difffilter(lab,lab1,destiny);
     cost = sum(destiny)[0];
     /*cv::Mat img(540, 960,CV_64F);
@@ -3132,6 +3136,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
   printf("GetDepthImage() for number of objects : %d\n", object_states.size());
 
   // cout << "External Render :" << env_params_.use_external_render;
+  auto start = chrono::steady_clock::now();
 
    for (size_t ii = 0; ii < object_states.size(); ++ii) {
       const auto &object_state = object_states[ii];
@@ -3141,6 +3146,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
       
       // std::cout << "Object model in pose after shift: " << p << endl;
       pcl::PolygonMeshPtr transformed_mesh;
+      // pcl::PolygonMesh::Ptr transformed_mesh(new pcl::PolygonMesh);
       if (shift_centroid && ii == object_states.size()-1) 
       {
         transformed_mesh = obj_model.GetTransformedMeshWithShift(p);
@@ -3150,12 +3156,31 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
       {
         transformed_mesh = obj_model.GetTransformedMesh(p);
       }
-
+      // std::string name;
+      // name = "/media/jessy/Data/dataset/saved_ply/";
+      // name.append(std::to_string(p.x()));
+      // name.append(",");
+      // name.append(std::to_string(p.y()));
+      // name.append(",");
+      // name.append(std::to_string(p.z()));
+      // name.append(",");
+      // name.append(std::to_string(p.yaw()));
+      // name.append(".ply");
+      // // pcl::io::savePLYFile(name, *transformed_mesh);
+      
+      // pcl::io::loadPolygonFilePLY(name,*transformed_mesh);
+      
+      //pcl::io::loadPCDFile(name,transformed_mesh->cloud);
       PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
                                                              GL_POLYGON, transformed_mesh));
-      scene_->add (model);
-    }
+      auto end = chrono::steady_clock::now();
+      std::cout<< "time: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << std::endl;
 
+      scene_->add (model);
+      
+      
+    }
+    
     kinect_simulator_->doSim(env_params_.camera_pose);
     const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
     kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
@@ -3191,7 +3216,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
         }
       }
     }
-
+    
     return depth_buffer;
 
 };

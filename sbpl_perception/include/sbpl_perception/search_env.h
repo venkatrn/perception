@@ -6,7 +6,7 @@
  * @author Venkatraman Narayanan
  * Carnegie Mellon University, 2015
  */
-
+#include <cuda_renderer/renderer.h>
 #include <kinect_sim/model.h>
 #include <kinect_sim/scene.h>
 #include <kinect_sim/simulation_io.hpp>
@@ -35,6 +35,8 @@
 #include <pcl/PolygonMesh.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/search/organized.h>
+#include <pcl/io/ply_io.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
@@ -336,6 +338,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   cv::Mat cv_input_color_image;
 
   std::vector<ObjectModel> obj_models_;
+  std::vector<cuda_renderer::Model> render_models_;
   pcl::simulation::Scene::Ptr scene_;
 
   EnvParams env_params_;

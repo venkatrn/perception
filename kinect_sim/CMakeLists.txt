@@ -113,14 +113,14 @@ target_link_libraries (${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES}
                        #${VTK_ROOT}/lib/libvtkRendering.so ${VTK_ROOT}/lib/libvtkIO.so
                        )
 
-add_executable(kinect_sim_viewer tools/sim_viewer.cpp)
-add_executable(kinect_sim_test_simple tools/sim_test_simple.cpp)
-add_executable(kinect_sim_test_performance tools/sim_test_performance.cpp)
-add_executable(kinect_sim_terminal_demo tools/sim_terminal_demo.cpp)
-target_link_libraries (kinect_sim_viewer ${PROJECT_NAME})
-target_link_libraries (kinect_sim_test_simple ${PROJECT_NAME})
-target_link_libraries (kinect_sim_test_performance ${PROJECT_NAME})
-target_link_libraries (kinect_sim_terminal_demo ${PROJECT_NAME})
+#add_executable(kinect_sim_viewer tools/sim_viewer.cpp)
+#add_executable(kinect_sim_test_simple tools/sim_test_simple.cpp)
+#add_executable(kinect_sim_test_performance tools/sim_test_performance.cpp)
+#add_executable(kinect_sim_terminal_demo tools/sim_terminal_demo.cpp)
+#target_link_libraries (kinect_sim_viewer ${PROJECT_NAME})
+#target_link_libraries (kinect_sim_test_simple ${PROJECT_NAME})
+#target_link_libraries (kinect_sim_test_performance ${PROJECT_NAME})
+#target_link_libraries (kinect_sim_terminal_demo ${PROJECT_NAME})
 
 install(DIRECTORY include/${PROJECT_NAME}/
         DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
