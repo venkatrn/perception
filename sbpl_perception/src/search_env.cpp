@@ -30,6 +30,7 @@
 
 #include <opencv/highgui.h>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/core/eigen.hpp>
 //// #include <opencv2/contrib/contrib.hpp>
 
 #include <boost/lexical_cast.hpp>
@@ -37,7 +38,6 @@
 #include <algorithm>
 #include <pcl/point_cloud.h>
 #include <pcl/octree/octree_pointcloud_changedetector.h>
-
 using namespace std;
 using namespace perception_utils;
 using namespace pcl::simulation;
@@ -189,7 +189,6 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
     printf("Debug Verbose: %d\n", perch_params_.debug_verbose);
     printf("Use Color Cost: %d\n", kUseColorCost);
-
     printf("\n");
     printf("----------Camera Config-------------\n");
     printf("Camera Width: %d\n", kCameraWidth);
@@ -198,6 +197,10 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Camera FY: %f\n", kCameraFY);
     printf("Camera CX: %f\n", kCameraCX);
     printf("Camera CY: %f\n", kCameraCY);
+    env_params_.cam_intrinsic=(cv::Mat_<float>(3,3) << kCameraFX, 0.0, kCameraCX, 0.0, kCameraFY, kCameraCY, 0.0, 0.0, 1.0);
+    env_params_.width = 960;
+    env_params_.height = 540;
+    env_params_.proj_mat = cuda_renderer::compute_proj(env_params_.cam_intrinsic, env_params_.width, env_params_.height);
   }
 
   mpi_comm_->barrier();
@@ -208,6 +211,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("ERROR: PERCH Params not initialized for process %d\n",
            mpi_comm_->rank());
   }
+
 }
 
 EnvObjectRecognition::~EnvObjectRecognition() {
@@ -561,6 +565,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
                                     vector<int> *succ_ids, vector<int> *costs) {
 
   printf("GetSuccs() for state\n");
+  auto start = chrono::steady_clock::now();
   succ_ids->clear();
   costs->clear();
 
@@ -647,11 +652,11 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
   // Sort in increasing order of cost for debugging
   std::sort(cost_computation_output.begin(), cost_computation_output.end(), compareCostComputationOutput);
-  
+
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
-
+    // std::cout<<output_unit.cost;
     bool invalid_state = output_unit.cost == -1;
 
     // if (output_unit.cost != -1) {
@@ -684,6 +689,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     if (invalid_state) {
       candidate_costs[ii] = -1;
     } else {
+
       adjusted_states_[candidate_succ_ids[ii]] = output_unit.adjusted_state;
       assert(output_unit.depth_image.size() != 0);
       if (env_params_.use_external_render == 1)
@@ -722,7 +728,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     }
   }
 
-  
+  auto end = chrono::steady_clock::now();
+  std::cout<< "real planning time: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << std::endl;
   //--------------------------------------//
   int min_cost = 9999999999;
   PointCloudPtr min_cost_point_cloud;
@@ -869,111 +876,279 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
                                                   std::vector<CostComputationOutput> *output,
                                                   bool lazy) {
   std::cout << "Computing costs in parallel" << endl;
-  int count = 0;
-  int original_count = 0;
-  // auto appended_input = input;
-  const int num_processors = static_cast<int>(mpi_comm_->size());
-  printf("num_processors : %d\n", num_processors);
-
-  if (mpi_comm_->rank() == kMasterRank) {
-    original_count = count = input.size();
-
-    if (count % num_processors != 0) {
-      printf("resizing input\n");
-      count += num_processors - count % num_processors;
-      CostComputationInput dummy_input;
-      dummy_input.source_id = -1;
-      // add dummy inputs to input vector to make it same on all processors
-      input.resize(count, dummy_input);
+  std::vector<cuda_renderer::Model::mat4x4> mat4_v;
+  std::vector<ContPose> contposes;
+  for(int i =0; i <input.size(); i ++){
+    std::vector<ObjectState> objects = input[i].child_state.object_states();
+    for(int n=0; n < objects.size();n++){
+      ContPose cur = objects[n].cont_pose();
+      contposes.push_back(cur);
+      // std::cout<<cur<<std::endl;
+      Eigen::Matrix4d transform;
+      transform = cur.ContPose::GetTransform().matrix().cast<double>();
+      Eigen::Isometry3d cam_z_front;
+      Eigen::Isometry3d cam_to_body;
+      cam_to_body.matrix() << 0, 0, 1, 0,
+                        -1, 0, 0, 0,
+                        0, -1, 0, 0,
+                        0, 0, 0, 1;
+      cam_z_front = cam_to_world_ * cam_to_body;
+      
+      Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
+      Eigen::Matrix4d pose_in_cam = cam_matrix*transform;
+      // std::cout<<transform<<std::endl;
+      // std::cout<<cam_matrix<<std::endl;
+      cuda_renderer::Model::mat4x4 mat4;
+      //multiply 100 to change scale, data scale is in meter
+      mat4.a0 = pose_in_cam(0,0)*100;
+      mat4.a1 = pose_in_cam(0,1)*100;
+      mat4.a2 = pose_in_cam(0,2)*100;
+      mat4.a3 = pose_in_cam(0,3)*100;
+      mat4.b0 = pose_in_cam(1,0)*100;
+      mat4.b1 = pose_in_cam(1,1)*100;
+      mat4.b2 = pose_in_cam(1,2)*100;
+      mat4.b3 = pose_in_cam(1,3)*100;
+      mat4.c0 = pose_in_cam(2,0)*100;
+      mat4.c1 = pose_in_cam(2,1)*100;
+      mat4.c2 = pose_in_cam(2,2)*100;
+      mat4.c3 = pose_in_cam(2,3)*100;
+      mat4.d0 = pose_in_cam(3,0);
+      mat4.d1 = pose_in_cam(3,1);
+      mat4.d2 = pose_in_cam(3,2);
+      mat4.d3 = pose_in_cam(3,3);
+      // std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<", "
+      // <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<", "
+      // <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<", "
+      // <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
+      mat4_v.push_back(mat4);
     }
-
-    assert(output != nullptr);
-    output->clear();
-    output->resize(count);
+    
+    // ContPose p = input[i].child_state.cont_pose();
+    // Eigen::Matrix4f transform;
+    // transform = p.ObjectModel::GetTransform().matrix().cast<float>();
   }
 
-  broadcast(*mpi_comm_, count, kMasterRank);
-  broadcast(*mpi_comm_, lazy, kMasterRank);
+  #ifdef CUDA_ON
+  int render_size = 750;
+  int total_render_num = mat4_v.size();
+  int num_render = (total_render_num-1)/render_size+1;
+  std::vector<int> total_result_cost;
+  for(int i =0; i <num_render; i ++){
+    auto last = std::min(total_render_num, i*render_size + render_size);
+    std::vector<cuda_renderer::Model::mat4x4>::const_iterator start = mat4_v.begin() + i*render_size;
+    std::vector<cuda_renderer::Model::mat4x4>::const_iterator finish = mat4_v.begin() + last;
+    std::vector<cuda_renderer::Model::mat4x4> cur_transform(start,finish);
+    std::vector<std::vector<uint8_t>> result_gpu = cuda_renderer::render_cuda(render_models_[0].tris,cur_transform,
+                                                      env_params_.width, env_params_.height, env_params_.proj_mat);
+  // std::vector<cv::Mat> test_mat;
+  // int height = 540;
+  // int width = 960;
+  // for(int n = 4; n <5; n ++){
+  //     cv::Mat cur_mat = cv::Mat(height,width,CV_8UC3);
+  //     for(int i = 0; i < height; i ++){
+  //         for(int j = 0; j <width; j ++){
+  //             int index = n*width*height+(i*width+j);
+  //             int red = result_gpu[0][index];
+  //             int green = result_gpu[1][index];
+  //             int blue = result_gpu[2][index];
+  //             // std::cout<<red<<","<<green<<","<<blue<<std::endl;
+  //             cur_mat.at<cv::Vec3b>(i, j) = cv::Vec3b(blue, green,red);
+  //         }
+  //     }
 
-  if (count == 0) {
-    return;
+  //   cv::imshow("gpu_mask1", cur_mat); 
+  //   // cv::FileStorage file("/home/jessy/Desktop/a.txt", cv::FileStorage::WRITE);
+  //   // file << "matName" << cur_mat;
+  //   cv::waitKey(0); 
+  // }
+    std::vector<uint8_t> r_v;
+    std::vector<uint8_t> g_v;
+    std::vector<uint8_t> b_v;
+    for (int y = 0; y < env_params_.height; y++) {
+      for (int x = 0; x < env_params_.width; x++) {
+          cv::Vec3b elem = cv_input_color_image.at<cv::Vec3b>(y, x);
+          r_v.push_back(elem[2]);
+          g_v.push_back(elem[1]);
+          b_v.push_back(elem[0]);
+          
+      }
+    }
+    std::vector<std::vector<uint8_t>> observed;
+    observed.push_back(r_v);
+    observed.push_back(g_v);
+    observed.push_back(b_v);
+    std::vector<int> result_cost = cuda_renderer::compute_cost(result_gpu,observed,env_params_.height,env_params_.width,cur_transform.size());
+    total_result_cost.insert(end(total_result_cost),begin(result_cost),end(result_cost));
+    // for(int i = 0; i < result_cost.size(); i ++){
+      // std::cout<<result_cost[i]<<contposes[i]<<std::endl;
+    // }
   }
-
-  int recvcount = count / num_processors;
-
-  std::vector<CostComputationInput> input_partition(recvcount);
-  std::vector<CostComputationOutput> output_partition(recvcount);
-  boost::mpi::scatter(*mpi_comm_, input, &input_partition[0], recvcount,
-                      kMasterRank);
-
+  std::cout<<total_result_cost.size()<<"ohhhhhhhhhh";
+  // cv::Mat cur_mat = cv::Mat(env_params_.height,env_params_.width,CV_8UC3);
+  // for(int n = 0; n <mat4_v.size(); n ++){
+      
+  //     for(int i = 0; i < env_params_.height; i ++){
+  //         for(int j = 0; j <env_params_.width; j ++){
+  //             int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
+  //             int dep = result_cost[index];
+  //             if(dep!= 0){
+  //                 cur_mat.at<cv::Vec3b>(i, j) = cv::Vec3b(100,100,100);
+  //             }else{
+  //                 cur_mat.at<cv::Vec3b>(i, j) = cv::Vec3b(0,0,0);;
+  //             }
+  // //             // std::cout<<red<<","<<green<<","<<blue<<std::endl;
+              
+  //         }
+  //     }
+  //     cv::imshow("gpu_mask1", cur_mat);
+  //     cv::waitKey(0);
+      
+  // }
+  int num= input.size();
+  assert(output != nullptr);
+  output->clear();
+  output->resize(num);
+  std::cout<<"ayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+  std::vector<CostComputationOutput> output_gpu;
   vector<unsigned short> source_depth_image;
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
   vector<vector<unsigned char>> source_color_image;
   cv::Mat source_cv_depth_image;
   cv::Mat source_cv_color_image;
-
-  GetDepthImage(input_partition[0].source_state, 
-                &source_depth_image, &source_color_image,
-                &source_cv_depth_image, &source_cv_color_image);
-
-  printf("recvcount : %d\n", recvcount);
-  for (int ii = 0; ii < recvcount; ++ii) {
-    printf("State number being processed : %d\n", ii);
-    const auto &input_unit = input_partition[ii];
-    auto &output_unit = output_partition[ii];
-
-    // If this is a dummy input, skip computation.
-    if (input_unit.source_id == -1) {
-      output_unit.cost = -1;
-      continue;
-    }
-    int color_only = 1;
-    if (!lazy) {
-      if(color_only ==1){
-        output_unit.cost = GetColorOnlyCost(input_unit.source_state, input_unit.child_state,
-                                   source_depth_image,
-                                   source_color_image,
-                                   input_unit.source_counted_pixels,
-                                   &output_unit.child_counted_pixels, &output_unit.adjusted_state,
-                                   &output_unit.state_properties, &output_unit.depth_image,
-                                   &output_unit.color_image,
-                                   &output_unit.unadjusted_depth_image,
-                                   &output_unit.unadjusted_color_image);
-      }else{
-        output_unit.cost = GetCost(input_unit.source_state, input_unit.child_state,
-                                   source_depth_image,
-                                   source_color_image,
-                                   input_unit.source_counted_pixels,
-                                   &output_unit.child_counted_pixels, &output_unit.adjusted_state,
-                                   &output_unit.state_properties, &output_unit.depth_image,
-                                   &output_unit.color_image,
-                                   &output_unit.unadjusted_depth_image,
-                                   &output_unit.unadjusted_color_image);
-      }
-    } else {
-      if (input_unit.unadjusted_last_object_depth_image.empty()) {
-        output_unit.cost = -1;
-      } else {
-        output_unit.cost = GetLazyCost(input_unit.source_state, input_unit.child_state,
-                                       input_unit.source_depth_image,
-                                       input_unit.unadjusted_last_object_depth_image,
-                                       input_unit.adjusted_last_object_depth_image,
-                                       input_unit.adjusted_last_object_state,
-                                       input_unit.source_counted_pixels,
-                                       &output_unit.adjusted_state,
-                                       &output_unit.state_properties,
-                                       &output_unit.depth_image);
-      }
-    }
-    // input_unit.source_depth_image.clear();
-    // input_unit.source_depth_image.shrink_to_fit();
+  int total_pixel = env_params_.height*env_params_.width;
+  //for a single object!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  for(int i =0; i <num; i ++){
+    CostComputationOutput cur_unit;
+    cur_unit.cost = total_result_cost[i];
+    cur_unit.adjusted_state = input[i].child_state;
+    cur_unit.state_properties.last_max_depth = kKinectMaxDepth;
+    cur_unit.state_properties.last_min_depth = 0;
+    cur_unit.state_properties.target_cost =  total_result_cost[i];
+    cur_unit.state_properties.source_cost = 0;
+    cur_unit.state_properties.last_level_cost = 0;
+    cur_unit.depth_image = source_depth_image;
+    output_gpu.push_back(cur_unit);
+    // output_gpu[i].color_image = ,
+    // output_gpu[i].unadjusted_depth_image,
+    // output_gpu[i].unadjusted_color_image
   }
+  // *output = output_gpu;
 
-  boost::mpi::gather(*mpi_comm_, &output_partition[0], recvcount, *output,
-                     kMasterRank);
+  *output = output_gpu;
+ 
+  std::cout<<"done!!!!!!!!!!!!!!!11";
+  #endif
+  // int count = 0;
+  // int original_count = 0;
+  // // auto appended_input = input;
+  // const int num_processors = static_cast<int>(mpi_comm_->size());
+  // printf("num_processors : %d\n", num_processors);
 
-  if (mpi_comm_->rank() == kMasterRank) {
-    output->resize(original_count);
-  }
+  // if (mpi_comm_->rank() == kMasterRank) {
+  //   original_count = count = input.size();
+
+  //   if (count % num_processors != 0) {
+  //     printf("resizing input\n");
+  //     count += num_processors - count % num_processors;
+  //     CostComputationInput dummy_input;
+  //     dummy_input.source_id = -1;
+  //     // add dummy inputs to input vector to make it same on all processors
+  //     input.resize(count, dummy_input);
+  //   }
+
+  //   assert(output != nullptr);
+  //   output->clear();
+  //   output->resize(count);
+  // }
+
+  // broadcast(*mpi_comm_, count, kMasterRank);
+  // broadcast(*mpi_comm_, lazy, kMasterRank);
+
+  // if (count == 0) {
+  //   return;
+  // }
+
+  // int recvcount = count / num_processors;
+
+  // std::vector<CostComputationInput> input_partition(recvcount);
+  // std::vector<CostComputationOutput> output_partition(recvcount);
+  // boost::mpi::scatter(*mpi_comm_, input, &input_partition[0], recvcount,
+  //                     kMasterRank);
+
+  // vector<unsigned short> source_depth_image;
+  // vector<vector<unsigned char>> source_color_image;
+  // cv::Mat source_cv_depth_image;
+  // cv::Mat source_cv_color_image;
+
+  // GetDepthImage(input_partition[0].source_state, 
+  //               &source_depth_image, &source_color_image,
+  //               &source_cv_depth_image, &source_cv_color_image);
+
+  // printf("recvcount : %d\n", recvcount);
+  // for (int ii = 0; ii < recvcount; ++ii) {
+  //   printf("State number being processed : %d\n", ii);
+  //   const auto &input_unit = input_partition[ii];
+  //   auto &output_unit = output_partition[ii];
+
+  //   // If this is a dummy input, skip computation.
+  //   if (input_unit.source_id == -1) {
+  //     output_unit.cost = -1;
+  //     continue;
+  //   }
+  //   int color_only = 1;
+  //   if (!lazy) {
+  //     if(color_only ==1){
+  //       output_unit.cost = GetColorOnlyCost(input_unit.source_state, input_unit.child_state,
+  //                                  source_depth_image,
+  //                                  source_color_image,
+  //                                  input_unit.source_counted_pixels,
+  //                                  &output_unit.child_counted_pixels, &output_unit.adjusted_state,
+  //                                  &output_unit.state_properties, &output_unit.depth_image,
+  //                                  &output_unit.color_image,
+  //                                  &output_unit.unadjusted_depth_image,
+  //                                  &output_unit.unadjusted_color_image);
+  //     }else{
+  //       output_unit.cost = GetCost(input_unit.source_state, input_unit.child_state,
+  //                                  source_depth_image,
+  //                                  source_color_image,
+  //                                  input_unit.source_counted_pixels,
+  //                                  &output_unit.child_counted_pixels, &output_unit.adjusted_state,
+  //                                  &output_unit.state_properties, &output_unit.depth_image,
+  //                                  &output_unit.color_image,
+  //                                  &output_unit.unadjusted_depth_image,
+  //                                  &output_unit.unadjusted_color_image);
+  //     }
+  //   } else {
+  //     if (input_unit.unadjusted_last_object_depth_image.empty()) {
+  //       output_unit.cost = -1;
+  //     } else {
+  //       output_unit.cost = GetLazyCost(input_unit.source_state, input_unit.child_state,
+  //                                      input_unit.source_depth_image,
+  //                                      input_unit.unadjusted_last_object_depth_image,
+  //                                      input_unit.adjusted_last_object_depth_image,
+  //                                      input_unit.adjusted_last_object_state,
+  //                                      input_unit.source_counted_pixels,
+  //                                      &output_unit.adjusted_state,
+  //                                      &output_unit.state_properties,
+  //                                      &output_unit.depth_image);
+  //     }
+  //   }
+  //   // input_unit.source_depth_image.clear();
+  //   // input_unit.source_depth_image.shrink_to_fit();
+  // }
+
+  // boost::mpi::gather(*mpi_comm_, &output_partition[0], recvcount, *output,
+  //                    kMasterRank);
+
+  // if (mpi_comm_->rank() == kMasterRank) {
+  //   output->resize(original_count);
+  // }
 }
 
 
@@ -4554,7 +4729,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 // If 180 degree symmetric, then iterate only between 0 and 180.
                 if (model_meta_data.symmetry_mode == 1 &&
                     theta > (M_PI + env_params_.theta_res)) {
-                  printf("Semi-symmetric object\n");
+                  // printf("Semi-symmetric object\n");
                   //break;
                 }
 

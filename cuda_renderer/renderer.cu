@@ -413,19 +413,19 @@ __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* b
                     }
                 }
                 if(v == 0){
-                    output[cur_id] = 100;
+                    output[cur_id] = 1;
                 }
                 
             }
 
         }else{
-            output[cur_id] = 100;
+            output[cur_id] = 1;
             float lab[3];
             rgb2lab(red,green,blue,lab);
             l1  = lab[0];
             a1  = lab[1];
             b1  = lab[2];
-            output[cur_id] = 100;
+            output[cur_id] = 1;
 
             for(int i = -2; i <3;i++){
                 int row = yIndex+i;
@@ -498,7 +498,7 @@ std::vector<int> compute_cost(const std::vector<std::vector<uint8_t>> input,
                                        depth_vec,
                                        width,height,num_rendered);
         cudaDeviceSynchronize();
-        gpuErrchk(cudaPeekAtLastError());
+        // gpuErrchk(cudaPeekAtLastError());
     }
 
    
@@ -515,9 +515,9 @@ std::vector<int> compute_cost(const std::vector<std::vector<uint8_t>> input,
     for(int i = 0 ; i < num_rendered; i ++){
         cost[i] = std::accumulate(result_depth.begin()+i*width*height,result_depth.begin()+(i+1)*width*height,0);
     }
-    std::cout<< cost[0] <<"!!!!!!!!!!";
+    // std::cout<< cost[0] <<"!!!!!!!!!!";
     
-    return result_depth;
+    return cost;
 }
 
 
@@ -567,7 +567,7 @@ std::vector<std::vector<uint8_t>> render_cuda(const std::vector<Model::Triangle>
                                                         depth_image_vec, width, height, proj_mat, roi,
                                                         red_image_vec,green_image_vec,blue_image_vec);
         cudaDeviceSynchronize();
-        gpuErrchk(cudaPeekAtLastError());
+        // gpuErrchk(cudaPeekAtLastError());
     }
 
 
@@ -612,6 +612,11 @@ std::vector<std::vector<uint8_t>> render_cuda(const std::vector<Model::Triangle>
     result_color.push_back(result_red);
     result_color.push_back(result_green);
     result_color.push_back(result_blue);
+    // for(int i=0;i<result_red.size(); i ++){
+    //     if(result_red[i]!=0){
+    //         std::cout<<result_red[i];
+    //     }
+    // }
     // result_lab.push_back(result_l);
     // result_lab.push_back(result_a);
     // result_lab.push_back(result_b);

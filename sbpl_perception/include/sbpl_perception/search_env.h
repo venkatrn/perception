@@ -66,6 +66,10 @@ struct EnvConfig {
 struct EnvParams {
   double table_height;
   Eigen::Isometry3d camera_pose;
+  cv::Mat cam_intrinsic;
+  cuda_renderer::Model::mat4x4 proj_mat;
+  int width;
+  int height;
   double x_min, x_max, y_min, y_max;
   double res, theta_res; // Resolution for x,y and theta
   int goal_state_id, start_state_id;

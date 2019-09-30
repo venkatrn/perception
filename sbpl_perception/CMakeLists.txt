@@ -9,6 +9,23 @@ project(sbpl_perception)
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
 # set(ROS_BUILD_TYPE RelWithDebInfo)
 # set(ROS_BUILD_TYPE Debug)
+option(USE_CUDA "use cuda or not" ON)
+if(USE_CUDA)
+set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-9.0)
+add_definitions(-DCUDA_ON)
+endif()
+if(USE_CUDA)
+# cuda
+find_package(CUDA REQUIRED)
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -O3")
+list(APPEND renderer_inc ${CUDA_INCLUDE_DIRS})
+list(APPEND renderer_lib ${CUDA_LIBRARIES})
+endif()
+if(USE_CUDA)
+CUDA_COMPILE(renderer_cuda_objs ${renderer_cuda})
+endif()
+
+
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
