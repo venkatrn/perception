@@ -211,6 +211,7 @@ def se3_q2m(se3_q):
 _NEXT_AXIS = [1, 2, 0, 1]
 
 # map axes strings to/from tuples of inner axis, parity, repetition, frame
+# 12 are extrinsic, 12 are intrinsic
 _AXES2TUPLE = {
     "sxyz": (0, 0, 0, 0),
     "sxyx": (0, 0, 1, 0),
