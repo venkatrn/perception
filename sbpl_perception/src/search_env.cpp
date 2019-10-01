@@ -4449,7 +4449,18 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
                   continue;
                 }
-                // std::cout << "Valid pose for theta : " << theta << endl;
+
+                if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
+                  break;
+                }
+
+                // If 180 degree symmetric, then iterate only between 0 and 180.
+                if (model_meta_data.symmetry_mode == 1 &&
+                    theta > (M_PI + env_params_.theta_res)) {
+                  printf("Semi-symmetric object\n");
+                  break;
+                }
+                std::cout << "Valid pose for theta : " << theta << endl;
 
                 GraphState s = source_state; // Can only add objects, not remove them
                 const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
@@ -4676,16 +4687,6 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 }
                 // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
                 // If symmetric object, don't iterate over all thetas
-                if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
-                  break;
-                }
-
-                // If 180 degree symmetric, then iterate only between 0 and 180.
-                if (model_meta_data.symmetry_mode == 1 &&
-                    theta > (M_PI + env_params_.theta_res)) {
-                  printf("Semi-symmetric object\n");
-                  break;
-                }
 
                 // }
               }

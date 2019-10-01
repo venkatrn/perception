@@ -2,7 +2,7 @@
   <!-- <master auto="start"/> -->
   <param name="/use_sim_time" value="false"/>
 
-  <arg name="image_debug" default="true" />
+  <arg name="image_debug" default="false" />
   <arg name="urdf" default="false" />
 
   <arg name="debug" default="false" />
@@ -11,6 +11,7 @@
 
   <include file="$(find sbpl_perception)/config/roman_objects.xml"/>
 
+  <param name="image_debug" value="false"/>
 
   <group if="$(arg urdf)">
       <include file="$(find roman_model)/robots/upload_rcta_roman.launch" />
@@ -42,20 +43,15 @@
 
     <!-- <param name="table_height" value="1.127"/> <!&#45;&#45;1.13&#45;&#45;> -->
 
-    <param name="table_height" value="0.08"/> <!--1.13-->
-    <param name="zmax" value="0.25"/> <!--1.13-->
-    <!-- <param name="xmin" value="1.0"/>
-    <param name="xmax" value="1.15"/>
-    <param name="ymin" value="-0.3"/>
-    <param name="ymax" value="0.3"/> -->
+    <param name="table_height" value="-0.083"/> <!--1.13-->
 
     <!--  Crate -->
-    <param name="xmin" value="0.6"/> <!--1.13-->
+    <param name="xmin" value="0.5"/> <!--1.13-->
     <param name="xmax" value="1.5"/> <!--1.13-->
-    <param name="ymin" value="-0.30"/> <!--1.13-->
-    <param name="ymax" value="0.30"/> <!--1.13-->
+    <param name="ymin" value="-0.05"/> <!--1.13-->
+    <param name="ymax" value="0.50"/> <!--1.13-->
 
-    <param name="reference_frame" value="/roman1/base_footprint"/>
+    <param name="reference_frame" value="/roman1/base_link"/>
     <param name="camera_optical_frame" value="/roman1/head_realsense_color_optical_frame"/>
     <param name="camera_frame" value="/roman1/head_realsense_depth_frame"/>
     <!-- <param name="camera_frame" value="/roman1/head_realsense_depth_frame"/> -->

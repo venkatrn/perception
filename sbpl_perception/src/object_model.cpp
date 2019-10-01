@@ -105,6 +105,8 @@ Eigen::Affine3f PreprocessModel(const pcl::PolygonMesh::Ptr &mesh_in,
   //   << max_pt.z - min_pt.z << endl;
 
   *mesh_out = *mesh_in;
+  // cloud_out = perception_utils::DownsamplePointCloud(cloud_out, 0.03);
+
   pcl::toPCLPointCloud2(*cloud_out, mesh_out->cloud);
   std::cout << "Preprocess done" << endl;
 
