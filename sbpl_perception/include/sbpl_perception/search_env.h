@@ -502,7 +502,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                    bool after_refinement) const;
 
   int rejected_histogram_count = 0;
-  bool IsValidHistogram(cv::Mat last_cv_obj_color_image, double threshold, double &base_distance);
+  bool IsValidHistogram(int object_model_id, cv::Mat last_cv_obj_color_image, double threshold, double &base_distance);
 
   void LabelEuclideanClusters();
   std::vector<unsigned short> GetDepthImageFromPointCloud(

@@ -182,6 +182,7 @@ ObjectRecognizer::ObjectRecognizer(std::shared_ptr<boost::mpi::communicator>
   kCameraCY = camera_cy;
   kZNear = camera_znear;
   kZFar = camera_zfar;
+  kNumPixels = kCameraWidth * kCameraHeight;
 
   env_config_.res = search_resolution_translation;
   env_config_.theta_res = search_resolution_yaw;

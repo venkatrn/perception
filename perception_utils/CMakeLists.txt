@@ -48,21 +48,21 @@ target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${HDF5_hdf5_LIBRARY}
   )
 
 
-add_executable(vfh_train tools/vfh/vfh_train.cpp)
-target_link_libraries(vfh_train ${PROJECT_NAME})
+#add_executable(vfh_train tools/vfh/vfh_train.cpp)
+#target_link_libraries(vfh_train ${PROJECT_NAME})
 
-add_executable(vfh_test tools/vfh/vfh_test.cpp)
-target_link_libraries(vfh_test ${PROJECT_NAME})
+#add_executable(vfh_test tools/vfh/vfh_test.cpp)
+#target_link_libraries(vfh_test ${PROJECT_NAME})
 
-add_executable(vfh_generate_views tools/vfh/vfh_generate_views.cpp)
-target_link_libraries(vfh_generate_views ${PROJECT_NAME})
+#add_executable(vfh_generate_views tools/vfh/vfh_generate_views.cpp)
+#target_link_libraries(vfh_generate_views ${PROJECT_NAME})
 
-add_executable(align_pcd_to_world tools/align_pcd_to_world.cpp)
-target_link_libraries(align_pcd_to_world ${PROJECT_NAME})
+#add_executable(align_pcd_to_world tools/align_pcd_to_world.cpp)
+#target_link_libraries(align_pcd_to_world ${PROJECT_NAME})
 
-add_executable(depth_image_smoother
-  tools/depth_image_smoother.cpp)
-target_link_libraries(depth_image_smoother ${PROJECT_NAME})
+#add_executable(depth_image_smoother
+#  tools/depth_image_smoother.cpp)
+#target_link_libraries(depth_image_smoother ${PROJECT_NAME})
 
 install(TARGETS ${PROJECT_NAME}
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}

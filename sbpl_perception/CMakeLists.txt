@@ -17,6 +17,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 #set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
 
+set(CUSTOM_BOOST_MPI ON)
+message(WARNING CUSTOM_BOOST_MPI)
+message(WARNING ${CUSTOM_BOOST_MPI})
 
 find_package(ZLIB)
 
@@ -43,20 +46,24 @@ find_package(catkin REQUIRED COMPONENTS
 
 #find_package(Boost COMPONENTS serialization thread mpi REQUIRED)
 
-#set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
-#set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
-#set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
-#set (BOOST_LIBRARYDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/lib")
-#set (Boost_NO_SYSTEM_PATHS ON)
-#set(Boost_USE_STATIC_LIBS OFF)
-#set(Boost_USE_MULTITHREADED ON)
-#set(Boost_USE_STATIC_RUNTIME OFF)
-include_directories(${Boost_INCLUDE_DIRS})
-#set( Boost_LIBRARIES
-#        ${BOOST_LIBRARYDIR}/libboost_serialization.so
-#        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
+if (${CUSTOM_BOOST_MPI})
+  set (BOOST_ROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+  set (BOOSTROOT "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install")
+  set (BOOST_INCLUDEDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/include")
+  set (BOOST_LIBRARYDIR "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/boost_1_67_0_perch/install/lib")
+  set (Boost_NO_SYSTEM_PATHS ON)
+  set(Boost_USE_STATIC_LIBS OFF)
+  set(Boost_USE_MULTITHREADED ON)
+  set(Boost_USE_STATIC_RUNTIME OFF)
+  set( Boost_LIBRARIES
+        ${BOOST_LIBRARYDIR}/libboost_serialization.so
+        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
+else ()
+  find_package(Boost 1.58.0 REQUIRED mpi serialization system)
+endif()
 
-find_package(Boost 1.58.0 REQUIRED mpi serialization system)
+include_directories(${Boost_INCLUDE_DIRS})
+
 
 # find_package(OpenCV REQUIRED)
 #find_package(MPI REQUIRED)
@@ -89,10 +96,16 @@ include_directories(include ${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${FCL_INCLUDE_DIRS})
 
 # include_directories(${MPI_INCLUDE_PATH})
-# set (MPI_ROOT /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install)
-set (MPI_ROOT /usr/include/openmpi/)
-# include_directories(${MPI_ROOT}/include)
-include_directories(${MPI_ROOT})
+if (${CUSTOM_BOOST_MPI})
+  set (MPI_INCLUDE /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/include)
+  set (CXX_PATH /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpicxx)
+else()
+  set (MPI_INCLUDE /usr/include/openmpi/)
+  set (CXX_PATH /usr/bin/mpicxx)
+endif()
+
+include_directories(${MPI_INCLUDE})
+#include_directories(${Pangolin_INCLUDE_DIRS})
 
 
 include_directories(${catkin_INCLUDE_DIRS})
@@ -118,8 +131,7 @@ catkin_package(
     #Boost
   INCLUDE_DIRS
     include
-    # ${MPI_ROOT}/include/
-    ${MPI_ROOT}/
+    ${MPI_INCLUDE}
   LIBRARIES
     ${PROJECT_NAME}
   )
@@ -162,11 +174,10 @@ target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Z
 add_executable(demo src/experiments/demo.cpp)
 target_link_libraries(demo ${PROJECT_NAME})
 
-  include(CMakeForceCompiler)
+include(CMakeForceCompiler)
   #CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
 
-  # CMAKE_FORCE_CXX_COMPILER(/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
-  CMAKE_FORCE_CXX_COMPILER(/usr/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
+CMAKE_FORCE_CXX_COMPILER(${CXX_PATH} ${CMAKE_CXX_COMPILER_ID})
 
 #catkin_add_gtest(${PROJECT_NAME}_states_test tests/states_test.cpp)
 #target_link_libraries(${PROJECT_NAME}_states_test ${PROJECT_NAME})
@@ -270,8 +281,8 @@ install(TARGETS ${PROJECT_NAME}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-catkin_install_python(
-  PROGRAMS
-  src/scripts/render_poses.py
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+#catkin_install_python(
+#  PROGRAMS
+#  src/scripts/render_poses.py
+#  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#)

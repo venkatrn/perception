@@ -78,10 +78,10 @@ class ContPose {
   double roll_ = 0.0;
   double pitch_ = 0.0;
   double yaw_ = 0.0;
-  double qx_ = 0;
-  double qy_ = 0;
-  double qz_ = 0;
-  double qw_ = 0;
+  double qx_ = 0.0;
+  double qy_ = 0.0;
+  double qz_ = 0.0;
+  double qw_ = 0.0;
   int external_pose_id_ = -1;
   std::string external_render_path_= "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered/";
 

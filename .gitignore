@@ -25,6 +25,30 @@ bugs.txt
 *ycm_extra_conf*
 tags
 
+.vscode
+.DS_Store
+__pycache__
+_ext
+*.pyc
+*.so
+maskrcnn_benchmark.egg-info/
+build/
+dist/
+
+# pytorch/python/numpy formats
+*.pth
+*.pkl
+*.npy
+
+# ipython/jupyter notebooks
+*.ipynb
+**/.ipynb_checkpoints/
+
+# Editor temporaries
+*.swn
+*.swo
+*.swp
+*~
 
 heuristics/
 *_results/

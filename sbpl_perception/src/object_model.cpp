@@ -257,12 +257,14 @@ void ObjectModel::TransformPolyMeshWithShift(const pcl::PolygonMesh::Ptr
                                                  pcl::PointCloud<PointT>);
   pcl::fromPCLPointCloud2(mesh_in->cloud, *cloud_in);
 
+  // Realign the mean of observed and rendered points
   transformPointCloud(*cloud_in, *cloud_out, transform);
   Eigen::Vector4f centroid;
   pcl::compute3DCentroid(*cloud_out, centroid);
   std::cout << "centroid " << centroid << std::endl;
   Eigen::Vector4f vec_out;
-  vec_out << transform(0,3), transform(1,3), transform(2,3);
+  // std::cout << transform << endl;
+  vec_out << transform(0,3), transform(1,3), transform(2,3), transform(3,3);
   std::cout << "centroid old " << vec_out << std::endl;
   std::cout << "centroid difference  " << vec_out-centroid << std::endl;
   Eigen::Vector4f shift = vec_out-centroid;
