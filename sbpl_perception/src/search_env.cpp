@@ -100,12 +100,12 @@ EnvObjectRecognition::EnvObjectRecognition(const
   argv[1] = const_cast<char *>("1");
 
   // printf("Making simulator camera and input camera dimensions equal\n");
-  // kDepthImageHeight = kCameraHeight;
-  // kDepthImageWidth = kCameraWidth;
-  // kNumPixels = kDepthImageWidth * kDepthImageHeight;
+  // kCameraHeight = kCameraHeight;
+  // kCameraWidth = kCameraWidth;
+  // kNumPixels = kCameraWidth * kCameraHeight;
 
   kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
-                                                     kDepthImageHeight, kDepthImageWidth));
+                                                     kCameraHeight, kCameraWidth));
   scene_ = kinect_simulator_->scene_;
   observed_cloud_.reset(new PointCloud);
   original_input_cloud_.reset(new PointCloud);
@@ -545,19 +545,19 @@ void EnvObjectRecognition::LabelEuclideanClusters() {
            observed_organized_cloud_->height);
 
     for (const auto &index : cluster.indices) {
-      int u = index % kDepthImageWidth;
-      int v = index / kDepthImageWidth;
-      int image_index = v * kDepthImageWidth + u;
+      int u = index % kCameraWidth;
+      int v = index / kCameraWidth;
+      int image_index = v * kCameraWidth + u;
       cluster_labels[image_index] = static_cast<int>(ii + 1);
     }
   }
 
   static cv::Mat image;
-  image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+  image.create(kCameraHeight, kCameraWidth, CV_8UC1);
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      int index = ii * kDepthImageWidth + jj;
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
+      int index = ii * kCameraWidth + jj;
       image.at<uchar>(ii, jj) = static_cast<uchar>(cluster_labels[index]);
     }
   }
@@ -1498,13 +1498,13 @@ int EnvObjectRecognition::GetLazyCost(const GraphState &source_state,
     return -1;
   }
 
-  vector<unsigned short> new_obj_depth_image(kDepthImageWidth *
-                                             kDepthImageHeight, kKinectMaxDepth);
+  vector<unsigned short> new_obj_depth_image(kCameraWidth *
+                                             kCameraHeight, kKinectMaxDepth);
 
   // RGB Aditya
   vector<unsigned char> color_vector{'0','0','0'};
-  vector<vector<unsigned char>> new_obj_color_image(kDepthImageWidth *
-                                             kDepthImageHeight, color_vector);
+  vector<vector<unsigned char>> new_obj_color_image(kCameraWidth *
+                                             kCameraHeight, color_vector);
   // Do ICP alignment on object *only* if it has been occluded by an existing
   // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
 
@@ -1797,11 +1797,11 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   }
 
   // new_pixel_indices is pixels corresponding to object added in this state
-  vector<unsigned short> new_obj_depth_image(kDepthImageWidth *
-                                             kDepthImageHeight, kKinectMaxDepth);
+  vector<unsigned short> new_obj_depth_image(kCameraWidth *
+                                             kCameraHeight, kKinectMaxDepth);
   vector<unsigned char> color_vector{'0','0','0'};
-  vector<vector<unsigned char>> new_obj_color_image(kDepthImageWidth *
-                                             kDepthImageHeight, color_vector);
+  vector<vector<unsigned char>> new_obj_color_image(kCameraWidth *
+                                             kCameraHeight, color_vector);
 
   // Do ICP alignment on object *only* if it has been occluded by an existing
   // object in the scene. Otherwise, we could simply use the cached depth image corresponding to the unoccluded ICP adjustement.
@@ -2673,9 +2673,9 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
     uint32_t rgbc = ((uint32_t)rgb[0] << 16 | (uint32_t)rgb[1] << 8 | (uint32_t)rgb[2]);
     point.rgb = *reinterpret_cast<float*>(&rgbc);
 
-    // int u = kDepthImageWidth - ii % kDepthImageWidth;
-    int u = ii % kDepthImageWidth;
-    int v = ii / kDepthImageWidth;
+    // int u = kCameraWidth - ii % kCameraWidth;
+    int u = ii % kCameraWidth;
+    int v = ii / kCameraWidth;
     // int idx = y * camera_width_ + x;
     //         int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
     // point = observed_organized_cloud_->at(v, u);
@@ -2690,7 +2690,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
     }
     else
     {
-      v = kDepthImageHeight - 1 - v;
+      v = kCameraHeight - 1 - v;
       kinect_simulator_->rl_->getGlobalPoint(u, v,
                                              static_cast<float>(depth_image[ii]) / 1000.0, cam_to_world_,
                                              point_eig);
@@ -2712,7 +2712,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
   const vector<unsigned short> &depth_image,
   const vector<vector<unsigned char>> &color_image) {
 
-    // printf("kDepthImageWidth : %d\n", kDepthImageWidth);
+    // printf("kCameraWidth : %d\n", kCameraWidth);
 
     using milli = std::chrono::milliseconds;
     auto start = std::chrono::high_resolution_clock::now();
@@ -2732,9 +2732,9 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
 
 
 
-      // int u = kDepthImageWidth - ii % kDepthImageWidth;
-      int u = ii % kDepthImageWidth;
-      int v = ii / kDepthImageWidth;
+      // int u = kCameraWidth - ii % kCameraWidth;
+      int u = ii % kCameraWidth;
+      int v = ii / kCameraWidth;
       // int idx = y * camera_width_ + x;
       //         int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
       // point = observed_organized_cloud_->at(v, u);
@@ -2754,7 +2754,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
       }
       else
       {
-        v = kDepthImageHeight - 1 - v;
+        v = kCameraHeight - 1 - v;
         if (kUseColorCost)
         {
           uint32_t rgbc = ((uint32_t)color_image[ii][0] << 16
@@ -2803,8 +2803,8 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloud(
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedOrganizedPointCloud(
   const vector<unsigned short> &depth_image) {
   PointCloudPtr cloud(new PointCloud);
-  cloud->width = kDepthImageWidth;
-  cloud->height = kDepthImageHeight;
+  cloud->width = kCameraWidth;
+  cloud->height = kCameraHeight;
   cloud->points.resize(kNumPixels);
   cloud->is_dense = true;
 
@@ -2819,10 +2819,10 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedOrganizedPointCloud(
       continue;
     }
 
-    // int u = kDepthImageWidth - ii % kDepthImageWidth;
-    int u = ii % kDepthImageWidth;
-    int v = ii / kDepthImageWidth;
-    v = kDepthImageHeight - 1 - v;
+    // int u = kCameraWidth - ii % kCameraWidth;
+    int u = ii % kCameraWidth;
+    int v = ii / kCameraWidth;
+    v = kCameraHeight - 1 - v;
     // int idx = y * camera_width_ + x;
     //         int i_in = (camera_height_ - 1 - y) * camera_width_ + x;
     // point = observed_organized_cloud_->at(v, u);
@@ -2851,13 +2851,13 @@ vector<unsigned short> EnvObjectRecognition::GetDepthImageFromPointCloud(
     float range = 0.0;
     kinect_simulator_->rl_->getCameraCoordinate(cam_to_world_, world_point, u, v,
                                                 range);
-    v = kDepthImageHeight - 1 - v;
+    v = kCameraHeight - 1 - v;
 
-    if (v < 0 || u < 0 || v >= kDepthImageHeight || u >= kDepthImageWidth) {
+    if (v < 0 || u < 0 || v >= kCameraHeight || u >= kCameraWidth) {
       continue;
     }
 
-    const int idx = v * kDepthImageWidth + u;
+    const int idx = v * kCameraWidth + u;
     assert(idx >= 0 && idx < kNumPixels);
     depth_image[idx] = std::min(static_cast<unsigned short>(1000.0 * range),
                                 depth_image[idx]);
@@ -3108,13 +3108,13 @@ void EnvObjectRecognition::PrintImage(string fname,
 
   assert(depth_image.size() != 0);
   static cv::Mat image;
-  image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+  image.create(kCameraHeight, kCameraWidth, CV_8UC1);
 
   const double range = double(max_observed_depth_ - min_observed_depth_);
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      int idx = ii * kDepthImageWidth + jj;
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
+      int idx = ii * kCameraWidth + jj;
       if (depth_image[idx] >= kKinectMaxDepth) {
         image.at<uchar>(ii, jj) = 0;
       } else {
@@ -3139,8 +3139,8 @@ void EnvObjectRecognition::PrintImage(string fname,
   cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
 
   // Convert background to white to make pretty.
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
       if (image.at<uchar>(ii, jj) == 0) {
         c_image.at<cv::Vec3b>(ii, jj)[0] = 0;
         c_image.at<cv::Vec3b>(ii, jj)[1] = 0;
@@ -3166,13 +3166,13 @@ void EnvObjectRecognition::PrintImage(string fname,
 
   assert(depth_image.size() != 0);
   static cv::Mat image;
-  image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+  image.create(kCameraHeight, kCameraWidth, CV_8UC1);
 
   const double range = double(max_observed_depth_ - min_observed_depth_);
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      int idx = ii * kDepthImageWidth + jj;
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
+      int idx = ii * kCameraWidth + jj;
       if (depth_image[idx] >= kKinectMaxDepth) {
         image.at<uchar>(ii, jj) = 0;
       } else {
@@ -3197,8 +3197,8 @@ void EnvObjectRecognition::PrintImage(string fname,
   cv::applyColorMap(image, c_image, cv::COLORMAP_JET);
 
   // Convert background to white to make pretty.
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
       if (image.at<uchar>(ii, jj) == 0) {
         c_image.at<cv::Vec3b>(ii, jj)[0] = 0;
         c_image.at<cv::Vec3b>(ii, jj)[1] = 0;
@@ -3325,7 +3325,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
     // cv::Mat cv_image;
     kinect_simulator_->get_depth_image_cv(depth_buffer, cv_depth_image);
     // *cv_depth_image = cv_image;
-    // cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
+    // cv_depth_image = cv::Mat(kCameraHeight, kCameraWidth, CV_16UC1, depth_image->data());
     // if (mpi_comm_->rank() == kMasterRank) {
     //   static cv::Mat c_image;
     //   ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
@@ -3374,7 +3374,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   if (object_states.size() > 0)
   {
       // printf("Using new render as\n");
-      // cv::Mat final_image(kDepthImageHeight, kDepthImageWidth, CV_8UC3, cv::Scalar(0,0,0));
+      // cv::Mat final_image(kCameraHeight, kCameraWidth, CV_8UC3, cv::Scalar(0,0,0));
       for (size_t ii = 0; ii < object_states.size(); ii++) {
           const auto &object_state = object_states[ii];
           ObjectModel obj_model = obj_models_[object_state.id()];
@@ -3400,8 +3400,8 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
           // static cv::Mat c_image;
           // cvToShort(cv_depth_image, depth_image);
 
-          // for (int u = 0; u < kDepthImageWidth; u++) {
-          //   for (int v = 0; v < kDepthImageHeight; v++) {
+          // for (int u = 0; u < kCameraWidth; u++) {
+          //   for (int v = 0; v < kCameraHeight; v++) {
           //     // if (final_image.at<unsigned short>(v,u) > 0 && cv_depth_image.at<unsigned short>(v,u) > 0)
           //     {
           //         final_image.at<unsigned short>(v,u) = std::max(final_image.at<unsigned short>(v,u),
@@ -3470,7 +3470,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   }
   //
   // kinect_simulator_->get_depth_image_cv(depth_buffer, depth_image);
-  // cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1, depth_image->data());
+  // cv_depth_image = cv::Mat(kCameraHeight, kCameraWidth, CV_16UC1, depth_image->data());
   // if (mpi_comm_->rank() == kMasterRank) {
   //   static cv::Mat c_image;
   //   ColorizeDepthImage(cv_depth_image, c_image, min_observed_depth_, max_observed_depth_);
@@ -3638,9 +3638,9 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   min_observed_depth_ = kKinectMaxDepth;
   max_observed_depth_ = 0;
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      int idx = ii * kDepthImageWidth + jj;
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
+      int idx = ii * kCameraWidth + jj;
 
       if (observed_depth_image_[idx] == kKinectMaxDepth) {
         continue;

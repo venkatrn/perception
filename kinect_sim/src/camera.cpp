@@ -36,6 +36,7 @@ float kCameraCX = 324.285f;
 float kCameraCY = 238.717f;
 float kZNear = 0.1f;
 float kZFar = 20.0f;
+int kNumPixels = kCameraWidth * kCameraHeight;
 
 // FAT/NDDS Camera
 // int kCameraWidth = 960;

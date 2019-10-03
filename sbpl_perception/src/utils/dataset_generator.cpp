@@ -6,6 +6,7 @@
 #include <sbpl_perception/utils/utils.h>
 
 #include <ros/ros.h>
+#include <kinect_sim/camera_constants.h>
 
 #include <chrono>
 #include <iostream>
@@ -65,7 +66,7 @@ void DatasetGenerator::AddSpeckleNoiseToDepthImage(const cv::Mat &input,
 
   // Find all the valid points in the depth image.
   auto valid_points = GetValidPointsInBoundingBox(input, cv::Rect(cv::Point(0,
-                                                                            0), cv::Point(kDepthImageWidth, kDepthImageHeight)));
+                                                                            0), cv::Point(kCameraWidth, kCameraHeight)));
   int num_random_points = percent * static_cast<double>(valid_points.size()) /
                           100.0;
   std::random_shuffle(valid_points.begin(), valid_points.end());
@@ -111,7 +112,7 @@ DatasetGenerator::DatasetGenerator(int argc, char **argv) : output_dir_("") {
   dummy_argv[0] = "0";
   dummy_argv[1] = "1";
   kinect_simulator_ = SimExample::Ptr(new SimExample(0, dummy_argv,
-                                                     kDepthImageHeight, kDepthImageWidth));
+                                                     kCameraHeight, kCameraWidth));
 
   ros::init(argc, argv, "dataset_generator");
   ros::NodeHandle nh;
@@ -264,7 +265,7 @@ void DatasetGenerator::GenerateCylindersDataset(double min_radius,
           static cv::Mat cv_depth_image;
           // Don't keep re-rendering if object is rotationally symmetric.
           if (!symmetric_object) {
-            cv_depth_image = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1,
+            cv_depth_image = cv::Mat(kCameraHeight, kCameraWidth, CV_16UC1,
                                      depth_image.data());
           }
           // If this is a rotationally symmetric object, just one camera pose

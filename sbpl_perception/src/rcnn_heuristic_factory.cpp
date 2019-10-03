@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <kinect_sim/camera_constants.h>
 
 using namespace std;
 
@@ -54,7 +55,7 @@ RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input, PointC
 
   auto depth_image = OrganizedPointCloudToKinectDepthImage(
                        depth_img_cloud);
-  input_depth_image_ = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1,
+  input_depth_image_ = cv::Mat(kCameraHeight, kCameraWidth, CV_16UC1,
                                depth_image.data());
   // Because the data is transient.
   input_depth_image_ = input_depth_image_.clone();
@@ -82,7 +83,7 @@ RCNNHeuristicFactory::RCNNHeuristicFactory(const RecognitionInput &input,
 
   auto depth_image = OrganizedPointCloudToKinectDepthImage(
                        depth_img_cloud);
-  input_depth_image_ = cv::Mat(kDepthImageHeight, kDepthImageWidth, CV_16UC1,
+  input_depth_image_ = cv::Mat(kCameraHeight, kCameraWidth, CV_16UC1,
                                depth_image.data());
   // Because the data is transient.
   input_depth_image_ = input_depth_image_.clone();
@@ -261,20 +262,20 @@ void RCNNHeuristicFactory::SaveROIsToDisk(const boost::filesystem::path
     auto &cv_cluster = cv_clusters[ii];
 
     for (const auto &index : cluster.indices) {
-      int u = index % kDepthImageWidth;
-      int v = index / kDepthImageWidth;
-      int image_index = v * kDepthImageWidth + u;
+      int u = index % kCameraWidth;
+      int v = index / kCameraWidth;
+      int image_index = v * kCameraWidth + u;
       cv_cluster.emplace_back(u, v);
       cluster_labels[image_index] = static_cast<int>(ii + 1);
     }
   }
 
   static cv::Mat image;
-  image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+  image.create(kCameraHeight, kCameraWidth, CV_8UC1);
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
-      int index = ii * kDepthImageWidth + jj;
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
+      int index = ii * kCameraWidth + jj;
       image.at<uchar>(ii, jj) = static_cast<uchar>(cluster_labels[index]);
     }
   }
@@ -306,9 +307,9 @@ void RCNNHeuristicFactory::SaveROIsToDisk(const boost::filesystem::path
   cv::Mat new_image;
   cv::Mat mask;
   cv::Mat encoded_roi;
-  new_image.create(kDepthImageHeight, kDepthImageWidth, CV_16UC1);
-  mask.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
-  encoded_roi.create(kDepthImageHeight, kDepthImageWidth, CV_8UC3);
+  new_image.create(kCameraHeight, kCameraWidth, CV_16UC1);
+  mask.create(kCameraHeight, kCameraWidth, CV_8UC1);
+  encoded_roi.create(kCameraHeight, kCameraWidth, CV_8UC3);
 
   for (size_t ii = 0; ii < cv_clusters.size(); ++ii) {
     const auto cv_cluster = cv_clusters[ii];
@@ -463,7 +464,7 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
   assert(matching_model_num != -1);
 
   static cv::Mat heur_vals;
-  heur_vals.create(kDepthImageHeight, kDepthImageWidth, CV_64FC1);
+  heur_vals.create(kCameraHeight, kCameraWidth, CV_64FC1);
   heur_vals.setTo(0);
 
   for (double x = recognition_input_.x_min; x <= recognition_input_.x_max;
@@ -483,10 +484,10 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
                                                   cv_row,
                                                   range);
       // TODO: move this to getCameraCoordinate.
-      cv_row = kDepthImageHeight - 1 - cv_row;
+      cv_row = kCameraHeight - 1 - cv_row;
 
-      if (cv_row < 0 || cv_row >= kDepthImageHeight || cv_col < 0 ||
-          cv_col >= kDepthImageWidth) {
+      if (cv_row < 0 || cv_row >= kCameraHeight || cv_col < 0 ||
+          cv_col >= kCameraWidth) {
         continue;
       }
 
@@ -503,8 +504,8 @@ void RCNNHeuristicFactory::RasterizeHeuristic(const Heuristic &heuristic,
   cv::applyColorMap(heur_vals, raster, cv::COLORMAP_JET);
 
   // Convert background to black to make pretty.
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
       if (heur_vals.at<char>(ii, jj) == 0) {
         raster.at<cv::Vec3b>(ii, jj)[0] = 0;
         raster.at<cv::Vec3b>(ii, jj)[1] = 0;
