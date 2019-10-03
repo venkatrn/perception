@@ -1455,7 +1455,7 @@ def run_6d():
     #for img_i in list(range(0,100)) + list(range(100,120)) + list(range(155,177)):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
-    for img_i in range(113,114):
+    for img_i in range(0,1):
         # Get Image
         image_name = 'kitchen_4/00{}.left.jpg'.format(str(img_i).zfill(4))
         if image_name in skip_list:
@@ -1627,14 +1627,14 @@ def run_roman_crate():
 def run_sameshape():
     ## Running on PERCH only with synthetic color dataset - shape
     # Use normalize cost to get best results
-    # base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed"
-    base_dir = "/media/sbpl/Data/Aditya/datasets/Zed"
+    base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed"
+    # base_dir = "/media/sbpl/Data/Aditya/datasets/Zed"
     image_directory = base_dir
     annotation_file = base_dir + '/instances_newmap1_turbosquid_2018.json'
     # annotation_file = base_dir + '/instances_newmap1_turbosquid_can_only_2018.json'
 
-    # model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
-    model_dir = "/media/sbpl/Data/Aditya/datasets/turbosquid/models"
+    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
+    # model_dir = "/media/sbpl/Data/Aditya/datasets/turbosquid/models"
     fat_image = FATImage(
         coco_annotation_file=annotation_file,
         coco_image_directory=image_directory,
@@ -1663,17 +1663,17 @@ def run_sameshape():
 
     # for img_i in ['14']:
     # for img_i in ['14', '20', '25', '32', '33', '38', '48']:
-    read_results_only = True
+    read_results_only = False
     # for img_i in range(0,50):
-    for img_i in range(0,25):
+    for img_i in range(7,8):
     # for img_i in ['30', '31', '34', '35', '36', '37', '39', '40']:
     # for img_i in ['15', '16', '17', '18', '19', '21', '22', '23', '24', '26', '27', '28', '29', '41', '42', '43', '44', '45', '46', '47', '49']:
     # for img_i in list(range(0,13)) + ['30', '31', '34', '35', '36', '37', '39', '40', '15', '16', '17', '18', '19', '21', '22', '23', '24', '26', '27', '28', '29', '41', '42', '43', '44', '45', '46', '47', '49']:
         # if img_i == 10 or img_i == 14 or img_i == 15 or img_i == 18 or img_i == 20:
         #     # mising in icp run
         #     continue
-        # image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
-        image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
+        image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
+        # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
         image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
         yaw_only_objects, max_min_dict, transformed_annotations = \
                 fat_image.visualize_pose_ros(image_data, annotations, frame='table', camera_optical_frame=False)
@@ -1996,12 +1996,12 @@ if __name__ == '__main__':
     ## Run Perch with Network Model
     # Dont use normalize cost and run with shifting centroid
     # Run with use_lazy and use_color_cost and histogram pruning disabled
-    run_6d()
+    # run_6d()
     # run_dope_6d()
 
     ## Run Perch with SameShape
     # Run with use_lazy and use_color_cost enabled
-    # run_sameshape()
+    run_sameshape()
     # run_sameshape_can_only()
     # run_dope_sameshape()
 

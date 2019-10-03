@@ -1,5 +1,5 @@
-#include <ColorSpace/Utils.h>
-#include <ColorSpace/Comparison.h>
+#include <sbpl_perception/ColorSpace/Utils.h>
+#include <sbpl_perception/ColorSpace/Comparison.h>
 
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -168,4 +168,3 @@ namespace ColorSpace {
 		return sqrt(SQR(deltaL / (defaultLightness*sl)) + SQR(deltaC / (defaultChroma*sc)) + SQR(deltaH / sh));
 	}
 }
-

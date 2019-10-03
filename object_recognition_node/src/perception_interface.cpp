@@ -62,8 +62,10 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   private_nh.param("ymax", ymax_, 0.0);
   private_nh.param("reference_frame", reference_frame_,
                    std::string("/map"));
-  private_nh.param("use_external_render", use_external_render,
-                   0);
+  private_nh.param("use_external_render", use_external_render,0);
+  private_nh.param("use_external_pose_list", use_external_pose_list,0);
+  private_nh.param("use_input_images", use_input_images,0);
+  private_nh.param("use_icp", use_icp, 1);
   private_nh.param("camera_frame", camera_frame_,
                    std::string("/head_mount_kinect_rgb_link"));
   private_nh.param("camera_optical_frame", camera_optical_frame_,
@@ -236,7 +238,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
   // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.4);
+  // pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.28);
+  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.35);
   pt_filter.filter(*table_removed_cloud);
 
   printf("table_removed_cloud size : %d\n", table_removed_cloud->size());
@@ -248,7 +251,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   // Convert to ROS data type
   pcl_conversions::fromPCL(outputPCL, output);
 
-  for (int i = 0; i < 100; i++)
+  for (int i = 0; i < 10; i++)
     filtered_point_cloud_pub_.publish(output);
 
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
@@ -301,7 +304,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
 
 
   tf_listener_.lookupTransform(reference_frame_.c_str(),
-                               camera_optical_frame_.c_str(), ros::Time(0.0), transform);
+                                camera_optical_frame_.c_str(), ros::Time(0.0), transform);
   printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
       transform.getOrigin().y(), transform.getOrigin().z());
   Eigen::Isometry3d camera_to_world_pose;
@@ -342,6 +345,9 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.object_ids = latest_requested_objects_;
   req.reference_frame_ = reference_frame_;
   req.use_external_render = use_external_render;
+  req.use_external_pose_list = use_external_pose_list;
+  req.use_icp = use_icp;
+  req.use_input_images = use_input_images;
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
@@ -419,12 +425,18 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
           marker.action = visualization_msgs::Marker::ADD;
           marker.pose.position = msg.pose.position;
           marker.pose.orientation = msg.pose.orientation;
-          marker.scale.x = 0.01;
-          marker.scale.y = 0.01;
-          marker.scale.z = 0.01;
-          // marker.scale.x = 1;
-          // marker.scale.y = 1;
-          // marker.scale.z = 1;
+          // marker.scale.x = 0.01;
+          // marker.scale.y = 0.01;
+          // marker.scale.z = 0.01;
+          if (kMeshInMillimeters) {
+            marker.scale.x = kMeshScalingFactor;
+            marker.scale.y = kMeshScalingFactor;
+            marker.scale.z = kMeshScalingFactor;
+          } else {
+            marker.scale.x = 1;
+            marker.scale.y = 1;
+            marker.scale.z = 1;
+          }
           marker.color.a = 0.8; // Don't forget to set the alpha!
           marker.color.r = red;
           marker.color.g = green;
@@ -467,10 +479,10 @@ void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
                                              &object_name) {
   cout << "[Perception Interface]: Got request to identify " << object_name.data
        << endl;
-  // latest_requested_objects_ = vector<string>({object_name.data});
-  // latest_requested_objects_ = {"004_sugar_box", "035_power_drill"};
+  latest_requested_objects_ = vector<string>({object_name.data});
+  // latest_requested_objects_ = {"pepsi_can", "sprite_can", "coke_bottle"};
   // latest_requested_objects_ = {"004_sugar_box"};
-  latest_requested_objects_ = {"crate"};
+  // latest_requested_objects_ = {"crate"};
   capture_kinect_ = true;
   recent_observations_.clear();
   return;

@@ -1,6 +1,6 @@
-#include <ColorSpace/Utils.h>
-#include <ColorSpace/ColorSpace.h>
-#include <ColorSpace/Conversion.h>
+#include <sbpl_perception/ColorSpace/Utils.h>
+#include <sbpl_perception/ColorSpace/ColorSpace.h>
+#include <sbpl_perception/ColorSpace/Conversion.h>
 
 
 #define _USE_MATH_DEFINES
@@ -55,7 +55,7 @@ namespace ColorSpace {
 		r = ((r > 0.0031308) ? (1.055*pow(r, 1 / 2.4) - 0.055) : (12.92*r)) * 255.0;
 		g = ((g > 0.0031308) ? (1.055*pow(g, 1 / 2.4) - 0.055) : (12.92*g)) * 255.0;
 		b = ((b > 0.0031308) ? (1.055*pow(b, 1 / 2.4) - 0.055) : (12.92*b)) * 255.0;
-		
+
 		color->r = r;
 		color->g = g;
 		color->b = b;
@@ -72,7 +72,7 @@ namespace ColorSpace {
 		double min = std::min(r, std::min(g, b));
 		double max = std::max(r, std::max(g, b));
 		double delta = max - min;
-		
+
 		item->l = (max + min) / 2;
 		if (delta == 0)
 		{
@@ -382,4 +382,3 @@ namespace ColorSpace {
 		XyzConverter::ToColor(color, &xyz);
 	}
 }
-

@@ -65,6 +65,9 @@ class PerceptionInterface
     std::string camera_optical_frame_;
     tf::TransformListener tf_listener_;
     int use_external_render;
+    int use_external_pose_list;
+    int use_icp;
+    int use_input_images;
     bool capture_kinect_;
 
     // Cache results of the latest call to ObjectLocalizerService.

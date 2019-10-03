@@ -405,7 +405,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
              << pose.yaw() << endl;
 
         cout << "external pose id : " << pose.external_pose_id() << endl;
-        
+
       }
 
       // last_object_point_clouds_ = env_obj_->GetObjectPointClouds(solution_state_ids);
@@ -442,7 +442,7 @@ bool ObjectRecognizer::RunPlanner(vector<ContPose> *detected_poses) const {
       // If master is done, exit loop.
       mpi_world_->irecv(kMasterRank, kPlanningFinishedTag, planning_finished);
     }
-    
+
   }
 
   mpi_world_->barrier();

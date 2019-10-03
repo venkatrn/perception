@@ -58,7 +58,7 @@ namespace {
   constexpr unsigned short kOcclusionThreshold = 50; // mm
   // Tolerance used when deciding the footprint of the object in a given pose is
   // out of bounds of the supporting place.
-  constexpr double kFootprintTolerance = 0.02; // m
+  constexpr double kFootprintTolerance = 0.05; // m
 
   // Max color distance for two points to be considered neighbours
   // constexpr double kColorDistanceThreshold = 7.5; // m
@@ -66,19 +66,21 @@ namespace {
 
   constexpr double kColorDistanceThreshold = 20; // m
 
+  constexpr double kNormalizeCostBase = 100;
+
   bool kUseColorCost = true;
 
   bool kUseColorPruning = false;
 
   bool kUseHistogramPruning = false;
 
-  bool kUseHistogramLazy = true;
+  bool kUseHistogramLazy = false;
 
   double kHistogramLazyScoreThresh = 0.8;
 
   bool kUseOctomapPruning = false;
 
-  bool cost_debug_msgs = false;
+  bool cost_debug_msgs = true;
 }  // namespace
 
 namespace sbpl_perception {
@@ -1931,6 +1933,9 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
 
 
   // Compute costs
+  using milli = std::chrono::milliseconds;
+  auto start = std::chrono::high_resolution_clock::now();
+
   const bool last_level = static_cast<int>(child_state.NumObjects()) ==
                           env_params_.num_objects;
   int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
@@ -1958,6 +1963,11 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     // last_level_cost = 0;
     // Aditya remove
   }
+
+  auto finish = std::chrono::high_resolution_clock::now();
+  std::cout << "Get Costs() took "
+            << std::chrono::duration_cast<milli>(finish - start).count()
+            << " milliseconds\n";
 
   total_cost = source_cost + target_cost + last_level_cost;
 
@@ -2243,7 +2253,7 @@ int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
       return 100;
     }
 
-    target_cost = static_cast<int>(nn_score * 100 /
+    target_cost = static_cast<int>(nn_score * kNormalizeCostBase /
                                    partial_rendered_cloud->points.size());
   } else {
     target_cost = static_cast<int>(nn_score);
@@ -2469,7 +2479,7 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
       return 100;
     }
 
-    source_cost = static_cast<int>(nn_score * 100 / indices_to_consider.size());
+    source_cost = static_cast<int>(nn_score * kNormalizeCostBase / indices_to_consider.size());
   } else {
     source_cost = static_cast<int>(nn_score);
   }
@@ -3258,10 +3268,14 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
                                                 int* num_occluders_in_input_cloud,
                                                 bool shift_centroid) {
 
+  using milli = std::chrono::milliseconds;
+  auto start = std::chrono::high_resolution_clock::now();
+
   *num_occluders_in_input_cloud = 0;
   if (scene_ == NULL) {
     printf("ERROR: Scene is not set\n");
   }
+
 
   scene_->clear();
 
@@ -3330,6 +3344,10 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
       }
     }
 
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::cout << "GetDepthImage() took "
+              << std::chrono::duration_cast<milli>(finish - start).count()
+              << " milliseconds\n";
     return depth_buffer;
 
 };
@@ -3896,7 +3914,7 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
     printf("Translation resolution: %f\n", env_params_.res);
     printf("Rotation resolution: %f\n", env_params_.theta_res);
     printf("Mesh in millimeters: %d\n", kMeshInMillimeters);
-    printf("Mesh scaling factor: %d\n", kMeshScalingFactor);
+    printf("Mesh scaling factor: %f\n", kMeshScalingFactor);
   }
 }
 
@@ -3906,7 +3924,6 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   if (cost_debug_msgs)
     printf("GetICPAdjustedPose()\n");
   auto start = std::chrono::high_resolution_clock::now();
-
 
   if (env_params_.use_icp == 0)
   {
@@ -4030,7 +4047,6 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     cloud_out = cloud_in;
     *pose_out = pose_in;
   }
-
 
   auto finish = std::chrono::high_resolution_clock::now();
   if (cost_debug_msgs)
@@ -4642,6 +4658,13 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
                   continue;
                 }
+
+                // If 180 degree symmetric, then iterate only between 0 and 180, break if going above.
+                if (model_meta_data.symmetry_mode == 1 &&
+                    theta > (M_PI + env_params_.theta_res)) {
+                  printf("Semi-symmetric object\n");
+                  break;
+                }
                 // std::cout << "Valid pose for theta : " << theta << endl;
 
                 GraphState s = source_state; // Can only add objects, not remove them
@@ -4875,17 +4898,12 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                   // }
                 }
                 // printf("Object added  to state x:%f y:%f z:%f theta: %f \n", x, y, env_params_.table_height, theta);
-                // If symmetric object, don't iterate over all thetas
+                // If symmetric object, don't iterate over all theta
+                // Break after adding first theta from above
                 if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
                   break;
                 }
 
-                // If 180 degree symmetric, then iterate only between 0 and 180.
-                if (model_meta_data.symmetry_mode == 1 &&
-                    theta > (M_PI + env_params_.theta_res)) {
-                  printf("Semi-symmetric object\n");
-                  break;
-                }
 
                 // }
               }

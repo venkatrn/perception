@@ -1,6 +1,8 @@
-# search_resolution_translation: 0.05 # m 0.04
-# search_resolution_yaw: 0.3926991 # rad
+search_resolution_translation: 0.07 # m 0.04
+search_resolution_yaw: 0.2526991 # rad
 # use_external_render : 0
+# use_external_pose_list : 0
+# use_icp : 1
 # use_full_object_point_cloud: true
 
 perch_params:
@@ -16,7 +18,7 @@ perch_params:
 
   ## With Downsampling
   use_downsampling: true
-  sensor_resolution_radius: 0.015 #m
+  sensor_resolution_radius: 0.018 #m
   # sensor_resolution_radius: 0.005 #m
   min_neighbor_points_for_valid_pose: 25 #50
   downsampling_leaf_size: 0.02
@@ -34,5 +36,5 @@ perch_params:
   ## Visualization and Debugging
   visualize_expanded_states: false
   visualize_successors: false
-  print_expanded_states: false
+  print_expanded_states: true
   debug_verbose: false # unused

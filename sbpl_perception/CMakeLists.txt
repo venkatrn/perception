@@ -9,15 +9,15 @@ project(sbpl_perception)
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
 # set(ROS_BUILD_TYPE RelWithDebInfo)
 # set(ROS_BUILD_TYPE Debug)
-set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
 # set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 #set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
 
-set(CUSTOM_BOOST_MPI OFF)
+set(CUSTOM_BOOST_MPI ON)
 message(WARNING CUSTOM_BOOST_MPI)
 message(WARNING ${CUSTOM_BOOST_MPI})
 
@@ -39,7 +39,7 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   rospy
   sbpl_utils
-)
+  sbpl_utils)
 
 
 #include_directories(${CUDA_INCLUDE_DIRS})
@@ -105,9 +105,10 @@ else()
 endif()
 
 include_directories(${MPI_INCLUDE})
-include_directories(${Pangolin_INCLUDE_DIRS})
+#include_directories(${Pangolin_INCLUDE_DIRS})
 
 
+include_directories(${catkin_INCLUDE_DIRS})
 
 catkin_package(
   CATKIN_DEPENDS
@@ -156,7 +157,7 @@ add_library(${PROJECT_NAME}
 #        ${MPI_ROOT}/lib/libmpi.so)
 #message(WARNING ${catkin_LIBRARIES})
 
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES} 
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${ZLIB_LIBRARIES}
   #${Pangolin_LIBRARIES}
   #${MPI_CXX_LIBRARIES} ${CUDA_LIBRARIES}
   #${PCL_LIBRARIES} ${OpenCV_LIBRARIES} /usr/lib/libvtkCommon.so.5.10 /usr/lib/libvtkFiltering.so.5.10 /usr/lib/libvtkRendering.so.5.10 /usr/lib/libvtkIO.so.5.10
@@ -245,8 +246,19 @@ target_link_libraries(perch_single_object ${PROJECT_NAME})
 install(DIRECTORY include/${PROJECT_NAME}/
         DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
 
+#install(DIRECTORY include/ColorSpace/
+#        DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION})
+
 install(DIRECTORY launch/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  PATTERN ".svn" EXCLUDE)
+
+install(DIRECTORY data/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/data
+  PATTERN ".svn" EXCLUDE)
+
+install(DIRECTORY visualization/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/visualization
   PATTERN ".svn" EXCLUDE)
 
 install(DIRECTORY config/
@@ -263,8 +275,14 @@ install(TARGETS demo
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
-catkin_install_python(
-  PROGRAMS
-  src/scripts/render_poses.py
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+install(TARGETS ${PROJECT_NAME}
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
+
+#catkin_install_python(
+#  PROGRAMS
+#  src/scripts/render_poses.py
+#  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#)
