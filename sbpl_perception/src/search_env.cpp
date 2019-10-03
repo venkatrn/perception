@@ -68,7 +68,7 @@ namespace {
 
   constexpr double kNormalizeCostBase = 100;
 
-  bool kUseColorCost = true;
+  bool kUseColorCost = false;
 
   bool kUseColorPruning = false;
 
