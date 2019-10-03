@@ -4660,6 +4660,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 }
 
                 // If 180 degree symmetric, then iterate only between 0 and 180, break if going above.
+
                 if (model_meta_data.symmetry_mode == 1 &&
                     theta > (M_PI + env_params_.theta_res)) {
                   printf("Semi-symmetric object\n");
@@ -4903,6 +4904,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
                   break;
                 }
+
 
 
                 // }
