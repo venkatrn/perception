@@ -8,9 +8,17 @@
       [name,
       file_descriptor,
       flipped (up-side down in the images wrt to the model),
-      symmetric (rotationally symmetric about Z-axis)]  
+      symmetric (rotationally symmetric about Z-axis)]
       -->
-    [003_cracker_box,
+      [004_sugar_box,
+      $(find sbpl_perception)/data/ycb_models/004_sugar_box_aligned.ply,
+      false,
+      true,
+      1,
+      0.06,
+      1
+      ],
+    <!-- [003_cracker_box,
     $(find sbpl_perception)/data/ycb_models/003_cracker_box.ply,
     false,
     false,
@@ -98,7 +106,7 @@
     1,
     0.06,
     1
-    ]
+    ] -->
     ]
   </rosparam>
 </launch>

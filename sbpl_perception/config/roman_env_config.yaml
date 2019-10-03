@@ -1,0 +1,40 @@
+search_resolution_translation: 0.07 # m 0.04
+search_resolution_yaw: 0.2526991 # rad
+# use_external_render : 0
+# use_external_pose_list : 0
+# use_icp : 1
+# use_full_object_point_cloud: true
+
+perch_params:
+  min_points_for_constraint_cloud: 50
+  max_icp_iterations: 15
+  icp_max_correspondence: 0.05 #m #0.075
+  use_adaptive_resolution: false
+  use_rcnn_heuristic: false
+  use_model_specific_search_resolution: false
+
+  ## RGB
+  use_color_cost: false
+
+  ## With Downsampling
+  use_downsampling: true
+  sensor_resolution_radius: 0.018 #m
+  # sensor_resolution_radius: 0.005 #m
+  min_neighbor_points_for_valid_pose: 500 #50
+  downsampling_leaf_size: 0.02
+  # downsampling_leaf_size: 0.01
+
+  ## Without Downsampling
+  # sensor_resolution_radius: 0.003 #m
+  # min_neighbor_points_for_valid_pose: 500 #50
+
+  ## Clutter mode
+  use_clutter_mode: false
+  # Should be in [0,1]
+  clutter_regularizer: 0.1
+
+  ## Visualization and Debugging
+  visualize_expanded_states: false
+  visualize_successors: false
+  print_expanded_states: true
+  debug_verbose: false # unused

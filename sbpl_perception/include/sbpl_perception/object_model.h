@@ -16,12 +16,19 @@
 
 #include <opencv/cv.h>
 #include <opencv2/core/core.hpp>
+#include <opencv2/imgproc.hpp>
 
 #include <pcl/PolygonMesh.h>
+#include <pcl/filters/voxel_grid.h>
+#include <algorithm> 
+#include <sbpl_perception/ColorSpace/ColorSpace.h>
+#include <sbpl_perception/ColorSpace/Conversion.h>
+#include <sbpl_perception/ColorSpace/Comparison.h>
 
 // TODO: use config manager.
 // If true, mesh is converted from mm to meters while preprocessing, otherwise left as such.
 extern bool kMeshInMillimeters;
+extern double kMeshScalingFactor;
 
 class ObjectModel {
  public:
@@ -33,6 +40,8 @@ class ObjectModel {
   double GetCircumscribedRadius() const;
 
   pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p) const;
+
+  pcl::PolygonMeshPtr GetTransformedMeshWithShift(ContPose & p) const;
 
   pcl::PolygonMeshPtr GetTransformedMesh(const Eigen::Matrix4f &transform) const;
 
@@ -46,14 +55,21 @@ class ObjectModel {
   std::vector<bool> PointsInsideFootprint(const PointCloudPtr &cloud, const ContPose &pose) const;
 
 
-  // Return the convex-hull footprint of the object at the pose of the object. 
+  // Return the convex-hull footprint of the object at the pose of the object.
   PointCloudPtr GetFootprint(const ContPose &pose, bool use_inflation=false) const;
-  
+
   static void TransformPolyMesh(const pcl::PolygonMesh::Ptr
                        &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f transform);
+
+  static void TransformPolyMeshWithShift(const pcl::PolygonMesh::Ptr
+                       &mesh_in, pcl::PolygonMesh::Ptr &mesh_out, Eigen::Matrix4f &transform);
+
   // Accessors
   const pcl::PolygonMesh &mesh() const {
     return mesh_;
+  }
+  const PointCloudPtr &downsampled_mesh_cloud() const {
+    return downsampled_mesh_cloud_;
   }
   std::string name() const {
     return name_;
@@ -79,7 +95,7 @@ class ObjectModel {
   double max_z() const {
     return max_z_;
   }
-  double GetInflationFactor() const{ 
+  double GetInflationFactor() const{
     return inflation_factor_;
   }
 
@@ -100,6 +116,7 @@ class ObjectModel {
   // A point cloud of the object (not just the vertices of the mesh!)
   // corresponding to mesh_
   PointCloudPtr cloud_;
+  PointCloudPtr downsampled_mesh_cloud_;
   bool symmetric_;
   std::string name_;
   double min_x_, min_y_, min_z_; // Bounding box in default orientation
@@ -115,4 +132,5 @@ class ObjectModel {
   void SetObjectProperties();
   // Check if world point is within rasterizred footprint.
   bool PointInsideRasterizedFootprint(double x, double y) const;
+  // static bool getColorEquivalence(uint32_t rgb_1, uint32_t rgb_2);
 };

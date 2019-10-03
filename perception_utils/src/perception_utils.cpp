@@ -4,6 +4,8 @@
  * Carnegie Mellon University, 2014
  */
 
+using namespace std;
+
 #include <perception_utils/perception_utils.h>
 
 #include <pcl/pcl_base.h>
@@ -47,7 +49,7 @@ const double kMaxY = 1.0;
 const double kMinZ = 0.1;
 const double kMaxZ = 2.0;
 
-using namespace std;
+
 
 namespace perception_utils {
 
@@ -99,7 +101,7 @@ void OrganizedSegmentation(PointCloudPtr cloud,
 }
 
 
-void OrganizedSegmentation(PointCloudPtr cloud, std::vector<pcl::ModelCoefficients>& model_coefficients, std::vector<pcl::PointIndices>& inlier_indices, 
+void OrganizedSegmentation(PointCloudPtr cloud, std::vector<pcl::ModelCoefficients>& model_coefficients, std::vector<pcl::PointIndices>& inlier_indices,
                            std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>>
                             *regions) {
   PointCloudPtr cloud_temp (new PointCloud);
@@ -934,7 +936,7 @@ void GetRangeImageFromCloud(PointCloudPtr cloud,
                                                  noiseLevel, minimumRange);
 }
 
-bool IsPointValid(const PointT &point) { 
+bool IsPointValid(const PointT &point) {
 	bool valid = true;
 	if (std::isnan(point.x) ||
 			std::isinf(point.x) ||

@@ -119,6 +119,7 @@ pcl::simulation::PolygonMeshModel::PolygonMeshModel (GLenum mode, pcl::PolygonMe
     if (plg->cloud.fields[i].name.compare ("rgb") == 0)
       found_rgb = true;
   
+  // printf("found_rgb : %d\n", found_rgb);
   if (found_rgb)
   {
     pcl::PointCloud<pcl::PointXYZRGB> newcloud;  

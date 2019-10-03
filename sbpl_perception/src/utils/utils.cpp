@@ -1,4 +1,5 @@
 #include <sbpl_perception/utils/utils.h>
+#include <kinect_sim/camera_constants.h>
 
 using std::string;
 using std::vector;
@@ -97,12 +98,12 @@ void ColorizeDepthImage(const cv::Mat &depth_image,
   const double range = double(max_depth - min_depth);
 
   static cv::Mat normalized_depth_image;
-  normalized_depth_image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+  normalized_depth_image.create(kCameraHeight, kCameraWidth, CV_8UC1);
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
     auto row = depth_image.ptr<unsigned short>(ii);
 
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
       const unsigned short depth = row[jj];
 
       if (depth > max_depth || depth == kKinectMaxDepth) {
@@ -120,8 +121,8 @@ void ColorizeDepthImage(const cv::Mat &depth_image,
                     cv::COLORMAP_JET);
 
   // Convert background to black to make pretty.
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
       if (normalized_depth_image.at<uchar>(ii, jj) == 0) {
         colored_depth_image.at<cv::Vec3b>(ii, jj)[0] = 0;
         colored_depth_image.at<cv::Vec3b>(ii, jj)[1] = 0;
@@ -138,12 +139,12 @@ void RescaleDepthImage(const cv::Mat &depth_image,
                        unsigned short max_depth) {
   const double range = double(max_depth - min_depth);
 
-  rescaled_depth_image.create(kDepthImageHeight, kDepthImageWidth, CV_8UC1);
+  rescaled_depth_image.create(kCameraHeight, kCameraWidth, CV_8UC1);
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
     auto row = depth_image.ptr<unsigned short>(ii);
 
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
       const unsigned short depth = row[jj];
 
       if (depth > max_depth || depth == kKinectMaxDepth) {
@@ -164,10 +165,10 @@ void EncodeDepthImage(const cv::Mat &depth_image,
   unsigned short min_depth = kKinectMaxDepth;
   unsigned short max_depth = 0;
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
     auto row = depth_image.ptr<unsigned short>(ii);
 
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
       const unsigned short depth = row[jj];
 
       if (depth >= kKinectMaxDepth || depth == 0) {
@@ -187,15 +188,36 @@ vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
   // TODO: check input cloud is organized and matches dimensions.
   vector<unsigned short> depth_image(kNumPixels);
 
-  for (int ii = 0; ii < kDepthImageHeight; ++ii) {
-    for (int jj = 0; jj < kDepthImageWidth; ++jj) {
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
       PointT p = depth_img_cloud->at(jj, ii);
 
       if (isnan(p.z) || isinf(p.z)) {
-        depth_image[ii * kDepthImageWidth + jj] = kKinectMaxDepth;
+        depth_image[ii * kCameraWidth + jj] = kKinectMaxDepth;
       } else {
-        depth_image[ii * kDepthImageWidth + jj] = static_cast<unsigned short>
+        depth_image[ii * kCameraWidth + jj] = static_cast<unsigned short>
                                                   (p.z * 1000.0);
+      }
+    }
+  }
+
+  return depth_image;
+}
+
+vector<unsigned short> OrganizedPointCloudToKinectDepthImage(
+  const PointCloudPtr depth_img_cloud, double depth_factor) {
+  // TODO: check input cloud is organized and matches dimensions.
+  vector<unsigned short> depth_image(kNumPixels);
+
+  for (int ii = 0; ii < kCameraHeight; ++ii) {
+    for (int jj = 0; jj < kCameraWidth; ++jj) {
+      PointT p = depth_img_cloud->at(jj, ii);
+
+      if (isnan(p.z) || isinf(p.z)) {
+        depth_image[ii * kCameraWidth + jj] = kKinectMaxDepth;
+      } else {
+        depth_image[ii * kCameraWidth + jj] = static_cast<unsigned short>
+                                                  (p.z * depth_factor);
       }
     }
   }
@@ -246,7 +268,7 @@ int VectorIndexToPCLIndex(int vector_index) {
 }
 
 int OpenCVIndexToVectorIndex(int x, int y) {
-  return y * kDepthImageWidth + x;
+  return y * kCameraWidth + x;
 }
 
 int OpenCVIndexToPCLIndex(int x, int y) {
@@ -254,8 +276,8 @@ int OpenCVIndexToPCLIndex(int x, int y) {
 }
 
 void VectorIndexToOpenCVIndex(int vector_index, int *x, int *y) {
-  *x = vector_index % kDepthImageWidth;
-  *y = vector_index / kDepthImageWidth;
+  *x = vector_index % kCameraWidth;
+  *y = vector_index / kCameraWidth;
 }
 void PCLIndexToOpenCVIndex(int pcl_index, int *x, int *y) {
   VectorIndexToOpenCVIndex(PCLIndexToVectorIndex(pcl_index), x, y);

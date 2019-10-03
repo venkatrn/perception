@@ -3,6 +3,7 @@
 timestamp=`date "+%m_%d_%Y_%H_%M_%S"`
 
 PERCH_ROOT=`rospack find sbpl_perception`
+MPI_BIN_ROOT="/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin"
 HEURISTICS_FOLDER="$PERCH_ROOT/heuristics"
 DATA_FOLDER="$PERCH_ROOT/data"
 SCENARIOS_FOLDER="$PERCH_ROOT/data/experiment_input"
@@ -14,12 +15,12 @@ local poses_file=$1
 local stats_file=$2
 # i=0
 for input_file in $SCENARIOS_FOLDER/*.txt; do
-  echo "mpirun -n $NUM_PROCS $PERCH_EXEC $input_file $poses_file $stats_file image_debug:=false"
+  echo "$MPI_BIN_ROOT/mpirun -n $NUM_PROCS $PERCH_EXEC $input_file $poses_file $stats_file image_debug:=false"
   # let i=i+1
   # if [ "$i" != "1" ]; then
   #   continue
   # fi
-  mpirun -n $NUM_PROCS $PERCH_EXEC $input_file $poses_file $stats_file image_debug:=false
+  $MPI_BIN_ROOT/mpirun -n $NUM_PROCS $PERCH_EXEC $input_file $poses_file $stats_file image_debug:=false
 done
 }
 
@@ -48,7 +49,7 @@ rosparam set perch_experiments/inflation_epsilon 5
 rosparam set perch_experiments/use_lazy false
 
 # Different values for max_icp_iterations.
-# max_icp_iterations_options="10 20 40"     
+# max_icp_iterations_options="10 20 40"
 rosparam set perch_experiments/perch_params/max_icp_iterations 20
 
 # Different options for translation and yaw resolutions.
@@ -67,7 +68,7 @@ clutter_regularizer_options="0 0.2 0.4 0.6 0.8 1.0"
 
 # Different options for number of processors to be used for parallelization.
 # proc_options="5 10 20"
-NUM_PROCS=8
+NUM_PROCS=4
 
 if [[ ! -e $EXPERIMENTS_FOLDER ]]; then
   mkdir $EXPERIMENTS_FOLDER
@@ -96,4 +97,3 @@ done
 
 # Terminate roscore
 pkill roscore
-

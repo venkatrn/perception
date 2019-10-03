@@ -40,7 +40,7 @@ class PerceptionInterface
     // Mutators
     pcl::visualization::PCLVisualizer* mutable_viewer() const {return viewer_;}
     pcl::visualization::RangeImageVisualizer* mutable_range_image_viewer() const {return range_image_viewer_;}
-    
+
   private:
     ros::NodeHandle nh_;
     ros::ServiceClient object_localization_client_;
@@ -50,19 +50,24 @@ class PerceptionInterface
     //pcl::visualization::PCLVisualizer viewer_;
     sbpl_perception::ModelBank model_bank_;
     bool pcl_visualization_;
-    double table_height_;
+    double table_height_, zmax;
     double xmin_, xmax_;
     double ymin_, ymax_;
     ros::Publisher pose_pub_;
     ros::Publisher mesh_marker_pub_;
+    ros::Publisher filtered_point_cloud_pub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;
     ros::Subscriber keyboard_sub_;
     ros::Subscriber requested_objects_sub_;
     std::string reference_frame_;
     std::string camera_frame_;
+    std::string camera_optical_frame_;
     tf::TransformListener tf_listener_;
-
+    int use_external_render;
+    int use_external_pose_list;
+    int use_icp;
+    int use_input_images;
     bool capture_kinect_;
 
     // Cache results of the latest call to ObjectLocalizerService.
@@ -74,7 +79,7 @@ class PerceptionInterface
     std::vector<PointCloud> recent_observations_;
 
     sensor_msgs::Image recent_depth_image_;
-    PointCloudPtr recent_cloud_; 
+    PointCloudPtr recent_cloud_;
 
     // Does all the work
     void CloudCBInternal(const PointCloudPtr& original_cloud);

@@ -43,8 +43,8 @@ using namespace sbpl_perception;
 
 namespace {
 std::vector<std::vector<int>> kColorPalette = {
-  {240, 163, 255}, {0, 117, 220}, {153, 63, 0}, {76, 0, 92}, {25, 25, 25}, {0, 92, 49}, {43, 206, 72}, 
-  {255, 204, 153}, {128, 128, 128}, {148, 255, 181}, {143, 124, 0}, {157, 204, 0}, {194, 0, 136}, 
+  {240, 163, 255}, {0, 117, 220}, {153, 63, 0}, {76, 0, 92}, {25, 25, 25}, {0, 92, 49}, {43, 206, 72},
+  {255, 204, 153}, {128, 128, 128}, {148, 255, 181}, {143, 124, 0}, {157, 204, 0}, {194, 0, 136},
   {0, 51, 128}, {255, 164, 5}, {255, 168, 187}, {66, 102, 0}, {255, 0, 16}, {94, 241, 242}, {0, 153, 143},
   {224, 255, 102}, {116, 10, 255}, {153, 0, 0}, {255, 255, 128}, {255, 255, 0}, {255, 80, 5}};
 } // namespace
@@ -61,12 +61,18 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   private_nh.param("xmax", xmax_, 0.0);
   private_nh.param("ymax", ymax_, 0.0);
   private_nh.param("reference_frame", reference_frame_,
-                   std::string("/base_footprint"));
+                   std::string("/map"));
+  private_nh.param("use_external_render", use_external_render,0);
+  private_nh.param("use_external_pose_list", use_external_pose_list,0);
+  private_nh.param("use_input_images", use_input_images,0);
+  private_nh.param("use_icp", use_icp, 1);
   private_nh.param("camera_frame", camera_frame_,
                    std::string("/head_mount_kinect_rgb_link"));
-
+  private_nh.param("camera_optical_frame", camera_optical_frame_,
+                   std::string("/head_mount_kinect_rgb_link"));
   std::string param_key;
   XmlRpc::XmlRpcValue model_bank_list;
+  printf("use_external_render : %d\n", use_external_render);
 
   if (private_nh.searchParam("model_bank", param_key)) {
     private_nh.getParam(param_key, model_bank_list);
@@ -74,7 +80,7 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
 
   model_bank_ = ModelBankFromList(model_bank_list);
 
-  pose_pub_ = nh.advertise<geometry_msgs::Pose>("perch_pose", 1);
+  pose_pub_ = nh.advertise<geometry_msgs::PoseStamped>("perch_pose", 1);
   mesh_marker_pub_ = nh.advertise<visualization_msgs::Marker>("perch_marker", 1);
   cloud_sub_ = nh.subscribe("input_cloud", 1, &PerceptionInterface::CloudCB,
                             this);
@@ -86,6 +92,8 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
                                         this);
   perch_server_.reset(new PerchServer(nh_, "perch_server", false));
   perch_server_->registerGoalCallback(boost::bind(&PerceptionInterface::PERCHGoalCB, this));
+  filtered_point_cloud_pub_ = nh.advertise<sensor_msgs::PointCloud2>("/obj_recognition/filtered_point_cloud", 1);
+
   // perch_server_->registerPreemptCallback(boost::bing(&PerceptionInterface::PreemptCB, this));
   perch_server_->start();
 
@@ -107,14 +115,17 @@ void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
                                   &sensor_cloud) {
 
   if (capture_kinect_ == false) {
+    ROS_ERROR("%s", "Capture kinect false");
     return;
+  } else {
+    ROS_ERROR("%s", "Cloud received");
   }
 
   PointCloudPtr pcl_cloud(new PointCloud);
   sensor_msgs::PointCloud2 ref_sensor_cloud;
   tf::StampedTransform transform;
 
-
+  ROS_ERROR("%s", "Waiting for transform");
   try {
     tf_listener_.waitForTransform(reference_frame_, sensor_cloud->header.frame_id,
                                   ros::Time(0), ros::Duration(10.0));
@@ -125,7 +136,7 @@ void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
 
     //ros::Duration(1.0).sleep();
   }
-
+  ROS_ERROR("%s", "Got transform");
   pcl_ros::transformPointCloud(reference_frame_, transform, *sensor_cloud,
                                ref_sensor_cloud);
 
@@ -209,6 +220,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   //
   PointCloudPtr table_removed_cloud(new PointCloud);
 
+  // table_removed_cloud = cloud;
   pcl::PassThrough<PointT> pt_filter;
   pt_filter.setInputCloud(original_cloud);
   pt_filter.setKeepOrganized (true);
@@ -226,15 +238,28 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   pt_filter.setKeepOrganized (true);
   pt_filter.setFilterFieldName("z");
   // pt_filter.setFilterLimits(table_height_ - 0.1, table_height_ + 0.5);
-  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.5);
+  // pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.28);
+  pt_filter.setFilterLimits(table_height_ + 0.005, table_height_ + 0.35);
   pt_filter.filter(*table_removed_cloud);
+
+  printf("table_removed_cloud size : %d\n", table_removed_cloud->size());
+
+  sensor_msgs::PointCloud2 output;
+  pcl::PCLPointCloud2 outputPCL;
+  pcl::toPCLPointCloud2( *table_removed_cloud ,outputPCL);
+
+  // Convert to ROS data type
+  pcl_conversions::fromPCL(outputPCL, output);
+
+  for (int i = 0; i < 10; i++)
+    filtered_point_cloud_pub_.publish(output);
 
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
   // table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
   //                                                           coefficients, 0.012, 1000, true);
 
   // std::vector<pcl::ModelCoefficients> model_coefficients;
-  // std::vector<pcl::PointIndices> model_inliers;                         
+  // std::vector<pcl::PointIndices> model_inliers;
   // std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>> regions;
   // perception_utils::OrganizedSegmentation(table_removed_cloud, model_coefficients, model_inliers, &regions);
   // cout << "MPS found " << model_inliers.size() << " planes\n";
@@ -261,12 +286,31 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   }
 
   tf::StampedTransform transform;
-  tf_listener_.lookupTransform(reference_frame_.c_str(),
-                               camera_frame_.c_str(), ros::Time(0.0), transform);
-  Eigen::Affine3d camera_pose;
+
+  if (use_external_render == 0)
+  {
+      tf_listener_.lookupTransform(reference_frame_.c_str(),
+                                   camera_frame_.c_str(), ros::Time(0.0), transform);
+  }
+  else if (use_external_render == 1)
+  {
+    tf_listener_.lookupTransform(reference_frame_.c_str(),
+                                 camera_optical_frame_.c_str(), ros::Time(0.0), transform);
+  }
+  Eigen::Isometry3d camera_pose;
   tf::transformTFToEigen(transform, camera_pose);
+  std::cout << "Camera Pose" << endl;
   std::cout << camera_pose.matrix() << endl;
 
+
+  tf_listener_.lookupTransform(reference_frame_.c_str(),
+                                camera_optical_frame_.c_str(), ros::Time(0.0), transform);
+  printf("Camera to World Transform : %f, %f, %f\n", transform.getOrigin().x(),
+      transform.getOrigin().y(), transform.getOrigin().z());
+  Eigen::Isometry3d camera_to_world_pose;
+  tf::transformTFToEigen(transform, camera_to_world_pose);
+  std::cout << "Camera To World Pose" << endl;
+  std::cout << camera_to_world_pose.matrix() << endl;
   // string output_dir = ros::package::getPath("object_recognition_node");
   // static int image_count = 0;
   // string output_image_name = string("frame_") + std::to_string(image_count);
@@ -299,6 +343,11 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.y_max = ymax_;
   req.support_surface_height = table_height_;
   req.object_ids = latest_requested_objects_;
+  req.reference_frame_ = reference_frame_;
+  req.use_external_render = use_external_render;
+  req.use_external_pose_list = use_external_pose_list;
+  req.use_icp = use_icp;
+  req.use_input_images = use_input_images;
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
@@ -327,73 +376,94 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       ROS_INFO_STREAM("Object: " << req.object_ids[ii] << std::endl <<
                       object_transform.matrix() << std::endl << std::endl);
 
-      const string &model_name = req.object_ids[ii];
-      const string &model_file = model_bank_[model_name].file;
-      cout << model_file << endl;
-      pcl::PolygonMesh mesh;
-      pcl::io::loadPolygonFile(model_file, mesh);
-      pcl::PolygonMesh::Ptr mesh_ptr(new pcl::PolygonMesh(mesh));
-      ObjectModel::TransformPolyMesh(mesh_ptr, mesh_ptr,
-                                     object_transform.matrix().cast<float>());
-      viewer_->addPolygonMesh(*mesh_ptr, model_name);
-      viewer_->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, model_name);
-      double red = 0;
-      double green = 0;
-      double blue = 0;;
-      // pcl::visualization::getRandomColors(red, green, blue);
+      geometry_msgs::PoseStamped msg;
+      msg.header.frame_id = reference_frame_;
+      msg.header.stamp = ros::Time::now();
+      tf::poseEigenToMsg(object_transform, msg.pose);
+      latest_object_poses_[ii] = msg.pose;
 
-      int rand_idx = rand() %  kColorPalette.size();
-      red = kColorPalette[rand_idx][0] / 255.0;
-      green = kColorPalette[rand_idx][1] / 255.0;
-      blue = kColorPalette[rand_idx][2] / 255.0;
+      if (use_external_render == 0)
+      {
+          const string &model_name = req.object_ids[ii];
+          const string &model_file = model_bank_[model_name].file;
+          cout << model_file << endl;
+          pcl::PolygonMesh mesh;
+          pcl::io::loadPolygonFile(model_file, mesh);
+          pcl::PolygonMesh::Ptr mesh_ptr(new pcl::PolygonMesh(mesh));
+          ObjectModel::TransformPolyMesh(mesh_ptr, mesh_ptr,
+                                        object_transform.matrix().cast<float>());
 
-      viewer_->setPointCloudRenderingProperties(
-        pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
+          if (pcl_visualization_) {
+              viewer_->addPolygonMesh(*mesh_ptr, model_name);
+              viewer_->setPointCloudRenderingProperties(
+                pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, model_name);
+          }
+          double red = 0;
+          double green = 0;
+          double blue = 0;;
+          // pcl::visualization::getRandomColors(red, green, blue);
 
-      geometry_msgs::Pose pose;
-      tf::poseEigenToMsg(object_transform, pose);
-      latest_object_poses_[ii] = pose;
+          int rand_idx = rand() %  kColorPalette.size();
+          red = kColorPalette[rand_idx][0] / 255.0;
+          green = kColorPalette[rand_idx][1] / 255.0;
+          blue = kColorPalette[rand_idx][2] / 255.0;
 
-      // Publish the mesh marker
-      visualization_msgs::Marker marker;
-      marker.header.frame_id = reference_frame_;
-      marker.header.stamp = ros::Time();
-      marker.ns = "perch";
-      marker.id = ii;
-      marker.type = visualization_msgs::Marker::MESH_RESOURCE;
-      marker.action = visualization_msgs::Marker::ADD;
-      marker.pose.position = pose.position;
-      marker.pose.orientation = pose.orientation;
-      marker.scale.x = 1.0;
-      marker.scale.y = 1.0;
-      marker.scale.z = 1.0;
-      marker.color.a = 0.8; // Don't forget to set the alpha!
-      marker.color.r = red;
-      marker.color.g = green;
-      marker.color.b = blue;
-      //only if using a MESH_RESOURCE marker type:
-      marker.mesh_resource = std::string("file://") + model_file;
-      mesh_marker_pub_.publish(marker);
+          if (pcl_visualization_) {
+              viewer_->setPointCloudRenderingProperties(
+                pcl::visualization::PCL_VISUALIZER_COLOR, red, green, blue, model_name);
+          }
+
+
+
+          // Publish the mesh marker
+          visualization_msgs::Marker marker;
+          marker.header.frame_id = reference_frame_;
+          marker.header.stamp = ros::Time();
+          marker.ns = "perch";
+          marker.id = ii;
+          marker.type = visualization_msgs::Marker::MESH_RESOURCE;
+          marker.action = visualization_msgs::Marker::ADD;
+          marker.pose.position = msg.pose.position;
+          marker.pose.orientation = msg.pose.orientation;
+          // marker.scale.x = 0.01;
+          // marker.scale.y = 0.01;
+          // marker.scale.z = 0.01;
+          if (kMeshInMillimeters) {
+            marker.scale.x = kMeshScalingFactor;
+            marker.scale.y = kMeshScalingFactor;
+            marker.scale.z = kMeshScalingFactor;
+          } else {
+            marker.scale.x = 1;
+            marker.scale.y = 1;
+            marker.scale.z = 1;
+          }
+          marker.color.a = 0.8; // Don't forget to set the alpha!
+          marker.color.r = red;
+          marker.color.g = green;
+          marker.color.b = blue;
+          //only if using a MESH_RESOURCE marker type:
+          marker.mesh_resource = std::string("file://") + model_file;
+          mesh_marker_pub_.publish(marker);
+      }
 
       // TODO: generalize to mutliple objects
       if (ii == 0) {
-        pose_pub_.publish(pose);
+        pose_pub_.publish(msg);
       }
     }
 
     // Set action client result if still active.
-    if (perch_server_->isActive()) {
-      perch_result_.object_poses = latest_object_poses_;
-      perch_server_->setSucceeded(perch_result_);
-    }
+      if (perch_server_->isActive()) {
+        perch_result_.object_poses = latest_object_poses_;
+        perch_server_->setSucceeded(perch_result_);
+      }
   } else {
-    ROS_ERROR("Object localizer service failed.");
-    // Set action client result if still active.
-    if (perch_server_->isActive()) {
-      perch_result_.object_poses.clear();
-      perch_server_->setAborted(perch_result_);
-    }
+      ROS_ERROR("Object localizer service failed.");
+      // Set action client result if still active.
+      if (perch_server_->isActive()) {
+        perch_result_.object_poses.clear();
+        perch_server_->setAborted(perch_result_);
+      }
   }
 }
 
@@ -410,6 +480,9 @@ void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
   cout << "[Perception Interface]: Got request to identify " << object_name.data
        << endl;
   latest_requested_objects_ = vector<string>({object_name.data});
+  // latest_requested_objects_ = {"pepsi_can", "sprite_can", "coke_bottle"};
+  // latest_requested_objects_ = {"004_sugar_box"};
+  // latest_requested_objects_ = {"crate"};
   capture_kinect_ = true;
   recent_observations_.clear();
   return;

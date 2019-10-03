@@ -8,18 +8,19 @@ DATA_FOLDER="$PERCH_ROOT/data"
 SCENARIOS_FOLDER="$PERCH_ROOT/data/experiment_input"
 EXPERIMENTS_FOLDER="$PERCH_ROOT/experiments/results_$timestamp"
 PERCH_EXEC=`catkin_find sbpl_perception perch`
+MPI_BIN_ROOT="/media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin"
 
 function run_experiment() {
 local poses_file=$1
 local stats_file=$2
-# i=0
+i=0
 for input_file in $SCENARIOS_FOLDER/*.txt; do
-  echo "mpirun -n $NUM_PROCS $PERCH_EXEC $input_file $poses_file $stats_file image_debug:=false"
-  # let i=i+1
-  # if [ "$i" != "1" ]; then
-  # 	continue
-  # fi
-  mpirun -n $NUM_PROCS $PERCH_EXEC $input_file $poses_file $stats_file image_debug:=false
+  echo "$MPI_BIN_ROOT/mpirun -n $NUM_PROCS $PERCH_EXEC $input_file $poses_file $stats_file image_debug:=false"
+  let i=i+1
+  if [ "$i" != "2" ]; then
+  	continue
+  fi
+  $MPI_BIN_ROOT/mpirun -n $NUM_PROCS $PERCH_EXEC $input_file $poses_file $stats_file image_debug:=false
 done
 }
 
@@ -47,8 +48,8 @@ epsilon_options="5"
 use_lazy_options="true"
 
 # Different values for max_icp_iterations.
-# max_icp_iterations_options="10 20 40"     
-max_icp_iterations_options="20"     
+# max_icp_iterations_options="10 20 40"
+max_icp_iterations_options="20"
 
 # Different options for translation and yaw resolutions.
 # search_resolution_translation_options="0.02 0.04 0.1 0.2"
@@ -58,7 +59,7 @@ search_resolution_yaw_options="0.3926991"
 
 # Different options for number of processors to be used for parallelization.
 # proc_options="5 10 20"
-proc_options="8"
+proc_options="2"
 
 if [[ ! -e $EXPERIMENTS_FOLDER ]]; then
   mkdir $EXPERIMENTS_FOLDER

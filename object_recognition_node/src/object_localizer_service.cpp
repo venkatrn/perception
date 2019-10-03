@@ -29,6 +29,12 @@ bool ObjectLocalizerService::LocalizerCallback(LocalizeObjects::Request &req,
   recognition_input.y_max = req.y_max;
   recognition_input.table_height = req.support_surface_height;
   recognition_input.heuristics_dir = req.heuristics_dir;
+  recognition_input.use_external_render = req.use_external_render;
+  recognition_input.use_external_pose_list = req.use_external_pose_list;
+  recognition_input.use_icp = req.use_icp;
+  recognition_input.use_input_images = req.use_input_images;
+  ROS_DEBUG("External Render : %d\n", recognition_input.use_external_render);
+  recognition_input.reference_frame_ = req.reference_frame_;
 
   Eigen::Matrix4d pose(req.camera_pose.data.data());
   // Transpose to convert column-major raw data initialization to row-major.
@@ -82,8 +88,8 @@ bool ObjectLocalizerService::LocalizerCallback(LocalizeObjects::Request &req,
     res.stats_field_names = vector<string>({"time (s)", "expansions", "cost"});
     res.stats = vector<double>({planning_stats[0].time, static_cast<double>(planning_stats[0].expands), static_cast<double>(planning_stats[0].cost)});
   } else {
-ROS_ERROR("Empty planning stats vector, localizer service failed");
-}
+    ROS_ERROR("Empty planning stats vector, localizer service failed");
+  }
 
 return success;
 }
@@ -100,13 +106,13 @@ bool ObjectLocalizerService::LocalizerHelper(const
   if (IsMaster(mpi_world)) {
     recognition_input = input;
   }
-
   // Wait for master input to be set
   mpi_world->barrier();
   broadcast(*mpi_world, recognition_input, kMasterRank);
 
+  std::vector<Eigen::Affine3f> preprocessing_object_transforms;
   const bool found_solution = object_recognizer.LocalizeObjects(
-                                recognition_input, object_transforms);
+                                recognition_input, object_transforms, &preprocessing_object_transforms);
 
   return found_solution;
 }

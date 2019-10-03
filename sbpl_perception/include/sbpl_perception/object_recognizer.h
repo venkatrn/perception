@@ -1,11 +1,12 @@
 #pragma once
 
-#include <sbpl/headers.h>
+#include <sbpl_perch/headers.h>
 #include <sbpl_perception/search_env.h>
 
 #include <memory>
 
-#include <Eigen/Core> 
+#include <Eigen/Core>
+#include <chrono>
 
 namespace sbpl_perception {
 class ObjectRecognizer {
@@ -16,7 +17,12 @@ class ObjectRecognizer {
   // that align the objects to the scene. Matrices are ordered by the list of names
   // under input.model_names.
   bool LocalizeObjects(const RecognitionInput &input,
-                       std::vector<Eigen::Affine3f> *object_transforms) const;
+                       std::vector<Eigen::Affine3f> *object_transforms,
+                       std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const;
+  
+  bool LocalizeObjectsGreedyICP(const RecognitionInput &input,
+                      std::vector<Eigen::Affine3f> *object_transforms,
+                      std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const;
   // Ditto as above, but return the (x,y,\theta) pose for every object in the
   // world frame, rather than the transforms.
   bool LocalizeObjects(const RecognitionInput &input,
@@ -30,7 +36,7 @@ class ObjectRecognizer {
   // Return the points in the input point cloud corresponding to each object.
   // The returned vector is of size input.model_names.size(). Note: This method
   // should be called right after LocalizeObjects.
-  std::vector<PointCloudPtr> GetObjectPointClouds() const;  
+  std::vector<PointCloudPtr> GetObjectPointClouds() const;
 
   const ModelBank &GetModelBank() const {
     return env_config_.model_bank;
@@ -41,7 +47,7 @@ class ObjectRecognizer {
   const EnvStats &GetLastEnvStats() const {
     return last_env_stats_;
   }
-  
+
   std::shared_ptr<EnvObjectRecognition> GetMutableEnvironment() {
     return env_obj_;
   }

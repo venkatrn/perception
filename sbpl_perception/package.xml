@@ -21,9 +21,14 @@
   <build_depend>pcl_ros</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>roslib</build_depend>
-  <build_depend>sbpl</build_depend>
+  <build_depend>sbpl_perch</build_depend>
   <build_depend>sbpl_utils</build_depend>
   <build_depend>libpcl-all-dev</build_depend>
+  <build_depend>rospy</build_depend>
+  <build_depend>eigen_conversions</build_depend>
+  <build_depend>visualization_msgs</build_depend>
+  <build_depend>ICP</build_depend>
+  
   <!-- <build_depend>libfcl&#45;dev</build_depend> -->
   <!-- <build_depend>libccd&#45;dev</build_depend> -->
 
@@ -34,10 +39,14 @@
   <run_depend>pcl_ros</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>roslib</run_depend>
-  <run_depend>sbpl</run_depend>
+  <run_depend>sbpl_perch</run_depend>
   <run_depend>sbpl_utils</run_depend>
   <run_depend>libpcl-all</run_depend>
   <run_depend>libpcl-all-dev</run_depend>
+  <run_depend>rospy</run_depend>
+  <run_depend>eigen_conversions</run_depend>
+  <run_depend>visualization_msgs</run_depend>
+  <run_depend>ICP</run_depend>
   <!-- <run_depend>libfcl&#45;dev</run_depend> -->
   <!-- <run_depend>libccd&#45;dev</run_depend> -->
 

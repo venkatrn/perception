@@ -1,7 +1,7 @@
 #include <pcl/io/vtk_lib_io.h>
 #include <vtkPolyDataMapper.h>
 #include <pcl/apps/render_views_tesselated_sphere.h>
- 
+
 int
 main(int argc, char** argv)
 {
@@ -9,14 +9,14 @@ main(int argc, char** argv)
   vtkSmartPointer<vtkPLYReader> reader = vtkSmartPointer<vtkPLYReader>::New();
   reader->SetFileName(argv[1]);
   reader->Update();
- 
+
   // VTK is not exactly straightforward...
   vtkSmartPointer < vtkPolyDataMapper > mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
   mapper->SetInputConnection(reader->GetOutputPort());
   mapper->Update();
- 
+
   vtkSmartPointer<vtkPolyData> object = mapper->GetInput();
- 
+
   // Virtual scanner object.
   pcl::apps::RenderViewsTesselatedSphere render_views;
   render_views.addModelFromPolyData(object);
@@ -35,9 +35,10 @@ main(int argc, char** argv)
   render_views.setUseVertices(true);
   // If true, the entropies (the amount of occlusions) will be computed for each snapshot (optional).
   render_views.setComputeEntropies(true);
- 
-  render_views.generateViews();
- 
+
+  // Aditya
+  // render_views.generateViews();
+
   // Object for storing the rendered views.
   std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> views;
   // Object for storing the poses, as 4x4 transformation matrices.
