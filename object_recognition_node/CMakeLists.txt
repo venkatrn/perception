@@ -56,9 +56,10 @@ include_directories(${Boost_INCLUDE_DIRS})
 #        ${BOOST_LIBRARYDIR}/libboost_serialization.so
 #        ${BOOST_LIBRARYDIR}/libboost_mpi.so)
 
-
 find_package(Boost 1.58.0 REQUIRED thread mpi serialization system)
 find_package(ZLIB)
+
+find_package(Boost 1.58.0 REQUIRED mpi serialization system)
 
 # find_package(catkin REQUIRED genmsg actionlib_msgs actionlib)
 add_action_files(DIRECTORY action FILES DoPerch.action)

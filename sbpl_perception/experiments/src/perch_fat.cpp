@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
   // string config_file = config_file_path.string();
   // cout << config_file << endl;
 
-  bool image_debug = false;
+  bool image_debug = true;
 
   string experiment_dir = kDebugDir + output_dir_name.stem().string() + "/";
   string debug_dir = kDebugDir + output_dir_name.stem().string() + "/";

@@ -1937,6 +1937,98 @@ def run_dope_6d():
 
     return
 
+def run_sameshape_gpu():
+    ## Running on PERCH only with synthetic color dataset - shape
+    # Use normalize cost to get best results
+    base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed"
+    # base_dir = "/media/sbpl/Data/Aditya/datasets/Zed"
+    image_directory = base_dir
+    annotation_file = base_dir + '/instances_newmap1_turbosquid_2018.json'
+    # annotation_file = base_dir + '/instances_newmap1_turbosquid_can_only_2018.json'
+
+    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
+    # model_dir = "/media/sbpl/Data/Aditya/datasets/turbosquid/models"
+    fat_image = FATImage(
+        coco_annotation_file=annotation_file,
+        coco_image_directory=image_directory,
+        depth_factor=100,
+        model_dir=model_dir,
+        model_mesh_in_mm=True,
+        # model_mesh_scaling_factor=0.005,
+        model_mesh_scaling_factor=1,
+        models_flipped=False
+    )
+
+    f_runtime = open('runtime.txt', "w")
+    f_accuracy = open('accuracy.txt', "w")
+    f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
+
+    # required_objects = ['coke_can', 'coke_bottle', 'pepsi_can']
+    required_objects = ['coke_bottle']
+    # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
+    # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
+
+    f_accuracy.write("name ")
+
+    for object_name in required_objects:
+        f_accuracy.write("{}-add {}-adds ".format(object_name, object_name))
+    f_accuracy.write("\n")
+
+    # for img_i in ['14']:
+    # for img_i in ['14', '20', '25', '32', '33', '38', '48']:
+    read_results_only = False
+    # for img_i in range(0,50):
+    for img_i in range(7,8):
+    # for img_i in ['30', '31', '34', '35', '36', '37', '39', '40']:
+    # for img_i in ['15', '16', '17', '18', '19', '21', '22', '23', '24', '26', '27', '28', '29', '41', '42', '43', '44', '45', '46', '47', '49']:
+    # for img_i in list(range(0,13)) + ['30', '31', '34', '35', '36', '37', '39', '40', '15', '16', '17', '18', '19', '21', '22', '23', '24', '26', '27', '28', '29', '41', '42', '43', '44', '45', '46', '47', '49']:
+        # if img_i == 10 or img_i == 14 or img_i == 15 or img_i == 18 or img_i == 20:
+        #     # mising in icp run
+        #     continue
+        image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
+        # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
+        image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
+        yaw_only_objects, max_min_dict, transformed_annotations = \
+                fat_image.visualize_pose_ros(image_data, annotations, frame='table', camera_optical_frame=False)
+
+        if read_results_only == False:
+
+
+            max_min_dict['ymax'] = 1.5
+            max_min_dict['ymin'] = -1.5
+            max_min_dict['xmax'] = 0.5
+            max_min_dict['xmin'] = -0.5
+            fat_image.search_resolution_translation = 0.08
+
+            perch_annotations, stats = fat_image.visualize_perch_output(
+                image_data, annotations, max_min_dict, frame='table',
+                use_external_render=0, required_object=required_objects,
+                # use_external_render=0, required_object=['coke', 'sprite', 'pepsi'],
+                # use_external_render=0, required_object=['sprite', 'coke', 'pepsi'],
+                camera_optical_frame=False, use_external_pose_list=0, gt_annotations=transformed_annotations
+            )
+        else:
+            output_dir_name = os.path.join("final_comp", "color_lazy_histogram", fat_image.get_clean_name(image_data['file_name']))
+            perch_annotations, stats = fat_image.read_perch_output(output_dir_name)
+
+        # print(perch_annotations)
+        # print(transformed_annotations)
+
+        f_accuracy.write("{},".format(image_data['file_name']))
+        add_dict, add_s_dict = fat_image.compare_clouds(transformed_annotations, perch_annotations, downsample=True, use_add_s=True)
+
+        for object_name in required_objects:
+            if (object_name in add_dict) and (object_name in add_s_dict):
+                f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name]))
+            else:
+                f_accuracy.write(" , ,")
+        f_accuracy.write("\n")
+
+        f_runtime.write("{} {} {}\n".format(image_name, stats['expands'], stats['runtime']))
+
+    f_runtime.close()
+    f_accuracy.close()
+
 if __name__ == '__main__':
 
     # coco_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/coco_results.pth')
@@ -2001,7 +2093,7 @@ if __name__ == '__main__':
 
     ## Run Perch with SameShape
     # Run with use_lazy and use_color_cost enabled
-    run_sameshape()
+    run_sameshape_gpu()
     # run_sameshape_can_only()
     # run_dope_sameshape()
 

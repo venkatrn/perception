@@ -30,6 +30,7 @@
 
 #include <opencv/highgui.h>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/core/eigen.hpp>
 //// #include <opencv2/contrib/contrib.hpp>
 
 #include <boost/lexical_cast.hpp>
@@ -37,7 +38,6 @@
 #include <algorithm>
 #include <pcl/point_cloud.h>
 #include <pcl/octree/octree_pointcloud_changedetector.h>
-
 using namespace std;
 using namespace perception_utils;
 using namespace pcl::simulation;
@@ -197,7 +197,6 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
     printf("Debug Verbose: %d\n", perch_params_.debug_verbose);
     printf("Use Color Cost: %d\n", kUseColorCost);
-
     printf("\n");
     printf("----------Camera Config-------------\n");
     printf("Camera Width: %d\n", kCameraWidth);
@@ -206,6 +205,10 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Camera FY: %f\n", kCameraFY);
     printf("Camera CX: %f\n", kCameraCX);
     printf("Camera CY: %f\n", kCameraCY);
+    env_params_.cam_intrinsic=(cv::Mat_<float>(3,3) << kCameraFX, 0.0, kCameraCX, 0.0, kCameraFY, kCameraCY, 0.0, 0.0, 1.0);
+    env_params_.width = 960;
+    env_params_.height = 540;
+    env_params_.proj_mat = cuda_renderer::compute_proj(env_params_.cam_intrinsic, env_params_.width, env_params_.height);
   }
 
   mpi_comm_->barrier();
@@ -216,6 +219,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("ERROR: PERCH Params not initialized for process %d\n",
            mpi_comm_->rank());
   }
+
 }
 
 EnvObjectRecognition::~EnvObjectRecognition() {
@@ -245,6 +249,8 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
 
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFilePLY (model_meta_data.file.c_str(), mesh);
+    cuda_renderer::Model render_model(model_meta_data.file.c_str()); 
+    render_models_.push_back(render_model);
     // pcl::io::loadPolygonFileOBJ (model_meta_data.file.c_str(), mesh);
 
     // pcl::PolygonMesh meshT;
@@ -580,6 +586,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
                                     vector<int> *succ_ids, vector<int> *costs) {
 
   printf("GetSuccs() for state\n");
+  auto start = chrono::steady_clock::now();
   succ_ids->clear();
   costs->clear();
 
@@ -660,9 +667,10 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     input_unit.source_counted_pixels = counted_pixels_map_[source_state_id];
   }
   vector<CostComputationOutput> cost_computation_output;
-  ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
+  // ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
+  //                        false);
+  ComputeCostsInParallelGPU(cost_computation_input, &cost_computation_output,
                          false);
-
   // hash_manager_.Print();
 
   // Sort in increasing order of cost for debugging
@@ -671,7 +679,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   //---- PARALLELIZE THIS LOOP-----------//
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
     const auto &output_unit = cost_computation_output[ii];
-
+    // std::cout<<output_unit.cost;
     bool invalid_state = output_unit.cost == -1;
 
     // if (output_unit.cost != -1) {
@@ -710,6 +718,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     if (invalid_state) {
       candidate_costs[ii] = -1;
     } else {
+
       adjusted_states_[candidate_succ_ids[ii]] = output_unit.adjusted_state;
       assert(output_unit.depth_image.size() != 0);
       // if (env_params_.use_external_render == 1)
@@ -765,7 +774,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     }
   }
 
-
+  auto end = chrono::steady_clock::now();
+  std::cout<< "real planning time: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << std::endl;
   //--------------------------------------//
   int min_cost = 9999999999;
   PointCloudPtr min_cost_point_cloud;
@@ -786,7 +796,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
     succ_cache[source_state_id].push_back(candidate_succ_ids[ii]);
     costs->push_back(candidate_costs[ii]);
-
+    image_debug_=false;
     if (image_debug_) {
       std::stringstream ss;
       ss.precision(20);
@@ -794,8 +804,8 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       std::stringstream ssc;
       ssc.precision(20);
       ssc << debug_dir_ + "succ_color_" << candidate_succ_ids[ii] << ".png";
-      PrintImage(ss.str(), output_unit.depth_image);
-      // PrintState(output_unit.adjusted_state , ss.str(), ssc.str());
+      //PrintImage(ss.str(), output_unit.depth_image);
+      PrintState(output_unit.adjusted_state , ss.str(), ssc.str());
 
       uint8_t rgb[3] = {255,0,0};
       // auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
@@ -908,6 +918,7 @@ int EnvObjectRecognition::GetBestSuccessorID(int state_id) {
   return best_succ_id;
 }
 
+
 void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInput> &input,
                                                   std::vector<CostComputationOutput> *output,
                                                   bool lazy) {
@@ -1013,6 +1024,204 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
   }
 }
 
+void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
+                                                  std::vector<CostComputationOutput> *output,
+                                                  bool lazy) {
+  std::cout << "Computing costs in parallel GPU" << endl;
+  std::vector<cuda_renderer::Model::mat4x4> mat4_v;
+  std::vector<ContPose> contposes;
+  for(int i =0; i <input.size(); i ++){
+    std::vector<ObjectState> objects = input[i].child_state.object_states();
+    for(int n=0; n < objects.size();n++){
+      ContPose cur = objects[n].cont_pose();
+      contposes.push_back(cur);
+      // std::cout<<cur<<std::endl;
+      Eigen::Matrix4d transform;
+      transform = cur.ContPose::GetTransform().matrix().cast<double>();
+      Eigen::Isometry3d cam_z_front;
+      Eigen::Isometry3d cam_to_body;
+      cam_to_body.matrix() << 0, 0, 1, 0,
+                        -1, 0, 0, 0,
+                        0, -1, 0, 0,
+                        0, 0, 0, 1;
+      cam_z_front = cam_to_world_ * cam_to_body;
+      
+      Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
+      Eigen::Matrix4d pose_in_cam = cam_matrix*transform;
+      // std::cout<<transform<<std::endl;
+      // std::cout<<cam_matrix<<std::endl;
+      cuda_renderer::Model::mat4x4 mat4;
+      //multiply 100 to change scale, data scale is in meter
+      mat4.a0 = pose_in_cam(0,0)*100;
+      mat4.a1 = pose_in_cam(0,1)*100;
+      mat4.a2 = pose_in_cam(0,2)*100;
+      mat4.a3 = pose_in_cam(0,3)*100;
+      mat4.b0 = pose_in_cam(1,0)*100;
+      mat4.b1 = pose_in_cam(1,1)*100;
+      mat4.b2 = pose_in_cam(1,2)*100;
+      mat4.b3 = pose_in_cam(1,3)*100;
+      mat4.c0 = pose_in_cam(2,0)*100;
+      mat4.c1 = pose_in_cam(2,1)*100;
+      mat4.c2 = pose_in_cam(2,2)*100;
+      mat4.c3 = pose_in_cam(2,3)*100;
+      mat4.d0 = pose_in_cam(3,0);
+      mat4.d1 = pose_in_cam(3,1);
+      mat4.d2 = pose_in_cam(3,2);
+      mat4.d3 = pose_in_cam(3,3);
+      // std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<", "
+      // <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<", "
+      // <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<", "
+      // <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
+      mat4_v.push_back(mat4);
+    }
+    
+    // ContPose p = input[i].child_state.cont_pose();
+    // Eigen::Matrix4f transform;
+    // transform = p.ObjectModel::GetTransform().matrix().cast<float>();
+  }
+
+  #ifdef CUDA_ON
+  int render_size = 750;
+  int total_render_num = mat4_v.size();
+  int num_render = (total_render_num-1)/render_size+1;
+  std::vector<int> total_result_cost;
+  for(int i =0; i <num_render; i ++){
+    auto last = std::min(total_render_num, i*render_size + render_size);
+    std::vector<cuda_renderer::Model::mat4x4>::const_iterator start = mat4_v.begin() + i*render_size;
+    std::vector<cuda_renderer::Model::mat4x4>::const_iterator finish = mat4_v.begin() + last;
+    std::vector<cuda_renderer::Model::mat4x4> cur_transform(start,finish);
+    std::vector<std::vector<uint8_t>> result_color;
+    std::vector<int32_t> result_depth;
+    cuda_renderer::render_cuda(render_models_[0].tris, cur_transform,
+                               env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
+  // std::vector<cv::Mat> test_mat;
+  // int height = 540;
+  // int width = 960;
+  for(int n = 0; n < 160; n ++){
+      cv::Mat cv_color = cv::Mat(env_params_.height,env_params_.width,CV_8UC3);
+      cv::Mat cv_depth = cv::Mat(env_params_.height,env_params_.width,CV_32SC1);
+      for(int i = 0; i < env_params_.height; i ++){
+          for(int j = 0; j < env_params_.width; j ++){
+              int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
+              int red = result_color[0][index];
+              int green = result_color[1][index];
+              int blue = result_color[2][index];
+              // std::cout<<red<<","<<green<<","<<blue<<std::endl;
+              cv_color.at<cv::Vec3b>(i, j) = cv::Vec3b(blue, green,red);
+              cv_depth.at<int>(i, j) = result_depth[index];
+          }
+      }
+      std::string color_image_path, depth_image_path;
+      std::stringstream ss1, ss2;
+      ss1 << debug_dir_ << "/gpu-" << n << "-color.png";
+      color_image_path = ss1.str();
+      ss2 << debug_dir_ << "/gpu-" << n << "-depth.png";
+      depth_image_path = ss2.str();
+
+      // cv::Mat color_depth_image;
+      // ColorizeDepthImage(cv_depth, color_depth_image, min_observed_depth_, max_observed_depth_);
+      cv::imwrite(color_image_path, cv_color);
+      // cv::imwrite(depth_image_path, color_depth_image);
+      cv::imwrite(depth_image_path, cv_depth);
+  }
+  
+  // Mat3x3f K_((float*)env_params_.cam_intrinsic.data);
+  // auto pcd1_cuda = cuda_icp::depth2cloud_cuda(device_result_depth.data(), env_params_.width, env_params_.height, K_);
+
+  // Scene_nn scene;
+  // KDTree_cuda kdtree_cuda;
+  // scene.init_Scene_nn_cuda(scene_depth, K_, kdtree_cuda);
+
+  //   cv::imshow("gpu_mask1", cur_mat); 
+  //   // cv::FileStorage file("/home/jessy/Desktop/a.txt", cv::FileStorage::WRITE);
+  //   // file << "matName" << cur_mat;
+  //   cv::waitKey(0); 
+  // }
+    std::vector<uint8_t> r_v;
+    std::vector<uint8_t> g_v;
+    std::vector<uint8_t> b_v;
+    for (int y = 0; y < env_params_.height; y++) {
+      for (int x = 0; x < env_params_.width; x++) {
+          cv::Vec3b elem = cv_input_color_image.at<cv::Vec3b>(y, x);
+          r_v.push_back(elem[2]);
+          g_v.push_back(elem[1]);
+          b_v.push_back(elem[0]);
+          
+      }
+    }
+    std::vector<std::vector<uint8_t>> observed;
+    observed.push_back(r_v);
+    observed.push_back(g_v);
+    observed.push_back(b_v);
+    std::vector<int> result_cost = cuda_renderer::compute_cost(result_color,observed,env_params_.height,env_params_.width,cur_transform.size());
+    total_result_cost.insert(end(total_result_cost),begin(result_cost),end(result_cost));
+    // for(int i = 0; i < result_cost.size(); i ++){
+      // std::cout<<result_cost[i]<<contposes[i]<<std::endl;
+    // }
+  }
+  std::cout<<total_result_cost.size()<<"ohhhhhhhhhh";
+  // cv::Mat cur_mat = cv::Mat(env_params_.height,env_params_.width,CV_8UC3);
+  // for(int n = 0; n <mat4_v.size(); n ++){
+      
+  //     for(int i = 0; i < env_params_.height; i ++){
+  //         for(int j = 0; j <env_params_.width; j ++){
+  //             int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
+  //             int dep = result_cost[index];
+  //             if(dep!= 0){
+  //                 cur_mat.at<cv::Vec3b>(i, j) = cv::Vec3b(100,100,100);
+  //             }else{
+  //                 cur_mat.at<cv::Vec3b>(i, j) = cv::Vec3b(0,0,0);;
+  //             }
+  // //             // std::cout<<red<<","<<green<<","<<blue<<std::endl;
+              
+  //         }
+  //     }
+  //     cv::imshow("gpu_mask1", cur_mat);
+  //     cv::waitKey(0);
+      
+  // }
+  int num= input.size();
+  assert(output != nullptr);
+  output->clear();
+  output->resize(num);
+  std::cout<<"ayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+  std::vector<CostComputationOutput> output_gpu;
+  vector<unsigned short> source_depth_image;
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  source_depth_image.push_back(1);
+  vector<vector<unsigned char>> source_color_image;
+  cv::Mat source_cv_depth_image;
+  cv::Mat source_cv_color_image;
+  int total_pixel = env_params_.height*env_params_.width;
+  //for a single object!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  for(int i =0; i <num; i ++){
+    CostComputationOutput cur_unit;
+    cur_unit.cost = total_result_cost[i];
+    cur_unit.adjusted_state = input[i].child_state;
+    cur_unit.state_properties.last_max_depth = kKinectMaxDepth;
+    cur_unit.state_properties.last_min_depth = 0;
+    cur_unit.state_properties.target_cost =  total_result_cost[i];
+    cur_unit.state_properties.source_cost = 0;
+    cur_unit.state_properties.last_level_cost = 0;
+    cur_unit.depth_image = source_depth_image;
+    output_gpu.push_back(cur_unit);
+    // output_gpu[i].color_image = ,
+    // output_gpu[i].unadjusted_depth_image,
+    // output_gpu[i].unadjusted_color_image
+  }
+  // *output = output_gpu;
+
+  *output = output_gpu;
+ 
+  std::cout<<"done!!!!!!!!!!!!!!!11";
+  #endif
+
+}
 
 void EnvObjectRecognition::GetLazySuccs(int source_state_id,
                                         vector<int> *succ_ids, vector<int> *costs,
@@ -1747,6 +1956,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
   ContPose child_pose = last_object.cont_pose();
   int last_object_id = last_object.id();
 
+  //initializing all containers for images and point clouds
   vector<unsigned short> depth_image, last_obj_depth_image;
   cv::Mat cv_depth_image, last_cv_obj_depth_image;
   vector<vector<unsigned char>> color_image, last_obj_color_image;
@@ -2032,7 +2242,145 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     printf("Cost of this state : %d\n", total_cost);
   return total_cost;
 }
+int EnvObjectRecognition::GetColorOnlyCost(const GraphState &source_state,
+                                  const GraphState &child_state,
+                                  const vector<unsigned short> &source_depth_image,
+                                  const vector<vector<unsigned char>> &source_color_image,
+                                  const vector<int> &parent_counted_pixels, vector<int> *child_counted_pixels,
+                                  GraphState *adjusted_child_state, GraphStateProperties *child_properties,
+                                  vector<unsigned short> *final_depth_image,
+                                  vector<vector<unsigned char>> *final_color_image,
+                                  vector<unsigned short> *unadjusted_depth_image,
+                                  vector<vector<unsigned char>> *unadjusted_color_image) {
+  std::cout << "GetCost() : Getting cost for state " << endl;
+  assert(child_state.NumObjects() > 0);
 
+  *adjusted_child_state = child_state;
+  child_properties->last_max_depth = kKinectMaxDepth;
+  child_properties->last_min_depth = 0;
+
+  const auto &last_object = child_state.object_states().back();
+  ContPose child_pose = last_object.cont_pose();
+  int last_object_id = last_object.id();
+
+  //initializing all containers for images and point clouds
+  vector<unsigned short> depth_image, last_obj_depth_image;
+  cv::Mat cv_depth_image, last_cv_obj_depth_image;
+  vector<vector<unsigned char>> color_image, last_obj_color_image;
+  cv::Mat cv_color_image, last_cv_obj_color_image;
+
+  const float *succ_depth_buffer;
+  ContPose pose_in(child_pose),
+           pose_out(child_pose);
+  // PointCloudPtr cloud_in(new PointCloud);
+  // PointCloudPtr succ_cloud(new PointCloud);
+  // PointCloudPtr cloud_out(new PointCloud);
+
+  // Begin ICP Adjustment
+  // Computing images after adding objects to scene
+  GraphState s_new_obj;
+  s_new_obj.AppendObject(ObjectState(last_object_id,
+                                     obj_models_[last_object_id].symmetric(), child_pose));
+  succ_depth_buffer = GetDepthImage(s_new_obj, &last_obj_depth_image, &last_obj_color_image,
+                                    &last_cv_obj_depth_image, &last_cv_obj_color_image);
+
+  unadjusted_depth_image->clear();
+  unadjusted_color_image->clear();
+  GetComposedDepthImage(source_depth_image, source_color_image,
+                        last_obj_depth_image, last_obj_color_image,
+                        unadjusted_depth_image, unadjusted_color_image);
+
+  unsigned short succ_min_depth_unused, succ_max_depth_unused;
+  vector<int> new_pixel_indices;
+
+  if (IsOccluded(source_depth_image, *unadjusted_depth_image, &new_pixel_indices,
+                 &succ_min_depth_unused,
+                 &succ_max_depth_unused)) {
+    // final_depth_image->clear();
+    // *final_depth_image = *unadjusted_depth_image;
+    printf("IsOccluded invalid\n");
+    // Can't add new objects that occlude previous ones
+    return -1;
+  }
+
+  
+  //child_properties->last_min_depth = succ_min_depth;
+  //child_properties->last_max_depth = succ_max_depth;
+
+  // Compute costs
+  const bool last_level = static_cast<int>(child_state.NumObjects()) ==
+                          env_params_.num_objects;
+  int target_cost = 0, source_cost = 0, last_level_cost = 0, total_cost = 0;
+  auto start = chrono::steady_clock::now();
+  target_cost = GetColorCost(&last_cv_obj_depth_image, &last_cv_obj_color_image);
+  auto end = chrono::steady_clock::now();
+  std::cout<< "time for the cost: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << std::endl;
+  // source_cost = GetSourceCost(succ_cloud,
+  //                             adjusted_child_state->object_states().back(),
+  //                             last_level, parent_counted_pixels, child_counted_pixels);
+  source_cost = 0;
+
+  // Aditya uncomment 
+  if (last_level) {
+    vector<int> updated_counted_pixels;
+    last_level_cost = 0;
+    // // NOTE: we won't include the points that lie outside the union of volumes.
+    // // Refer to the header for documentation on child_counted_pixels.
+    // *child_counted_pixels = updated_counted_pixels;
+    *child_counted_pixels = updated_counted_pixels;
+
+    // last_level_cost = 0;
+    // Aditya remove
+  }
+
+  total_cost = target_cost;
+
+  unadjusted_color_image->clear();
+  unadjusted_color_image->shrink_to_fit();
+  // unadjusted_depth_image->clear();
+  // unadjusted_depth_image->shrink_to_fit();
+
+  *final_depth_image = last_obj_depth_image;
+
+  // final_color_image->clear();
+  // final_color_image->shrink_to_fit();
+  // *final_color_image = color_image;
+
+  // cloud_out.reset();
+  // cloud_in.reset();
+  // succ_cloud.reset();
+
+  child_properties->target_cost = target_cost;
+  child_properties->source_cost = source_cost;
+  child_properties->last_level_cost = last_level_cost;
+
+  // std::stringstream cloud_ss;
+  // cloud_ss.precision(20);
+  // cloud_ss << debug_dir_ + "cloud_" << rand() << ".pcd";
+  // pcl::PCDWriter writer;
+  // writer.writeBinary (cloud_ss.str()  , *succ_cloud);
+
+  if (image_debug_) {
+    // cloud_out = GetGravityAlignedPointCloud(*final_depth_image);
+    // PrintPointCloud(cloud_out, last_object_id);
+
+    // PrintImage("Test", depth_image);
+    // std::stringstream ss1, ss2, ss3;
+    // ss1.precision(20);
+    // ss2.precision(20);
+    // ss1 << debug_dir_ + "cloud_" << child_id << ".pcd";
+    // ss2 << debug_dir_ + "cloud_aligned_" << child_id << ".pcd";
+    // ss3 << debug_dir_ + "cloud_succ_" << child_id << ".pcd";
+    // pcl::PCDWriter writer;
+    // writer.writeBinary (ss1.str()  , *cloud_in);
+    // writer.writeBinary (ss2.str()  , *cloud_out);
+    // writer.writeBinary (ss3.str()  , *succ_cloud);
+  }
+  printf("Cost of this state : %d\n", total_cost);
+  return total_cost;
+
+  
+}
 bool EnvObjectRecognition::IsOccluded(const vector<unsigned short>
                                       &parent_depth_image, const vector<unsigned short> &succ_depth_image,
                                       vector<int> *new_pixel_indices, unsigned short *min_succ_depth,
@@ -2127,6 +2475,17 @@ double EnvObjectRecognition::getColorDistance(uint32_t rgb_1, uint32_t rgb_2) co
     return color_distance;
 
 }
+double EnvObjectRecognition::getColorDistance(uint8_t r1,uint8_t g1,uint8_t b1,uint8_t r2,uint8_t g2,uint8_t b2) const
+{
+    ColorSpace::Rgb point_1_color(r1, g1, b1);
+    ColorSpace::Rgb point_2_color(r2, g2, b2);
+
+    double color_distance =
+              ColorSpace::Cie2000Comparison::Compare(&point_1_color, &point_2_color);
+
+    return color_distance;
+
+}
 
 int EnvObjectRecognition::getNumColorNeighboursCMC(PointT point,
                                               const PointCloudPtr point_cloud) const
@@ -2164,6 +2523,87 @@ int EnvObjectRecognition::getNumColorNeighbours(PointT point,
         }
     }
     return num_color_neighbors_found;
+}
+int EnvObjectRecognition::GetColorCost(cv::Mat *cv_depth_image,cv::Mat *cv_color_image) {
+  
+    int cost = 0;
+    cv::Mat lab;
+    cv::Mat lab1;
+    cv::cvtColor(*cv_color_image,lab,cv::COLOR_BGR2Lab);
+    cv::cvtColor(cv_input_color_image,lab1,cv::COLOR_BGR2Lab);
+    cv::Mat destiny = cv::Mat::zeros( cv_color_image->size(), CV_8UC1);
+    
+    difffilter(lab,lab1,destiny);
+    cost = sum(destiny)[0];
+    /*cv::Mat img(540, 960,CV_64F);
+    cv::Vec3b pixel1;
+    cv::Vec3b pixel2;
+    cv::Vec3b pixel_depth;
+    uint8_t r1;
+    uint8_t g1;
+    uint8_t b1;
+    uint8_t r2;
+    uint8_t g2;
+    uint8_t b2;
+    uint8_t depth;
+    int row;
+    int col;
+    double cur_dist;
+    bool valid;
+    for(int r = 0; r < cv_input_color_image.rows; ++r) {
+        for(int c = 0; c < cv_input_color_image.cols; ++c) {
+          valid = false;
+          pixel1 = cv_input_color_image.at<cv::Vec3b>(r,c);
+          
+          pixel_depth = cv_depth_image->at<cv::Vec3b>(r,c);
+          r1 = (uint8_t)pixel1[0];
+          g1 = (uint8_t)pixel1[1];
+          b1 = (uint8_t)pixel1[2];
+          
+          depth = (uint8_t)pixel_depth[0];
+          for(int i = -2; i <3;i++){
+            row = r+i;
+            col = c+i;
+            if(row >= 0 && row <cv_input_color_image.rows && col >= 0 && col <cv_input_color_image.cols){
+              pixel2 = cv_color_image->at<cv::Vec3b>(r,c);
+              r2 = (uint8_t)pixel2[0];
+              g2 = (uint8_t)pixel2[1];
+              b2 = (uint8_t)pixel2[2];
+              cur_dist = getColorDistance(r1,g1,b1,r2,g2,b2);
+              if(cur_dist < kColorDistanceThreshold){
+                valid = true;
+              }
+            }
+          }
+          // if(r2 != 0 || g2 != 0 || b2 != 0){
+          //   std::cout<< r << ":"<< c << std::endl;
+          //   std::cout<<cur_dist<<std::endl;
+          //   //std::cout<< unsigned(r2) << ","<< unsigned(g2) << ","<< unsigned(b2) << std::endl;
+          // }
+          
+          if(valid == false){
+            // cost += depth*depth;
+            img.at<double>(r,c) = cur_dist;
+            cost += 1;
+          }
+            
+        }
+    }*/
+    // std::stringstream ssc1;
+    // ssc1.precision(20);
+    // ssc1 << debug_dir_ << "input"<< cost <<".png";;
+    // std::stringstream ssc2;
+    // ssc2.precision(20);
+    // ssc2 << debug_dir_ << "generated"<< cost <<".png";;
+    // cv::imwrite(ssc1.str().c_str(), cv_input_color_image);
+    // cv::imwrite(ssc2.str().c_str(), *cv_color_image);
+    // std::stringstream color_mismatch;
+    // color_mismatch.precision(20);
+    // color_mismatch << debug_dir_ << "mismatch"<< cost <<".png";
+    // cv::imwrite(color_mismatch.str().c_str(), img);
+    // std::cout << "M = "<< std::endl << " "  << img << std::endl << std::endl;
+    std::cout<< "cost !!!!!!!!!!!!!!!!!!!!"<< cost <<std::endl;
+    return cost;
 }
 
 int EnvObjectRecognition::GetTargetCost(const PointCloudPtr
@@ -3236,7 +3676,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState s,
   cv::Mat cv_depth_image, cv_color_image;
   return GetDepthImage(s, depth_image, &color_image, cv_depth_image, cv_color_image, &num_occluders, false);
 }
-
+//GetDepthImage after append a new object
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
                                                  vector<unsigned short> *depth_image,
                                                  vector<vector<unsigned char>> *color_image,
@@ -3284,7 +3724,6 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
     printf("GetDepthImage() for number of objects : %d\n", object_states.size());
 
   // cout << "External Render :" << env_params_.use_external_render;
-
    for (size_t ii = 0; ii < object_states.size(); ++ii) {
       const auto &object_state = object_states[ii];
       ObjectModel obj_model = obj_models_[object_state.id()];
@@ -3302,12 +3741,28 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
       {
         transformed_mesh = obj_model.GetTransformedMesh(p);
       }
-
+      // std::string name;
+      // name = "/media/jessy/Data/dataset/saved_ply/";
+      // name.append(std::to_string(p.x()));
+      // name.append(",");
+      // name.append(std::to_string(p.y()));
+      // name.append(",");
+      // name.append(std::to_string(p.z()));
+      // name.append(",");
+      // name.append(std::to_string(p.yaw()));
+      // name.append(".ply");
+      // // pcl::io::savePLYFile(name, *transformed_mesh);
+      
+      // pcl::io::loadPolygonFilePLY(name,*transformed_mesh);
+      
+      //pcl::io::loadPCDFile(name,transformed_mesh->cloud);
       PolygonMeshModel::Ptr model = PolygonMeshModel::Ptr (new PolygonMeshModel (
                                                              GL_POLYGON, transformed_mesh));
       scene_->add (model);
+      
+      
     }
-
+    
     kinect_simulator_->doSim(env_params_.camera_pose);
     const float *depth_buffer = kinect_simulator_->rl_->getDepthBuffer();
     kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
@@ -3351,7 +3806,7 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
     return depth_buffer;
 
 };
-
+//GetDepthImage with cv:mat color image 
 const float *EnvObjectRecognition::GetDepthImage(GraphState s,
                              std::vector<unsigned short> *depth_image,
                              vector<vector<unsigned char>> *color_image,
@@ -4652,7 +5107,10 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
                 // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
                 ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
-
+                //check valid poses need to check!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                // if (!IsValidPose(source_state, ii, p)) {
+                //   // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
+                // cout << "Pose " << p << endl;
                 if (!IsValidPose(source_state, ii, p)) {
                   // std::cout << "Not a valid pose for theta : " << theta << " " << endl;
 
@@ -4902,9 +5360,8 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 // If symmetric object, don't iterate over all theta
                 // Break after adding first theta from above
                 if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
-                  break;
+                  //break;
                 }
-
 
 
                 // }

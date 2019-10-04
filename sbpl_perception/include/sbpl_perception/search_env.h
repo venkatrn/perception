@@ -6,7 +6,8 @@
  * @author Venkatraman Narayanan
  * Carnegie Mellon University, 2015
  */
-
+#include <cuda_renderer/renderer.h>
+#include <cuda_icp/icp.h>
 #include <kinect_sim/model.h>
 #include <kinect_sim/scene.h>
 #include <kinect_sim/simulation_io.hpp>
@@ -35,6 +36,8 @@
 #include <pcl/PolygonMesh.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/search/organized.h>
+#include <pcl/io/ply_io.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/visualization/image_viewer.h>
@@ -52,6 +55,7 @@
 #include <sbpl_perception/ColorSpace/Comparison.h>
 #include <chrono>
 
+int *difffilter(const cv::Mat& input,const cv::Mat& input1, cv::Mat& output);
 namespace sbpl_perception {
 
 struct EnvConfig {
@@ -64,6 +68,10 @@ struct EnvConfig {
 struct EnvParams {
   double table_height;
   Eigen::Isometry3d camera_pose;
+  cv::Mat cam_intrinsic;
+  cuda_renderer::Model::mat4x4 proj_mat;
+  int width;
+  int height;
   double x_min, x_max, y_min, y_max;
   double res, theta_res; // Resolution for x,y and theta
   int goal_state_id, start_state_id;
@@ -219,10 +227,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   double GetTableHeight();
   void SetBounds(double x_min, double x_max, double y_min, double y_max);
 
-  double GetICPAdjustedPoseCUDA(const PointCloudPtr cloud_in,
-                            const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
-                            const std::vector<int> counted_indices = std::vector<int>(0));
-
   double GetICPAdjustedPose(const PointCloudPtr cloud_in,
                             const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
                             const std::vector<int> counted_indices = std::vector<int>(0));
@@ -294,6 +298,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void ComputeCostsInParallel(std::vector<CostComputationInput> &input,
                               std::vector<CostComputationOutput> *output, bool lazy);
 
+  void ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
+                              std::vector<CostComputationOutput> *output, bool lazy);
 
   void PrintValidStates();
 
@@ -343,6 +349,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   cv::Mat cv_input_color_image;
 
   std::vector<ObjectModel> obj_models_;
+  std::vector<cuda_renderer::Model> render_models_;
   pcl::simulation::Scene::Ptr scene_;
 
   EnvParams env_params_;
@@ -456,8 +463,21 @@ class EnvObjectRecognition : public EnvironmentMHA {
               std::vector<std::vector<unsigned char>> *unadjusted_child_color_image,
               double &histogram_score);
 
+  int GetColorOnlyCost(const GraphState &source_state, const GraphState &child_state,
+              const std::vector<unsigned short> &source_depth_image,
+              const std::vector<std::vector<unsigned char>> &source_color_image,
+              const std::vector<int> &parent_counted_pixels,
+              std::vector<int> *child_counted_pixels,
+              GraphState *adjusted_child_state,
+              GraphStateProperties *state_properties,
+              std::vector<unsigned short> *adjusted_child_depth_image,
+              std::vector<std::vector<unsigned char>> *adjusted_child_color_image,
+              std::vector<unsigned short> *unadjusted_child_depth_image,
+              std::vector<std::vector<unsigned char>> *unadjusted_child_color_image);
+
   double getColorDistanceCMC(uint32_t rgb_1, uint32_t rgb_2) const;
   double getColorDistance(uint32_t rgb_1, uint32_t rgb_2) const;
+  double getColorDistance(uint8_t r1,uint8_t g1,uint8_t b1,uint8_t r2,uint8_t g2,uint8_t b2) const;
   int getNumColorNeighboursCMC(PointT point, const PointCloudPtr point_cloud) const;
   int getNumColorNeighbours(PointT point, vector<int> indices, const PointCloudPtr point_cloud) const;
 
@@ -475,6 +495,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                        const ObjectState &last_object,
                        const std::vector<int> &counted_pixels,
                        std::vector<int> *updated_counted_pixels);
+  int GetColorCost(cv::Mat *cv_depth_image,cv::Mat *cv_color_image);
 
   // Computes the cost for the lazy parent-child edge. This is an admissible estimate of the true parent-child edge cost, computed without any
   // additional renderings. This requires the true source depth image and

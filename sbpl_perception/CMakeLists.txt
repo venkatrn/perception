@@ -9,6 +9,23 @@ project(sbpl_perception)
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
 # set(ROS_BUILD_TYPE RelWithDebInfo)
 # set(ROS_BUILD_TYPE Debug)
+option(USE_CUDA "use cuda or not" ON)
+if(USE_CUDA)
+set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-8.0)
+add_definitions(-DCUDA_ON)
+endif()
+if(USE_CUDA)
+# cuda
+find_package(CUDA REQUIRED)
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -O3")
+list(APPEND renderer_inc ${CUDA_INCLUDE_DIRS})
+list(APPEND renderer_lib ${CUDA_LIBRARIES})
+endif()
+if(USE_CUDA)
+CUDA_COMPILE(renderer_cuda_objs ${renderer_cuda})
+endif()
+
+
 set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -16,20 +33,24 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
 #set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
+find_package(CUDA REQUIRED)
+set(OpenCV_DIR /usr/local/share/OpenCV)
 
-set(CUSTOM_BOOST_MPI OFF)
+set(CUSTOM_BOOST_MPI ON)
 message(WARNING CUSTOM_BOOST_MPI)
 message(WARNING ${CUSTOM_BOOST_MPI})
 
+include_directories(${OpenCV_INCLUDE_DIRS})
 find_package(ZLIB)
 
 include_directories(${ZLIB_INCLUDE_DIRS})
 # Load catkin and all dependencies required for this package
-#find_package(CUDA REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   kinect_sim
+  cuda_renderer
+  cuda_icp
   perception_utils
   pcl_ros
   roscpp
@@ -76,7 +97,6 @@ include_directories(${Boost_INCLUDE_DIRS})
 find_package(OpenMP)
 # find_package(fcl REQUIRED)
 find_package(octomap REQUIRED)
-# find_package(Pangolin REQUIRED)
 
 find_package(PkgConfig QUIET)
 # pkg_check_modules(FCL REQUIRED fcl)
@@ -114,6 +134,8 @@ catkin_package(
   CATKIN_DEPENDS
     cv_bridge
     kinect_sim
+    cuda_renderer
+    cuda_icp
     perception_utils
     pcl_ros
     roscpp
@@ -171,8 +193,7 @@ target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${catkin_LIBRARIES} ${Z
 #add_executable(sim_test src/experiments/sim_test.cpp)
 #target_link_libraries(sim_test ${PROJECT_NAME})
 
-add_executable(demo src/experiments/demo.cpp)
-target_link_libraries(demo ${PROJECT_NAME})
+
 
 include(CMakeForceCompiler)
   #CMAKE_FORCE_CXX_COMPILER(mpicxx ${CMAKE_CXX_COMPILER_ID})
@@ -189,9 +210,25 @@ CMAKE_FORCE_CXX_COMPILER(${CXX_PATH} ${CMAKE_CXX_COMPILER_ID})
 #####################################################################
 # Needed only for experiments and debugging.
 #####################################################################
+set(CUDA_NVCC_FLAGS "-arch=compute_30" CACHE STRING "nvcc flags" FORCE)
+set(CUDA_VERBOSE_BUILD ON CACHE BOOL "nvcc verbose" FORCE) 
+set(LIB_TYPE STATIC)
+cuda_add_library(CUDA_getCost ${LIB_TYPE} src/compute_cost.cu)
+#add_executable(roscuda_basic_node src/aaa.cpp)
+
+#add_dependencies(roscuda_basic_node CUDA_getCost)
+#TARGET_LINK_LIBRARIES(roscuda_basic_node
+#${catkin_LIBRARIES}
+#CUDA_getCost
+#)
+
+add_executable(demo src/experiments/demo.cpp)
+add_dependencies(demo CUDA_getCost)
+target_link_libraries(demo ${PROJECT_NAME} CUDA_getCost)
 
 add_executable(heuristic_test src/experiments/heuristic_test.cpp)
-target_link_libraries(heuristic_test ${PROJECT_NAME})
+add_dependencies(heuristic_test CUDA_getCost)
+target_link_libraries(heuristic_test ${PROJECT_NAME} CUDA_getCost)
 
 # add_executable(generate_dataset src/utils/generate_dataset.cpp)
 # target_link_libraries(generate_dataset ${PROJECT_NAME})
@@ -210,15 +247,18 @@ target_link_libraries(heuristic_test ${PROJECT_NAME})
 
 add_executable(perch
   experiments/src/perch.cpp)
-target_link_libraries(perch ${PROJECT_NAME})
+add_dependencies(perch CUDA_getCost)
+target_link_libraries(perch ${PROJECT_NAME} ${ZLIB_LIBRARIES} CUDA_getCost)
 
 add_executable(perch_fat
   experiments/src/perch_fat.cpp)
-target_link_libraries(perch_fat ${PROJECT_NAME})
+add_dependencies(perch_fat CUDA_getCost)
+target_link_libraries(perch_fat ${PROJECT_NAME} ${ZLIB_LIBRARIES} CUDA_getCost)
 
 add_executable(perch_single_object
   experiments/src/perch_single_object.cpp)
-target_link_libraries(perch_single_object ${PROJECT_NAME})
+add_dependencies(perch_single_object CUDA_getCost)
+target_link_libraries(perch_single_object ${PROJECT_NAME} ${ZLIB_LIBRARIES} CUDA_getCost)
 
 # add_executable(greedy_icp
 #   experiments/src/greedy_icp.cpp)

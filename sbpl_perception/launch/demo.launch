@@ -4,7 +4,7 @@
   <arg name="image_debug" default="false" />
   <!-- <include file="$(find sbpl_perception)/config/household_objects.xml"/> -->
   <include file="$(find sbpl_perception)/config/roman_objects.xml"/>
-  <node pkg="sbpl_perception" type="demo" name="demo" output="screen" launch-prefix="valgrind /media/aditya/A69AFABA9AFA85D9/Cruzr/code/openmpi-4.0.0/install/bin/mpirun -np 2" respawn="false">
+  <node pkg="sbpl_perception" type="demo" name="demo" output="screen" launch-prefix="valgrind mpirun -np 2" respawn="false">
     <rosparam command="load" file="$(find sbpl_perception)/config/demo_env_config.yaml" />
     <rosparam command="load" file="$(find sbpl_perception)/config/demo_planner_config.yaml" />
     <rosparam command="load" file="$(find sbpl_perception)/config/roman_camera_config.yaml" />
