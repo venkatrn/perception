@@ -21,7 +21,7 @@
 
 namespace cuda_renderer {
 bool depth2cloud_global(
-    int* depth_data, 
+    int32_t* depth_data, 
     float* &result_cloud, 
     int* &dc_index,
     int &point_num,

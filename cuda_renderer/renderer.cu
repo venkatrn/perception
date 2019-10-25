@@ -500,7 +500,7 @@ device_vector_holder<int> render_cuda(const std::vector<Model::Triangle>& tris,c
     }
     // atomic min only support int32
     
-    device_vector_holder<int> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+    device_vector_holder<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
 
     // thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
     thrust::device_vector<uint8_t> device_red_int(poses.size()*real_width*real_height, 0);

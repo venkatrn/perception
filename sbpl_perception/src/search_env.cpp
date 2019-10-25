@@ -1045,9 +1045,10 @@ void EnvObjectRecognition::PrintGPUImages(
               int blue = result_color[2][index];
               // std::cout<<red<<","<<green<<","<<blue<<std::endl;
               cv_color.at<cv::Vec3b>(i, j) = cv::Vec3b(blue, green,red);
-              cv_depth.at<int>(i, j) = result_depth[index];
+              cv_depth.at<int32_t>(i, j) = result_depth[index];
               // if (result_depth[index] > 0)
-              //   printf("%d,%d:%d\n",i,j,result_depth[index]);
+                // printf("%d,%d:%d\n",i,j,result_depth[index]);
+                // printf("%d,%d:%d\n",i,j,cv_depth.at<int>(i, j));
           }
       }
       std::string color_image_path, depth_image_path;
@@ -1130,10 +1131,13 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     std::vector<ObjectState> objects = input[i].child_state.object_states();
     for(int n=0; n < objects.size();n++){
       ContPose cur = objects[n].cont_pose();
+      Eigen::Matrix4d preprocess_transform = 
+        obj_models_[input[i].child_id].preprocessing_transform().matrix().cast<double>();
       contposes.push_back(cur);
       // std::cout<<cur<<std::endl;
       Eigen::Matrix4d transform;
       transform = cur.ContPose::GetTransform().matrix().cast<double>();
+      transform = preprocess_transform * transform;
       Eigen::Isometry3d cam_z_front;
       Eigen::Isometry3d cam_to_body;
       cam_to_body.matrix() << 0, 0, 1, 0,
@@ -1197,7 +1201,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     // float* result_cloud = (float*) malloc(3 * result_depth.size() * sizeof(float));
     float* result_cloud;
     int* dc_index;
-    int* depth_data = result_depth.data();
+    int32_t* depth_data = result_depth.data();
     float depth_factor = 100.0;
     int point_dim = 3;
     int rendered_point_num;
@@ -1205,14 +1209,14 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
       num_poses, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor
     );
-    // PrintGPUImages(result_depth, result_color, num_poses, "input");
+    PrintGPUImages(result_depth, result_color, num_poses, "input");
     PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses);
 
     // // Compute observed cloud
     // free(dc_index);
     float* result_observed_cloud = (float*) malloc(point_dim * env_params_.width*env_params_.height * sizeof(float));
     int* observed_dc_index;
-    int* observed_depth_data = cv_input_filtered_depth_image.ptr<int>(0);
+    int32_t* observed_depth_data = cv_input_filtered_depth_image.ptr<int>(0);
     // int* observed_depth_data = cv_depth_image.ptr<int>(0);
     int observed_point_num;
     cuda_renderer::depth2cloud_global(
@@ -3221,7 +3225,8 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
         kinect_simulator_->rl_->getGlobalPointCV(u, v,
                                                   static_cast<float>(depth_image.at<uchar>(v,u)/depth_factor), transform,
                                                   point_eig);
-        // printf("depth data : %f\n", static_cast<float>(adjMap.at<unsigned char>(v,u)));
+        // printf("depth data : %d\n", (depth_image.at<int>(v,u)));
+        // printf("depth data : %d\n", (depth_image.at<uchar>(v,u)));
         // printf("depth data : %f\n", static_cast<float>(depth_image.at<unsigned short>(v,u) - min)/1000);
         // printf("depth data : %f\n", static_cast<float>(depth_image.at<unsigned short>(v,u)*65535.0 / (max-min) - min));
         // kinect_simulator_->rl_->getGlobalPointCV(u, v,
