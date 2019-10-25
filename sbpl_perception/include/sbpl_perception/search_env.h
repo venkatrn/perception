@@ -6,8 +6,12 @@
  * @author Venkatraman Narayanan
  * Carnegie Mellon University, 2015
  */
+
 #include <cuda_renderer/renderer.h>
 #include <cuda_icp/icp.h>
+// #include <cuda_icp/helper.h>
+#include <cuda_renderer/knncuda.h>
+
 #include <kinect_sim/model.h>
 #include <kinect_sim/scene.h>
 #include <kinect_sim/simulation_io.hpp>
@@ -54,6 +58,7 @@
 #include <sbpl_perception/ColorSpace/Conversion.h>
 #include <sbpl_perception/ColorSpace/Comparison.h>
 #include <chrono>
+#include <thread>
 
 int *difffilter(const cv::Mat& input,const cv::Mat& input1, cv::Mat& output);
 namespace sbpl_perception {
@@ -321,7 +326,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   Heuristics rcnn_heuristics_;
 
   PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, cv::Mat predicted_mask_image, double depth_factor);
-
+  PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, double depth_factor);
   PointCloudPtr GetGravityAlignedPointCloud(
     const vector<unsigned short> &depth_image, uint8_t rgb[3]);
 
@@ -337,6 +342,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
   // void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
 
+  void PrintGPUImages(std::vector<int32_t>& result_depth, std::vector<std::vector<uint8_t>>& result_color, int num_poses, string suffix);
+  void PrintGPUClouds(float* cloud, int* result_depth, int* dc_index, int num_poses);
+
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
 
@@ -346,8 +354,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   ros::Publisher downsampled_input_point_cloud_topic;
   ros::Publisher downsampled_mesh_cloud_topic;
   ros::Publisher input_point_cloud_topic;
-  cv::Mat cv_input_color_image;
+  cv::Mat cv_input_color_image, cv_input_filtered_depth_image;
+  std::string input_depth_image_path;
 
+  
   std::vector<ObjectModel> obj_models_;
   std::vector<cuda_renderer::Model> render_models_;
   pcl::simulation::Scene::Ptr scene_;

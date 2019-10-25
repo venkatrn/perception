@@ -26,6 +26,7 @@ find_package(CUDA REQUIRED)
 set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -O3")
 list(APPEND renderer_inc ${CUDA_INCLUDE_DIRS})
 list(APPEND renderer_lib ${CUDA_LIBRARIES})
+list(APPEND renderer_lib ${CUDA_CUBLAS_LIBRARIES})
 endif()
 
 # assimp, load ply
@@ -39,9 +40,10 @@ include_directories("include")
 # src
 SET(renderer_cuda renderer.cu)
 SET(renderer_srcs renderer.cpp)
+SET(renderer_knn knncuda.cu)
 
 if(USE_CUDA)
-CUDA_COMPILE(renderer_cuda_objs ${renderer_cuda})
+CUDA_COMPILE(renderer_cuda_objs ${renderer_cuda} ${renderer_knn})
 endif()
 
 find_package(catkin REQUIRED COMPONENTS roscpp OpenCV)
@@ -54,6 +56,7 @@ catkin_package(
 add_library(cuda_renderer
                ${renderer_srcs}
                ${renderer_cuda} 
+               ${renderer_knn}
                ${renderer_cuda_objs} 
 )
 target_include_directories(cuda_renderer PUBLIC ${renderer_inc})

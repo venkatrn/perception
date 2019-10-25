@@ -189,6 +189,13 @@ extern template class device_vector_holder<Model::Triangle>;
 #else
     using Int_holder = std::vector<int>;
 #endif
+std::vector<int> compute_rgbd_cost(
+    const std::vector<std::vector<uint8_t>> input_color,
+    std::vector<int32_t> input_depth,
+    const std::vector<std::vector<uint8_t>> observed_color,
+    std::vector<int32_t> observed_depth,
+    size_t height, size_t width, size_t num_rendered
+);
 std::vector<int> compute_cost(const std::vector<std::vector<uint8_t>> input,const std::vector<std::vector<uint8_t>> observed,size_t height,size_t width,size_t num_rendered) ;
 std::vector<Model::mat4x4> mat_to_compact_4x4(const std::vector<cv::Mat>& poses);
 Model::mat4x4 compute_proj(const cv::Mat& K, int width, int height, float near=10, float far=10000);
@@ -200,7 +207,7 @@ std::vector<int32_t> render_cpu(const std::vector<Model::Triangle>& tris,const s
                                 const Model::ROI roi= {0, 0, 0, 0});
 
 #ifdef CUDA_ON
-void render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
+device_vector_holder<int> render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
                             size_t width, size_t height, const Model::mat4x4& proj_mat, 
                             std::vector<int32_t>& result_depth, std::vector<std::vector<uint8_t>>& result_color,
                             const Model::ROI roi= {0, 0, 0, 0});

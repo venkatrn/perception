@@ -30,7 +30,7 @@ from dipy.core.geometry import cart2sphere, sphere2cart, sphere_distance
 from lib.render_glumpy.render_py import Render_Py
 from lib.utils.mkdir_if_missing import mkdir_if_missing
 
-if True:
+if False:
     ROOT_DIR = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra'
     SCENES = [ \
             #   "kitchen_0", "kitchen_1", "kitchen_2", "kitchen_3", 
@@ -96,17 +96,18 @@ if True:
     # OUTFILE_NAME = 'instances_fat_train_pose_6_obj_2018'
     OUTFILE_NAME = 'instances_fat_val_pose_6_obj_2018'
 
-if False:
-    ROOT_DIR = '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed'
-    SCENES = [ "NewMap1_turbosquid_can_only" ]
+if True:
+    ROOT_DIR = '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed/Final'
+    # SCENES = [ "NewMap1_turbosquid_can_only" ]
+    SCENES = [ "NewMap1_reduced_2" ]
     # SCENES = [ "NewMap1_roman" ]
-
+    SELECTED_OBJECTS = []
     object_settings_file = Path(os.path.join(ROOT_DIR, SCENES[0], "_object_settings.json"))
     camera_settings_file = Path(os.path.join(ROOT_DIR, SCENES[0], "_camera_settings.json"))
     IMAGE_DIR_LIST = [
             "",
     ]
-    OUTFILE_NAME = 'instances_newmap1_turbosquid_can_only_2018'
+    OUTFILE_NAME = 'instances_newmap1_reduced_2_2018'
     # OUTFILE_NAME = 'instances_newmap1_roman_2018'
 
 
@@ -376,7 +377,7 @@ def main():
     if object_settings_file.is_file():
         with open(object_settings_file) as file:
             object_settings_data = json.load(file)
-            if SELECTED_OBJECTS is None:
+            if len(SELECTED_OBJECTS) == 0:
                 CLASSES = object_settings_data['exported_object_classes']
             else:
                 CLASSES = SELECTED_OBJECTS
@@ -476,8 +477,9 @@ def main():
                         for i in range(0, len(label_data['objects'])):
                             class_name = label_data['objects'][i]['class']
 
-                            if class_name not in SELECTED_OBJECTS:
-                                continue
+                            if len(SELECTED_OBJECTS) > 0:
+                                if class_name not in SELECTED_OBJECTS:
+                                    continue
                             # print(class_name)
                             class_bounding_box = label_data['objects'][i]['bounding_box']
                             quat = label_data['objects'][i]['quaternion_xyzw']

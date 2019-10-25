@@ -1940,14 +1940,17 @@ def run_dope_6d():
 def run_sameshape_gpu():
     ## Running on PERCH only with synthetic color dataset - shape
     # Use normalize cost to get best results
-    base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed"
+    # base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed"
+    base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed/Final"
     # base_dir = "/media/sbpl/Data/Aditya/datasets/Zed"
     image_directory = base_dir
-    annotation_file = base_dir + '/instances_newmap1_turbosquid_2018.json'
+    annotation_file = base_dir + '/instances_newmap1_reduced_2_2018.json'
+    # annotation_file = base_dir + '/instances_newmap1_turbosquid_2018.json'
     # annotation_file = base_dir + '/instances_newmap1_turbosquid_can_only_2018.json'
 
-    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
+    # model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
     # model_dir = "/media/sbpl/Data/Aditya/datasets/turbosquid/models"
+    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models"
     fat_image = FATImage(
         coco_annotation_file=annotation_file,
         coco_image_directory=image_directory,
@@ -1964,7 +1967,8 @@ def run_sameshape_gpu():
     f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
 
     # required_objects = ['coke_can', 'coke_bottle', 'pepsi_can']
-    required_objects = ['coke_bottle']
+    # required_objects = ['coke_bottle']
+    required_objects = ['010_potted_meat_can']
     # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
     # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
 
@@ -1974,18 +1978,10 @@ def run_sameshape_gpu():
         f_accuracy.write("{}-add {}-adds ".format(object_name, object_name))
     f_accuracy.write("\n")
 
-    # for img_i in ['14']:
-    # for img_i in ['14', '20', '25', '32', '33', '38', '48']:
     read_results_only = False
-    # for img_i in range(0,50):
     for img_i in range(7,8):
-    # for img_i in ['30', '31', '34', '35', '36', '37', '39', '40']:
-    # for img_i in ['15', '16', '17', '18', '19', '21', '22', '23', '24', '26', '27', '28', '29', '41', '42', '43', '44', '45', '46', '47', '49']:
-    # for img_i in list(range(0,13)) + ['30', '31', '34', '35', '36', '37', '39', '40', '15', '16', '17', '18', '19', '21', '22', '23', '24', '26', '27', '28', '29', '41', '42', '43', '44', '45', '46', '47', '49']:
-        # if img_i == 10 or img_i == 14 or img_i == 15 or img_i == 18 or img_i == 20:
-        #     # mising in icp run
-        #     continue
-        image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
+
+        image_name = 'NewMap1_reduced_2/0000{}.left.png'.format(str(img_i).zfill(2))
         # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
         image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
         yaw_only_objects, max_min_dict, transformed_annotations = \

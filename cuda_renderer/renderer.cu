@@ -262,63 +262,12 @@ void rasterization(const Model::Triangle dev_tri, Model::float3 last_row,
 
             int32_t depth = int32_t(frag_depth/**1000*/ + 0.5f);
             int32_t& depth_to_write = depth_entry[x_to_write+y_to_write*real_width];
-            // int32_t& color_to_write = color_entry[x_to_write+y_to_write*real_width];
-            // int32_t rgb = dev_tri.color.v0;
-            // rgb = (rgb << 8) + dev_tri.color.v1;
-            // rgb = (rgb << 8) + dev_tri.color.v2;
-            
-            // unsigned char l1 = lab1[0];
-            // unsigned char a1 = lab1[1];
-            // unsigned char b1 = lab1[2];
-            // bool valid = false;
-            // double real_distance;
-            // double cur_dist;
+
             if(depth_entry[x_to_write+y_to_write*real_width] > depth){
-                // color_entry[x_to_write+y_to_write*real_width] = rgb;
-                // float lab1[3];
-                // rgb2lab(dev_tri.color.v0,dev_tri.color.v1,dev_tri.color.v2,lab1);
                 red_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v0);
                 green_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v1);
                 blue_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v2);
-                // l_entry[x_to_write+y_to_write*real_width] = lab1[0];
-                // a_entry[x_to_write+y_to_write*real_width] = lab1[1];
-                // b_entry[x_to_write+y_to_write*real_width] = lab1[2];
-                // for(int i = -2; i <3;i++){
-                //     int row = y_to_write+i;
-                //     int col = x_to_write+i;
-                //     if(row >= 0 && row <height && col >= 0 && col <width){
-                //         const int color_tid_input1 = (row) * real_width + (3 * col);
-                //         const unsigned char l2  = input[color_tid_input1];
-                //         const unsigned char a2  = input[color_tid_input1 + 1];
-                //         const unsigned char b2  = input[color_tid_input1 + 2];
-                //         cur_dist=color_distance(l1,a1,b1,l2,a2,b2);
-                //         if(cur_dist < 20){
-                //             valid = true;
-                //         }
-                //         if(i==0){
-                //             real_distance = cur_dist;
-                //         }
-                //     }
-                // }
-                // if(!valid){
-                //     color_entry[x_to_write+y_to_write*real_width] = cur_dist;
-                // }
-                // int red = input[3*x_to_write+y_to_write*real_width];
-                // int green = input[3*x_to_write+y_to_write*real_width+1];
-                // int blue = input[3*x_to_write+y_to_write*real_width+2];
-                // int32_t lab2[3];
-                // rgb2lab(red,green,blue,lab);
-                // unsigned char l2 = lab2[0];
-                // unsigned char a2 = lab2[1];
-                // unsigned char b2 = lab2[2];
-                // double cur_dist=color_distance(l1,a1,b1,l2,a2,b2);
-                // if(cur_dist>20){
-                //     color_entry[x_to_write+y_to_write*real_width] = 1;
-                // }
-
-
             }
-            // atomicMin(&depth_to_write, rgb);
             atomicMin(&depth_to_write,depth);
         }
     }
@@ -464,6 +413,16 @@ __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* b
     }
 }
 
+std::vector<int> compute_rgbd_cost(
+    const std::vector<std::vector<uint8_t>> input_color,
+    std::vector<int32_t> input_depth,
+    const std::vector<std::vector<uint8_t>> observed_color,
+    std::vector<int32_t> observed_depth,
+    size_t height, size_t width, size_t num_rendered
+)
+{
+    
+}
 std::vector<int> compute_cost(const std::vector<std::vector<uint8_t>> input,
                                   const std::vector<std::vector<uint8_t>> observed,
                                   size_t height, size_t width,size_t num_rendered) 
@@ -475,6 +434,7 @@ std::vector<int> compute_cost(const std::vector<std::vector<uint8_t>> input,
    
     // //Allocate device memory
     thrust::device_vector<int> d_output(num_rendered*width*height, 0);
+    // this contains all images
     thrust::device_vector<uint8_t> d_red_in = input[0];
     thrust::device_vector<uint8_t> d_green_in = input[1];
     thrust::device_vector<uint8_t> d_blue_in = input[2];
@@ -521,7 +481,7 @@ std::vector<int> compute_cost(const std::vector<std::vector<uint8_t>> input,
 }
 
 
-void render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
+device_vector_holder<int> render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
                             size_t width, size_t height, const Model::mat4x4& proj_mat,
                             std::vector<int32_t>& result_depth, std::vector<std::vector<uint8_t>>& result_color, const Model::ROI roi){
 
@@ -540,9 +500,9 @@ void render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Mode
     }
     // atomic min only support int32
     
-    // device_vector_holder<int> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+    device_vector_holder<int> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
 
-    thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+    // thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
     thrust::device_vector<uint8_t> device_red_int(poses.size()*real_width*real_height, 0);
     thrust::device_vector<uint8_t> device_green_int(poses.size()*real_width*real_height, 0);
     thrust::device_vector<uint8_t> device_blue_int(poses.size()*real_width*real_height, 0);
@@ -552,8 +512,8 @@ void render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Mode
     // {
         Model::Triangle* device_tris_ptr = thrust::raw_pointer_cast(device_tris.data());
         Model::mat4x4* device_poses_ptr = thrust::raw_pointer_cast(device_poses.data());
-        int32_t* depth_image_vec = thrust::raw_pointer_cast(device_depth_int.data());
-        // int32_t* depth_image_vec = device_depth_int.data();
+        // int32_t* depth_image_vec = thrust::raw_pointer_cast(device_depth_int.data());
+        int32_t* depth_image_vec = device_depth_int.data();
         uint8_t* red_image_vec = thrust::raw_pointer_cast(device_red_int.data());
         uint8_t* green_image_vec = thrust::raw_pointer_cast(device_green_int.data());
         uint8_t* blue_image_vec = thrust::raw_pointer_cast(device_blue_int.data());
@@ -562,10 +522,6 @@ void render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Mode
         // float* b_vec = thrust::raw_pointer_cast(b.data());
 
         dim3 numBlocks((tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
-        // render_triangle<<<numBlocks, threadsPerBlock>>>(device_tris_ptr, tris.size(),
-        //                                                 device_poses_ptr, poses.size(),
-        //                                                 depth_image_vec, width, height, proj_mat, roi,
-        //                                                 red_image_vec,green_image_vec,blue_image_vec,l_vec,a_vec,b_vec);
         render_triangle<<<numBlocks, threadsPerBlock>>>(device_tris_ptr, tris.size(),
                                                         device_poses_ptr, poses.size(),
                                                         depth_image_vec, width, height, proj_mat, roi,
@@ -577,18 +533,15 @@ void render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Mode
 
     result_depth.resize(poses.size()*real_width*real_height);
     {
-        thrust::transform(device_depth_int.begin(), device_depth_int.end(),
-                          device_depth_int.begin(), max2zero_functor());
-        thrust::copy(device_depth_int.begin(), device_depth_int.end(), result_depth.begin());
+        thrust::device_vector<int32_t> v3(depth_image_vec, depth_image_vec + poses.size()*real_width*real_height);
+        thrust::transform(v3.begin(), v3.end(),v3.begin(), max2zero_functor());
+        thrust::copy(v3.begin(), v3.end(), result_depth.begin());
 
     }
     
     std::vector<uint8_t> result_red(poses.size()*real_width*real_height);
     std::vector<uint8_t> result_green(poses.size()*real_width*real_height);
     std::vector<uint8_t> result_blue(poses.size()*real_width*real_height);
-    std::vector<float> result_l(poses.size()*real_width*real_height);
-    std::vector<float> result_a(poses.size()*real_width*real_height);
-    std::vector<float> result_b(poses.size()*real_width*real_height);
     {
         thrust::transform(device_red_int.begin(), device_red_int.end(),
                           device_red_int.begin(), max2zero_functor());
@@ -600,33 +553,21 @@ void render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Mode
                           device_blue_int.begin(), max2zero_functor());
         thrust::copy(device_blue_int.begin(), device_blue_int.end(), result_blue.begin());
 
-        // thrust::transform(l.begin(), l.end(),
-        //                   l.begin(), max2zero_functor());
-        // thrust::copy(l.begin(), l.end(), result_l.begin());
-        // thrust::transform(a.begin(), a.end(),
-        //                   a.begin(), max2zero_functor());
-        // thrust::copy(a.begin(), a.end(), result_a.begin());
-        // thrust::transform(b.begin(), b.end(),
-        //                   b.begin(), max2zero_functor());
-        // thrust::copy(b.begin(), b.end(), result_b.begin());
-
     }
-    // std::vector<std::vector<uint8_t>> result_color;
-    // std::vector<std::vector<float>> result_lab;
     result_color.push_back(result_red);
     result_color.push_back(result_green);
     result_color.push_back(result_blue);
-    // for(int i=0;i<result_red.size(); i ++){
-    //     if(result_red[i]!=0){
-    //         std::cout<<result_red[i];
-    //     }
-    // }
-    // result_lab.push_back(result_l);
-    // result_lab.push_back(result_a);
-    // result_lab.push_back(result_b);
-    // device_vector_holder<int> device_depth_int_v(poses.size()*real_width*real_height, * depth_image_vec);
+
+    // device_vector_holder<int> device_depth_int_v(poses.size()*real_width*real_height, result_depth);
+    // device_vector_holder<int> device_depth_int_v = device_depth_int;
+    // device_vector_holder<int> device_depth_int_v;
+    // thrust::copy(device_depth_int.begin(), device_depth_int.end(), device_depth_int_v.begin());
     
+    // device_depth_int_v.__gpu_memory = thrust::raw_pointer_cast(device_depth_int.data());
+    // device_depth_int_v.__size = device_depth_int.size();
+    // device_depth_int_v.valid = true;
     // return device_depth_int_v;
+    return device_depth_int;
 }
 
 // std::vector<int32_t> render_cuda(device_vector_holder<Model::Triangle>& device_tris,const std::vector<Model::mat4x4>& poses,
