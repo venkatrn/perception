@@ -1169,10 +1169,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       mat4.d1 = pose_in_cam(3,1);
       mat4.d2 = pose_in_cam(3,2);
       mat4.d3 = pose_in_cam(3,3);
-      // std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<"\n"
-      // <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<"\n"
-      // <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<"\n"
-      // <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
+      std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<"\n"
+      <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<"\n"
+      <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<"\n"
+      <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
       mat4_v.push_back(mat4);
     }
     
@@ -1252,9 +1252,42 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
 
 
     Mat3x3f K_((float*)env_params_.cam_intrinsic.data);
-    // auto pcd_all_poses = cuda_icp::depth2cloud_cuda(result_dev.data(), env_params_.width, env_params_.height, K_);
+    if (true)
+    {
+      std::vector<cuda_renderer::Model::mat4x4> post_icp_poses;
+      Scene_nn scene;
+      KDTree_cuda kdtree_cuda;
+      scene.init_Scene_nn_cuda(cv_input_filtered_depth_image, K_, kdtree_cuda);
 
+      std::vector<cuda_icp::RegistrationResult> result_poses(num_poses);
+      cuda_icp::ICPConvergenceCriteria criteria;
+      criteria.max_iteration_ = 10;
 
+      Mat4x4f temp = reinterpret_cast<Mat4x4f&>(cur_transform[0]);
+      // cout << cur_transform[0] << end;
+      auto pcd1_cuda = cuda_icp::depth2cloud_cuda(result_dev.data(),
+                                              env_params_.width, env_params_.height, K_,
+                                              1, 0, 0);
+
+      result_poses[0] = cuda_icp::ICP_Point2Plane_cuda(pcd1_cuda, scene, criteria);
+      std::cout << "finally fitness_: " << result_poses[0].fitness_ << std::endl;
+      std::cout << "finally inlier_rmse_: " << result_poses[0].inlier_rmse_ << std::endl;
+      cout << result_poses[0].transformation_;
+
+      temp = result_poses[0].transformation_ * temp;
+      result_poses[0].transformation_ = temp;
+
+      // cout << result_poses[0].transformation_;
+      result_depth.clear();
+      result_color.clear();
+
+      cuda_renderer::Model::mat4x4 mat_4v = reinterpret_cast<cuda_renderer::Model::mat4x4&>(result_poses[0].transformation_);
+      post_icp_poses.push_back(mat_4v);
+      cuda_renderer::render_cuda(render_models_[0].tris, post_icp_poses,
+                            env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
+      PrintGPUImages(result_depth, result_color, 1, "icp");
+
+    }
     if (false)
     {
       // auto pcd1_cuda = cuda_icp::depth2cloud_cuda(result_dev.data(), env_params_.width, env_params_.height, K_);
@@ -1322,7 +1355,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       result_color.clear();
       cuda_renderer::render_cuda(render_models_[0].tris, post_icp_poses,
                             env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
-      PrintGPUImages(result_depth, result_color, num_poses, "icp");
+      PrintGPUImages(result_depth, result_color, 1, "icp");
     }
 
     std::vector<uint8_t> r_v;

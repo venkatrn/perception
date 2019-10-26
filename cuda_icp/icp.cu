@@ -184,7 +184,8 @@ RegistrationResult ICP_Point2Plane_cuda(device_vector_holder<Vec3f> &model_pcd, 
 
         result.fitness_ = float(count) / model_pcd.size();
         result.inlier_rmse_ = std::sqrt(total_error / count);
-        // printf("fitness_:%f\n", result.fitness_);
+        printf("fitness_:%f\n", result.fitness_);
+        printf("inlier_rmse_:%f\n", result.inlier_rmse_);
         // last extra iter, just compute fitness & mse
         if(iter == criteria.max_iteration_) return result;
 
@@ -247,10 +248,11 @@ __global__ void depth2cloud(T* depth, Vec3f* pcd, uint32_t width, uint32_t heigh
     if(depth[idx_depth] <= 0) return;
 
     // float z_pcd = depth[idx_depth]/1000.0f;
-    float z_pcd = depth[idx_depth]/1000.0f;
+    float z_pcd = depth[idx_depth]/100.0f;
     float x_pcd = (x + tl_x - K[0][2])/K[0][0]*z_pcd;
     float y_pcd = (y + tl_y - K[1][2])/K[1][1]*z_pcd;
 
+    // printf("x:%d,y:%d, x_pcd:%f, y_pcd:%f, z_pcd:%f\n", x,y,x_pcd, y_pcd, z_pcd);
     pcd[scan[index_mask]] = {x_pcd, y_pcd, z_pcd};
 }
 

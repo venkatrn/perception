@@ -3,6 +3,8 @@
 
 void Scene_nn::init_Scene_nn_cpu(cv::Mat &scene_depth__, Mat3x3f &scene_K, KDTree_cpu& kdtree)
 {
+    printf("init_Scene_nn_cpu()\n");
+
     int depth_type = scene_depth__.type();
     assert(depth_type == CV_16U || depth_type == CV_32S);
 

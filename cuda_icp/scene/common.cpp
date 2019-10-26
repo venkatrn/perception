@@ -24,7 +24,7 @@ std::vector<Vec3f> get_normal(const cv::Mat& depth__, const Mat3x3f& K){
     }else{
         depth = depth__;
     }
-
+    printf("get_normal()\n");
     std::vector<Vec3f> normals;
     normals.resize(depth.rows * depth.cols);
     // method from linemod depth modality

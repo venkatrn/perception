@@ -55,9 +55,10 @@ Vec3f dep2pcd(size_t x, size_t y, T dep, Mat3x3f& K, size_t tl_x=0, size_t tl_y=
 
     if(dep == 0) return {0, 0, 0};
 
-    float z_pcd = dep/1000.0f;
+    float z_pcd = dep/100.0f;
     float x_pcd = (x + tl_x - K[0][2])/K[0][0]*z_pcd;
     float y_pcd = (y + tl_y - K[1][2])/K[1][1]*z_pcd;
+    // printf("x_pcd:%f, y_pcd:%f, z_pcd:%f\n", x_pcd, y_pcd, z_pcd);
     return {
         x_pcd,
         y_pcd,
@@ -67,7 +68,7 @@ Vec3f dep2pcd(size_t x, size_t y, T dep, Mat3x3f& K, size_t tl_x=0, size_t tl_y=
 
 __device__ __host__ inline
 Vec3i pcd2dep(const Vec3f& pcd, const Mat3x3f& K, size_t tl_x=0, size_t tl_y=0){
-    int dep = int(pcd.z*1000.0f + 0.5f);
+    int dep = int(pcd.z*100.0f + 0.5f);
     int x = int(pcd.x/pcd.z*K[0][0] + K[0][2] - tl_x +0.5f);
     int y = int(pcd.y/pcd.z*K[1][1] + K[1][2] - tl_y +0.5f);
     return {

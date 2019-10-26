@@ -567,6 +567,9 @@ device_vector_holder<int> render_cuda(const std::vector<Model::Triangle>& tris,c
     // device_depth_int_v.__size = device_depth_int.size();
     // device_depth_int_v.valid = true;
     // return device_depth_int_v;
+    // thrust::transform(device_depth_int.begin(), device_depth_int.end(),device_depth_int.begin(), max2zero_functor());
+    thrust::transform(device_depth_int.begin_thr(), device_depth_int.end_thr(),
+                      device_depth_int.begin_thr(), max2zero_functor());
     return device_depth_int;
 }
 

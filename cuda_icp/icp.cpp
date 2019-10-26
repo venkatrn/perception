@@ -97,7 +97,7 @@ std::vector<Vec3f> depth2cloud_cpu(T* depth, uint32_t width, uint32_t height, Ma
 
             if(depth[idx_depth] <= 0) continue;
 
-            float z_pcd = depth[idx_depth]/1000.0f;
+            float z_pcd = depth[idx_depth]/100.0f;
             float x_pcd = (x + tl_x - K[0][2])/K[0][0]*z_pcd;
             float y_pcd = (y + tl_y - K[1][2])/K[1][1]*z_pcd;
 

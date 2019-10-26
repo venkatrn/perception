@@ -2,6 +2,8 @@
 
 void Scene_nn::init_Scene_nn_cuda(cv::Mat &scene_depth, Mat3x3f &scene_K, KDTree_cuda &kdtree)
 {
+    printf("init_Scene_nn_cuda()\n");
+
     KDTree_cpu cpu_tree;
     init_Scene_nn_cpu(scene_depth, scene_K, cpu_tree);
 
