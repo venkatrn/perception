@@ -1227,12 +1227,15 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
 
     // Do KNN
     int k = 1;
-    float* knn_dist   = (float*) malloc(num_poses * env_params_.width * env_params_.height * k * sizeof(float));
-    int* knn_index  = (int*)   malloc(num_poses * env_params_.width * env_params_.height * k * sizeof(int));
+    float* knn_dist   = (float*) malloc(rendered_point_num * k * sizeof(float));
+    int* knn_index  = (int*)   malloc(rendered_point_num * k * sizeof(int));
     // int observed_nb = env_params_.width * env_params_.height;
     // int rendered_nb = num_poses * env_params_.width * env_params_.height;
-    cuda_renderer::knn_cuda_global(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
+    // cuda_renderer::knn_cuda_global(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
+    cuda_renderer::knn_test(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
     for(int n = 0; n < num_poses; n ++){
+      float total_count = 0.0;
+      float avg_distance = 0.0;
       for(int i = 0; i < env_params_.height; i ++){
           for(int j = 0; j < env_params_.width; j ++){
             int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
@@ -1240,19 +1243,24 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
             if (result_depth[index] > 0)
             {
               // printf("dist:%f\n", knn_dist[cloud_index]);
-              if (knn_dist[cloud_index] > 0.003)
+              total_count += 1;
+              avg_distance += knn_dist[cloud_index];
+              if (knn_dist[cloud_index] > 0.01)
               {
                 rendered_cost[n] += 1;
               }
             }
           }
       }
+      // rendered_cost[n] = rendered_cost[n]/total_count * 100;
+      avg_distance /= total_count;
+      printf("average_distance:%f\n", avg_distance);
       printf("cost:%d\n", rendered_cost[n]);
     }
 
 
     Mat3x3f K_((float*)env_params_.cam_intrinsic.data);
-    if (true)
+    if (false)
     {
       std::vector<cuda_renderer::Model::mat4x4> post_icp_poses;
       Scene_nn scene;
@@ -5370,7 +5378,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
                 // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
                 ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
-                if (succ_count == 5)
+                if (succ_count == 10)
                 {
                   break;
                 }
