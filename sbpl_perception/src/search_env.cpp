@@ -1080,7 +1080,8 @@ void EnvObjectRecognition::PrintGPUImages(
   
 }
 
-void EnvObjectRecognition::PrintGPUClouds(float* result_cloud, int* result_depth, int* dc_index, int num_poses)
+void EnvObjectRecognition::PrintGPUClouds(
+  float* result_cloud, int* result_depth, int* dc_index, int num_poses, int cloud_point_num)
 { 
   uint8_t rgb[3] = {0,0,0};
   for(int n = 0; n < num_poses; n ++)
@@ -1096,9 +1097,9 @@ void EnvObjectRecognition::PrintGPUClouds(float* result_cloud, int* result_depth
           if (result_depth[index] > 0)
           {
             // printf("x:%f,y:%f,z:%f\n", result_cloud[3*index], result_cloud[3*index + 1], result_cloud[3*index + 2]);
-            point.x = result_cloud[3*cloud_index];
-            point.y = result_cloud[3*cloud_index + 1];
-            point.z = result_cloud[3*cloud_index + 2];
+            point.x = result_cloud[cloud_index + 0*cloud_point_num];
+            point.y = result_cloud[cloud_index + 1*cloud_point_num];
+            point.z = result_cloud[cloud_index + 2*cloud_point_num];
             uint32_t rgbc = ((uint32_t)rgb[2] << 16 | (uint32_t)rgb[1]<< 8 | (uint32_t)rgb[0]);
             point.rgb = *reinterpret_cast<float*>(&rgbc);
 
@@ -1210,7 +1211,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       num_poses, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor
     );
     PrintGPUImages(result_depth, result_color, num_poses, "input");
-    PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses);
+    PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num);
 
     // // Compute observed cloud
     // free(dc_index);
@@ -1223,7 +1224,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       observed_depth_data, result_observed_cloud, observed_dc_index, observed_point_num, env_params_.width, env_params_.height, 
       1, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor
     );
-    PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1);
+    PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num);
 
     // Do KNN
     int k = 1;
@@ -1231,8 +1232,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int* knn_index  = (int*)   malloc(rendered_point_num * k * sizeof(int));
     // int observed_nb = env_params_.width * env_params_.height;
     // int rendered_nb = num_poses * env_params_.width * env_params_.height;
-    // cuda_renderer::knn_cuda_global(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
-    cuda_renderer::knn_test(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
+    cuda_renderer::knn_cuda_global(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
+    // cuda_renderer::knn_test(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
     for(int n = 0; n < num_poses; n ++){
       float total_count = 0.0;
       float avg_distance = 0.0;
@@ -1245,7 +1246,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
               // printf("dist:%f\n", knn_dist[cloud_index]);
               total_count += 1;
               avg_distance += knn_dist[cloud_index];
-              if (knn_dist[cloud_index] > 0.01)
+              if (knn_dist[cloud_index] > 0.005)
               {
                 rendered_cost[n] += 1;
               }

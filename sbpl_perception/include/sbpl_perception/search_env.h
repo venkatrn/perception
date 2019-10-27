@@ -343,7 +343,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   // void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
 
   void PrintGPUImages(std::vector<int32_t>& result_depth, std::vector<std::vector<uint8_t>>& result_color, int num_poses, string suffix);
-  void PrintGPUClouds(float* cloud, int* result_depth, int* dc_index, int num_poses);
+  void PrintGPUClouds(float* cloud, int* result_depth, int* dc_index, int num_poses, int cloud_point_num);
 
   // We should get rid of this eventually.
   friend class ObjectRecognizer;

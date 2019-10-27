@@ -287,7 +287,7 @@ __global__ void depth_to_mask(int32_t* depth, int* mask, int width, int height)
 }
 
 __global__ void depth_to_cloud(
-    int32_t* depth, float* cloud, int* mask, int width, int height, 
+    int32_t* depth, float* cloud, int cloud_point_num, int* mask, int width, int height, 
     float kCameraCX, float kCameraCY, float kCameraFX, float kCameraFY, float depth_factor)
 {
     int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/width);
@@ -311,9 +311,12 @@ __global__ void depth_to_cloud(
 
     // printf("x:%d,y:%d, x_pcd:%f, y_pcd:%f, z_pcd:%f\n", x,y,x_pcd, y_pcd, z_pcd);
     int cloud_idx = mask[idx_depth];
-    cloud[3*cloud_idx + 0] = x_pcd;
-    cloud[3*cloud_idx + 1] = y_pcd;
-    cloud[3*cloud_idx + 2] = z_pcd;
+    cloud[cloud_idx + 0*cloud_point_num] = x_pcd;
+    cloud[cloud_idx + 1*cloud_point_num] = y_pcd;
+    cloud[cloud_idx + 2*cloud_point_num] = z_pcd;
+    // cloud[3*cloud_idx + 0] = x_pcd;
+    // cloud[3*cloud_idx + 1] = y_pcd;
+    // cloud[3*cloud_idx + 2] = z_pcd;
 }
 
 bool depth2cloud_global(
@@ -341,6 +344,7 @@ bool depth2cloud_global(
     // cudaMalloc(&mask, size);
 
     int32_t* depth_data_cuda;
+    // int stride = 5;
     cudaMalloc(&depth_data_cuda, num_poses * width * height * sizeof(int32_t));
     cudaMemcpy(depth_data_cuda, depth_data, num_poses * width * height * sizeof(int32_t), cudaMemcpyHostToDevice);
     
@@ -367,7 +371,7 @@ bool depth2cloud_global(
     result_cloud = (float*) malloc(point_dim * point_num * sizeof(float));
     dc_index = (int*) malloc(num_poses * width * height * sizeof(int));
 
-    depth_to_cloud<<<numBlocks, threadsPerBlock>>>(depth_data_cuda, cuda_cloud, mask_ptr, width, height, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor);
+    depth_to_cloud<<<numBlocks, threadsPerBlock>>>(depth_data_cuda, cuda_cloud, point_num, mask_ptr, width, height, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor);
     cudaDeviceSynchronize();
     cudaMemcpy(result_cloud, cuda_cloud, point_dim * point_num * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(dc_index, mask_ptr, num_poses * width * height * sizeof(int), cudaMemcpyDeviceToHost);
