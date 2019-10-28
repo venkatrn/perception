@@ -40,7 +40,9 @@ namespace cuda_renderer {
                             float kCameraCY, 
                             float kCameraFX, 
                             float kCameraFY,
-                            float depth_factor);
+                            float depth_factor,
+                            int stride,
+                            int point_dim);
 
     // bool depth2cloud_global(
     //     std::vector<int32_t> result_depth,  

@@ -1081,15 +1081,25 @@ void EnvObjectRecognition::PrintGPUImages(
 }
 
 void EnvObjectRecognition::PrintGPUClouds(
-  float* result_cloud, int* result_depth, int* dc_index, int num_poses, int cloud_point_num)
+  float* result_cloud, int* result_depth, int* dc_index, int num_poses, int cloud_point_num, int stride)
 { 
   uint8_t rgb[3] = {0,0,0};
+  Eigen::Isometry3d transform;
+  Eigen::Isometry3d cam_to_body;
+  cam_to_body.matrix() << 0, 0, 1, 0,
+                    -1, 0, 0, 0,
+                    0, -1, 0, 0,
+                    0, 0, 0, 1;
+  transform = cam_to_world_ * cam_to_body;
+
   for(int n = 0; n < num_poses; n ++)
   {
     PointCloudPtr cloud(new PointCloud);
-    for(int i = 0; i < env_params_.height; i ++)
+    PointCloudPtr transformed_cloud(new PointCloud);
+
+    for(int i = 0; i < env_params_.height; i = i + stride)
     {
-        for(int j = 0; j < env_params_.width; j ++)
+        for(int j = 0; j < env_params_.width; j = j + stride)
         {
           pcl::PointXYZRGB point;
           int index = n*env_params_.width*env_params_.height + (i*env_params_.width + j);
@@ -1110,7 +1120,8 @@ void EnvObjectRecognition::PrintGPUClouds(
     cloud->width = 1;
     cloud->height = cloud->points.size();
     cloud->is_dense = false;
-    PrintPointCloud(cloud, 1, render_point_cloud_topic);
+    transformPointCloud (*cloud, *transformed_cloud, transform.matrix().cast<float>());
+    PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 }
@@ -1170,10 +1181,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       mat4.d1 = pose_in_cam(3,1);
       mat4.d2 = pose_in_cam(3,2);
       mat4.d3 = pose_in_cam(3,3);
-      std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<"\n"
-      <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<"\n"
-      <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<"\n"
-      <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
+      // std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<"\n"
+      // <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<"\n"
+      // <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<"\n"
+      // <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
       mat4_v.push_back(mat4);
     }
     
@@ -1205,13 +1216,14 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int32_t* depth_data = result_depth.data();
     float depth_factor = 100.0;
     int point_dim = 3;
+    int stride = 5;
     int rendered_point_num;
     cuda_renderer::depth2cloud_global(
       depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
-      num_poses, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor
+      num_poses, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
-    PrintGPUImages(result_depth, result_color, num_poses, "input");
-    PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num);
+    // PrintGPUImages(result_depth, result_color, num_poses, "input");
+    PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride);
 
     // // Compute observed cloud
     // free(dc_index);
@@ -1222,9 +1234,9 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int observed_point_num;
     cuda_renderer::depth2cloud_global(
       observed_depth_data, result_observed_cloud, observed_dc_index, observed_point_num, env_params_.width, env_params_.height, 
-      1, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor
+      1, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
-    PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num);
+    // PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, stride);
 
     // Do KNN
     int k = 1;
@@ -1232,13 +1244,15 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int* knn_index  = (int*)   malloc(rendered_point_num * k * sizeof(int));
     // int observed_nb = env_params_.width * env_params_.height;
     // int rendered_nb = num_poses * env_params_.width * env_params_.height;
-    cuda_renderer::knn_cuda_global(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
+    cuda_renderer::knn_cuda_global(
+      result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index
+    );
     // cuda_renderer::knn_test(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
     for(int n = 0; n < num_poses; n ++){
       float total_count = 0.0;
       float avg_distance = 0.0;
-      for(int i = 0; i < env_params_.height; i ++){
-          for(int j = 0; j < env_params_.width; j ++){
+      for(int i = 0; i < env_params_.height; i = i + stride){
+          for(int j = 0; j < env_params_.width; j = j + stride){
             int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
             int cloud_index = dc_index[index];
             if (result_depth[index] > 0)
@@ -1367,23 +1381,23 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       PrintGPUImages(result_depth, result_color, 1, "icp");
     }
 
-    std::vector<uint8_t> r_v;
-    std::vector<uint8_t> g_v;
-    std::vector<uint8_t> b_v;
-    for (int y = 0; y < env_params_.height; y++) {
-      for (int x = 0; x < env_params_.width; x++) {
-          cv::Vec3b elem = cv_input_color_image.at<cv::Vec3b>(y, x);
-          r_v.push_back(elem[2]);
-          g_v.push_back(elem[1]);
-          b_v.push_back(elem[0]);
-      }
-    }
-    std::vector<std::vector<uint8_t>> observed_color;
-    observed_color.push_back(r_v);
-    observed_color.push_back(g_v);
-    observed_color.push_back(b_v);
-    std::vector<int> result_cost = cuda_renderer::compute_cost(result_color,observed_color,env_params_.height,env_params_.width,cur_transform.size());
-    total_result_cost.insert(end(total_result_cost),begin(result_cost),end(result_cost));
+    // std::vector<uint8_t> r_v;
+    // std::vector<uint8_t> g_v;
+    // std::vector<uint8_t> b_v;
+    // for (int y = 0; y < env_params_.height; y++) {
+    //   for (int x = 0; x < env_params_.width; x++) {
+    //       cv::Vec3b elem = cv_input_color_image.at<cv::Vec3b>(y, x);
+    //       r_v.push_back(elem[2]);
+    //       g_v.push_back(elem[1]);
+    //       b_v.push_back(elem[0]);
+    //   }
+    // }
+    // std::vector<std::vector<uint8_t>> observed_color;
+    // observed_color.push_back(r_v);
+    // observed_color.push_back(g_v);
+    // observed_color.push_back(b_v);
+    // std::vector<int> result_cost = cuda_renderer::compute_cost(result_color,observed_color,env_params_.height,env_params_.width,cur_transform.size());
+    // total_result_cost.insert(end(total_result_cost),begin(result_cost),end(result_cost));
 
   }
 
@@ -5379,10 +5393,10 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
                 // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);
                 ContPose p(x, y, env_params_.table_height, 0.0, 0.0, theta);
-                if (succ_count == 10)
-                {
-                  break;
-                }
+                // if (succ_count == 20)
+                // {
+                //   break;
+                // }
                 //check valid poses need to check!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 // if (!IsValidPose(source_state, ii, p)) {
                 //   // std::cout << "Not a valid pose for theta : " << theta << " " << endl;

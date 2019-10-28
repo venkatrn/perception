@@ -1560,7 +1560,7 @@ def run_roman_crate():
         coco_annotation_file=annotation_file,
         coco_image_directory=image_directory,
         depth_factor=100,
-        model_dir='/media/aditya/A69AFABA9AFA85D9/Datasets/roman/model',
+        model_dir='/media/aditya/A69AFABA9AFA85D9/Datasets/roman/models',
         model_mesh_in_mm=True,
         # model_mesh_scaling_factor=0.005,
         model_mesh_scaling_factor=1,
@@ -1578,7 +1578,7 @@ def run_roman_crate():
     # f_accuracy.write("\n")
 
 
-    for img_i in range(0,13):
+    for img_i in range(0,1):
     # for img_i in [16, 17, 19, 22]:
 
         # required_objects = ['coke']
@@ -1968,7 +1968,7 @@ def run_sameshape_gpu():
 
     # required_objects = ['coke_can', 'coke_bottle', 'pepsi_can']
     # required_objects = ['coke_bottle']
-    required_objects = ['010_potted_meat_can']
+    required_objects = ['010_potted_meat_can', '008_pudding_box']
     # required_objects = ['008_pudding_box']
     # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
     # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
@@ -1995,7 +1995,7 @@ def run_sameshape_gpu():
             max_min_dict['ymin'] = -1.5
             max_min_dict['xmax'] = 0.5
             max_min_dict['xmin'] = -0.5
-            fat_image.search_resolution_translation = 0.08
+            fat_image.search_resolution_translation = 0.05
 
             perch_annotations, stats = fat_image.visualize_perch_output(
                 image_data, annotations, max_min_dict, frame='table',
