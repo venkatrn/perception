@@ -249,72 +249,8 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
 
     pcl::PolygonMesh mesh;
     pcl::io::loadPolygonFilePLY (model_meta_data.file.c_str(), mesh);
-    cuda_renderer::Model render_model(model_meta_data.file.c_str()); 
-    render_models_.push_back(render_model);
-    // pcl::io::loadPolygonFileOBJ (model_meta_data.file.c_str(), mesh);
-
-    // pcl::PolygonMesh meshT;
-    // std::string pcd_file = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/models/006_mustard_bottle/textured.pcd";
-    // // pcl::io::loadPolygonFileOBJ (pcd_file.c_str(), meshT);
-    // pcl::PointCloud<PointT>::Ptr cloud_in (new pcl::PointCloud<PointT>);
-
-
-    // // pcl::PointCloud<PointT>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
-
-    // if (pcl::io::loadPCDFile<PointT> (pcd_file.c_str(), *cloud_in) == -1) //* load the file
-    // {
-    //   printf("Couldn't read file test_pcd.pcd \n");
-    // }
-    // printf("PCD cloud size : %d\n", cloud_in->points.size());
-    // pcl::toPCLPointCloud2(*cloud_in, mesh.cloud);
-
-    // pcl::TextureMapping<pcl::PointXYZ> texture_mapping;
-    // std::vector<std::string> texture_files;
-    // texture_files.push_back("/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/models/006_mustard_bottle/textured.mtl");
-    // texture_mapping.setTextureFiles(texture_files);
-    // texture_mapping.mapTexture2MeshUV(meshT);
-
-    // pcl::TexMaterial texture_material;
-    // texture_material.tex_file = '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/models/006_mustard_bottle/texture_map.png';
-    // std::vector<pcl::TexMaterial> tex_materials;
-    // tex_materials.push_back(texture_material);
-    // meshT.tex_materials = tex_materials;
-    // pcl::fromPCLPointCloud2(mesh.cloud, *cloud_in);
-    // printf("PCD cloud size : %d\n", cloud_in->points.size());
-
-    // sensor_msgs::PointCloud2 output;
-    // pcl_conversions::fromPCL(meshT.cloud, output);
-    // output.header.frame_id = env_params_.reference_frame_;
-
-    // for (size_t ii = 0; ii < cloud_in->points.size(); ++ii) {
-    //   PointT point = cloud_in->points[ii];
-    //   uint32_t rgb = *reinterpret_cast<int*>(&point.rgb);
-    //   uint8_t r = (rgb >> 16);
-    //   uint8_t g = (rgb >> 8);
-    //   uint8_t b = (rgb);
-    //   printf("mesh point color : %d,%d,%d\n", r,g,b);
-    // }
-
-
-    // render_point_cloud_topic.publish(output);
-    // PrintPointCloud(cloud_in, 1);
-    // printf("Obj File Cloud Size : %d\n", meshT.cloud.data.size());
-    // sensor_msgs::PointCloud2 output;
-
-    // pcl::PCLPointCloud2 outputPCL;
-    // pcl::toPCLPointCloud2( meshT.cloud ,outputPCL);
-
-    // Convert to ROS data type
-    // pcl_conversions::fromPCL(meshT.cloud, output);
-    // output.header.frame_id = env_params_.reference_frame_;
-
-    // for (int i = 0; i < 104; i++)
-    // {
-    //     render_point_cloud_topic.publish(output);
-    //     ros::spinOnce();
-    //     ros::Rate loop_rate(5);
-    //     loop_rate.sleep();
-    // }
+    
+    
     ObjectModel obj_model(mesh, model_meta_data.name,
                           model_meta_data.symmetric,
                           model_meta_data.flipped);
@@ -332,6 +268,8 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
              obj_model.GetInscribedRadius());
       printf("\n");
     }
+    cuda_renderer::Model render_model(model_meta_data.file.c_str()); 
+    render_models_.push_back(render_model);
   }
 }
 
@@ -1139,60 +1077,79 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   std::vector<int> rendered_cost(num_poses, 0);
 
   // for(int i =0; i <input.size(); i ++){
+  // concat all model triangles
+  std::vector<cuda_renderer::Model::Triangle> tris;
+
+  // store which pose is for which model
+  std::vector<int> pose_model_map;
+
+  // store num of triangles in each model
+  std::vector<int> tris_model_count;
+  int model_id_prev = input[0].child_id;
   for(int i = 0; i < num_poses; i ++) {
     std::vector<ObjectState> objects = input[i].child_state.object_states();
-    for(int n=0; n < objects.size();n++){
-      ContPose cur = objects[n].cont_pose();
-      Eigen::Matrix4d preprocess_transform = 
-        obj_models_[input[i].child_id].preprocessing_transform().matrix().cast<double>();
-      contposes.push_back(cur);
-      // std::cout<<cur<<std::endl;
-      Eigen::Matrix4d transform;
-      transform = cur.ContPose::GetTransform().matrix().cast<double>();
-      transform = preprocess_transform * transform;
-      Eigen::Isometry3d cam_z_front;
-      Eigen::Isometry3d cam_to_body;
-      cam_to_body.matrix() << 0, 0, 1, 0,
-                        -1, 0, 0, 0,
-                        0, -1, 0, 0,
-                        0, 0, 0, 1;
-      cam_z_front = cam_to_world_ * cam_to_body;
-      
-      Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
-      Eigen::Matrix4d pose_in_cam = cam_matrix*transform;
-      // std::cout<<transform<<std::endl;
-      // std::cout<<cam_matrix<<std::endl;
-      cuda_renderer::Model::mat4x4 mat4;
-      //multiply 100 to change scale, data scale is in meter
-      int scale_factor = 100;
-      mat4.a0 = pose_in_cam(0,0)*scale_factor;
-      mat4.a1 = pose_in_cam(0,1)*scale_factor;
-      mat4.a2 = pose_in_cam(0,2)*scale_factor;
-      mat4.a3 = pose_in_cam(0,3)*scale_factor;
-      mat4.b0 = pose_in_cam(1,0)*scale_factor;
-      mat4.b1 = pose_in_cam(1,1)*scale_factor;
-      mat4.b2 = pose_in_cam(1,2)*scale_factor;
-      mat4.b3 = pose_in_cam(1,3)*scale_factor;
-      mat4.c0 = pose_in_cam(2,0)*scale_factor;
-      mat4.c1 = pose_in_cam(2,1)*scale_factor;
-      mat4.c2 = pose_in_cam(2,2)*scale_factor;
-      mat4.c3 = pose_in_cam(2,3)*scale_factor;
-      mat4.d0 = pose_in_cam(3,0);
-      mat4.d1 = pose_in_cam(3,1);
-      mat4.d2 = pose_in_cam(3,2);
-      mat4.d3 = pose_in_cam(3,3);
-      // std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<"\n"
-      // <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<"\n"
-      // <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<"\n"
-      // <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
-      mat4_v.push_back(mat4);
-    }
+    // for(int n=0; n < objects.size();n++){
+    // Take the last object
+    int n = objects.size() - 1;
+    int model_id = objects[n].id();
+    ContPose cur = objects[n].cont_pose();
+    Eigen::Matrix4d preprocess_transform = 
+      obj_models_[model_id].preprocessing_transform().matrix().cast<double>();
+    contposes.push_back(cur);
+    // std::cout<<cur<<std::endl;
+    Eigen::Matrix4d transform;
+    transform = cur.ContPose::GetTransform().matrix().cast<double>();
+    transform = preprocess_transform * transform;
+    Eigen::Isometry3d cam_z_front;
+    Eigen::Isometry3d cam_to_body;
+    cam_to_body.matrix() << 0, 0, 1, 0,
+                      -1, 0, 0, 0,
+                      0, -1, 0, 0,
+                      0, 0, 0, 1;
+    cam_z_front = cam_to_world_ * cam_to_body;
     
-    // ContPose p = input[i].child_state.cont_pose();
-    // Eigen::Matrix4f transform;
-    // transform = p.ObjectModel::GetTransform().matrix().cast<float>();
+    Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
+    Eigen::Matrix4d pose_in_cam = cam_matrix*transform;
+    // std::cout<<transform<<std::endl;
+    // std::cout<<cam_matrix<<std::endl;
+    cuda_renderer::Model::mat4x4 mat4;
+    //multiply 100 to change scale, data scale is in meter
+    int scale_factor = 100;
+    mat4.a0 = pose_in_cam(0,0)*scale_factor;
+    mat4.a1 = pose_in_cam(0,1)*scale_factor;
+    mat4.a2 = pose_in_cam(0,2)*scale_factor;
+    mat4.a3 = pose_in_cam(0,3)*scale_factor;
+    mat4.b0 = pose_in_cam(1,0)*scale_factor;
+    mat4.b1 = pose_in_cam(1,1)*scale_factor;
+    mat4.b2 = pose_in_cam(1,2)*scale_factor;
+    mat4.b3 = pose_in_cam(1,3)*scale_factor;
+    mat4.c0 = pose_in_cam(2,0)*scale_factor;
+    mat4.c1 = pose_in_cam(2,1)*scale_factor;
+    mat4.c2 = pose_in_cam(2,2)*scale_factor;
+    mat4.c3 = pose_in_cam(2,3)*scale_factor;
+    mat4.d0 = pose_in_cam(3,0);
+    mat4.d1 = pose_in_cam(3,1);
+    mat4.d2 = pose_in_cam(3,2);
+    mat4.d3 = pose_in_cam(3,3);
+    // std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<"\n"
+    // <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<"\n"
+    // <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<"\n"
+    // <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
+    mat4_v.push_back(mat4);
+    pose_model_map.push_back(model_id);
+    if (i == 0 || model_id != model_id_prev)
+    {
+      // collect triangles in one vector. need to do only once
+      tris.insert(tris.end(), render_models_[model_id].tris.begin(), render_models_[model_id].tris.end());
+      tris_model_count.push_back(render_models_[model_id].tris.size());
+    }
+    // cout << model_id << endl;
+    model_id_prev = model_id;
+    // }
   }
 
+  // std::cout << "exclusive sum: ";
+  // std::exclusive_scan(tris_model_count.begin(), tris_model_count.end(), std::ostream_iterator<int>(std::cout, " "), 0);
   #ifdef CUDA_ON
   int render_size = 750;
   int total_render_num = mat4_v.size();
@@ -1206,8 +1163,16 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     std::vector<std::vector<uint8_t>> result_color;
     std::vector<int32_t> result_depth;
 
-    auto result_dev = cuda_renderer::render_cuda(render_models_[0].tris, cur_transform,
-                               env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
+    // auto result_dev = cuda_renderer::render_cuda(render_models_[0].tris, cur_transform,
+    //                            env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
+    auto result_dev = cuda_renderer::render_cuda_multi(
+                          tris,
+                          cur_transform,
+                          pose_model_map,
+                          tris_model_count,
+                          env_params_.width, env_params_.height, 
+                          env_params_.proj_mat, 
+                          result_depth, result_color);
 
     // Compute rendered clouds
     // float* result_cloud = (float*) malloc(3 * result_depth.size() * sizeof(float));
@@ -1216,14 +1181,14 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int32_t* depth_data = result_depth.data();
     float depth_factor = 100.0;
     int point_dim = 3;
-    int stride = 5;
+    int stride = 8;
     int rendered_point_num;
     cuda_renderer::depth2cloud_global(
       depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
       num_poses, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
-    // PrintGPUImages(result_depth, result_color, num_poses, "input");
-    PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride);
+    PrintGPUImages(result_depth, result_color, num_poses, "input");
+    // PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride);
 
     // // Compute observed cloud
     // free(dc_index);
@@ -1311,75 +1276,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       PrintGPUImages(result_depth, result_color, 1, "icp");
 
     }
-    if (false)
-    {
-      // auto pcd1_cuda = cuda_icp::depth2cloud_cuda(result_dev.data(), env_params_.width, env_params_.height, K_);
-      // cout << "depth2cloud_cuda() done\n";
-      Scene_nn scene;
-      // Scene_projective scene;
-      KDTree_cuda kdtree_cuda;
-      cv::Mat scene_depth(env_params_.height, env_params_.width, CV_32S);
-      // cv_depth_image.convertTo(scene_depth, CV_32S);
-      // cv_input_filtered_depth_image.convertTo(scene_depth, CV_32S);
-      // cv::imshow("gpu_mask1", scene_depth);
-      // cv::Mat mask, new_scene_depth(height, width, CV_32S);
-      // cv::cvtColor(cv_color, mask, CV_BGR2GRAY);
-      // mask = mask > 0;
-      // cv::Mat Points;
-      // cv::findNonZero(mask, Points);
-      // cv::Rect bounding_box = cv::boundingRect(Points);
-      // scene_depth.copyTo(new_scene_depth, mask);
-
-      cv::imwrite("test.png", cv_input_filtered_depth_image);
-      
-      scene.init_Scene_nn_cuda(cv_input_filtered_depth_image, K_, kdtree_cuda);
-
-      // cv::waitKey(0);
-      // auto result_cuda = cuda_icp::ICP_Point2Plane_cuda(pcd1_cuda, scene);
-      // cout << result_cuda.transformation_;
-
-      std::vector<cuda_icp::RegistrationResult> result_poses(num_poses);
-      cuda_icp::ICPConvergenceCriteria criteria;
-      // #pragma omp parallel num_threads(num_poses)
-      ::device_vector_holder<::Vec3f> pcd_buffer, normal_buffer;
-
-      // scene.init(cv_input_filtered_depth_image, K_, kdtree_cuda);
-
-      // scene.init(cv_input_filtered_depth_image, K_, pcd_buffer, normal_buffer);
-
-
-      std::vector<cuda_renderer::Model::mat4x4> post_icp_poses;
-      for(int j = 0; j < num_poses; j ++)
-      {
-        // int j = omp_get_thread_num();
-        cout << "Doing ICP " << j << endl;
-        Mat4x4f temp = reinterpret_cast<Mat4x4f&>(cur_transform[j]);
-
-        auto pcd1_cuda = cuda_icp::depth2cloud(result_dev.data() + j*env_params_.width*env_params_.height,
-                                                env_params_.width, env_params_.height, K_);
-
-        result_poses[j] = cuda_icp::ICP_Point2Plane(pcd1_cuda, scene, criteria);
-
-        // if(result_poses[j+i].fitness_ > 0.7f){
-        std::cout << "finally fitness_: " << result_poses[j].fitness_ << std::endl;
-        std::cout << "finally inlier_rmse_: " << result_poses[j].inlier_rmse_ << std::endl;
-            //  helper::view_pcd(pcd1_cpu, pcd_buffer);
-        // }
-
-        temp = result_poses[j].transformation_ * temp;
-        result_poses[j].transformation_ = temp;
-
-        cout << result_poses[j].transformation_;
-
-        cuda_renderer::Model::mat4x4 mat_4v = reinterpret_cast<cuda_renderer::Model::mat4x4&>(result_poses[j].transformation_);
-        post_icp_poses.push_back(mat_4v);
-      }
-      result_depth.clear();
-      result_color.clear();
-      cuda_renderer::render_cuda(render_models_[0].tris, post_icp_poses,
-                            env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
-      PrintGPUImages(result_depth, result_color, 1, "icp");
-    }
+    
 
     // std::vector<uint8_t> r_v;
     // std::vector<uint8_t> g_v;
@@ -5650,7 +5547,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                 // If symmetric object, don't iterate over all theta
                 // Break after adding first theta from above
                 if (obj_models_[ii].symmetric() || model_meta_data.symmetry_mode == 2) {
-                  //break;
+                  break;
                 }
 
 

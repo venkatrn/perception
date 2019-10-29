@@ -1995,7 +1995,7 @@ def run_sameshape_gpu():
             max_min_dict['ymin'] = -1.5
             max_min_dict['xmax'] = 0.5
             max_min_dict['xmin'] = -0.5
-            fat_image.search_resolution_translation = 0.05
+            fat_image.search_resolution_translation = 0.08
 
             perch_annotations, stats = fat_image.visualize_perch_output(
                 image_data, annotations, max_min_dict, frame='table',

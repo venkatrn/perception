@@ -207,6 +207,15 @@ std::vector<int32_t> render_cpu(const std::vector<Model::Triangle>& tris,const s
                                 const Model::ROI roi= {0, 0, 0, 0});
 
 #ifdef CUDA_ON
+device_vector_holder<int> render_cuda_multi(
+                            const std::vector<Model::Triangle>& tris,
+                            const std::vector<Model::mat4x4>& poses,
+                            const std::vector<int> pose_model_map,
+                            const std::vector<int> tris_model_count,
+                            size_t width, size_t height, const Model::mat4x4& proj_mat,
+                            std::vector<int32_t>& result_depth, 
+                            std::vector<std::vector<uint8_t>>& result_color);
+
 device_vector_holder<int> render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
                             size_t width, size_t height, const Model::mat4x4& proj_mat, 
                             std::vector<int32_t>& result_depth, std::vector<std::vector<uint8_t>>& result_color,
