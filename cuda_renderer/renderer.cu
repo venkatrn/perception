@@ -568,6 +568,12 @@ device_vector_holder<int> render_cuda_multi(
         device_tris_model_count_high.end(), 
         std::ostream_iterator<int>(std::cout, " ")
     );
+    printf("\n");
+    thrust::copy(
+        device_pose_model_map.begin(),
+        device_pose_model_map.end(), 
+        std::ostream_iterator<int>(std::cout, " ")
+    );
     printf("\nNumber of triangles : %d\n", tris.size());
     printf("Number of poses : %d\n", poses.size());
 

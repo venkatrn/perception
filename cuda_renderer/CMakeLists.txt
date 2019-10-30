@@ -35,6 +35,9 @@ LINK_DIRECTORIES(/usr/local/lib)
 list(APPEND renderer_inc ${ASSIMP_INCLUDE_DIRS})
 list(APPEND renderer_lib ${ASSIMP_LIBRARIES})
 
+find_package(Eigen3 REQUIRED)
+include_directories(${EIGEN3_INCLUDE_DIR})
+
 include_directories("include")
 
 # src

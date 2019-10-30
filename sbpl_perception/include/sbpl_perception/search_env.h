@@ -342,9 +342,13 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
   // void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
 
+  vector<int> tris_model_count;
+  vector<cuda_renderer::Model::Triangle> tris;
   void PrintGPUImages(std::vector<int32_t>& result_depth, std::vector<std::vector<uint8_t>>& result_color, int num_poses, string suffix);
   void PrintGPUClouds(float* cloud, int* result_depth, int* dc_index, int num_poses, int cloud_point_num, int stride);
-
+  void GetStateImagesGPU(const vector<ObjectState>& objects,
+                        vector<vector<uint8_t>>& result_color,
+                        vector<int32_t>& result_depth);
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
 

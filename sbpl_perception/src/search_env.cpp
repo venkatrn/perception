@@ -270,6 +270,9 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
     }
     cuda_renderer::Model render_model(model_meta_data.file.c_str()); 
     render_models_.push_back(render_model);
+    tris.insert(tris.end(), render_model.tris.begin(), render_model.tris.end());
+    tris_model_count.push_back(render_model.tris.size());
+
   }
 }
 
@@ -962,8 +965,9 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
   }
 }
 
-void EnvObjectRecognition::PrintGPUImages(
-    std::vector<int32_t>& result_depth, std::vector<std::vector<uint8_t>>& result_color, int num_poses, string suffix)
+void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth, 
+                                      std::vector<std::vector<uint8_t>>& result_color, 
+                                      int num_poses, string suffix)
 {
   // for (int j = 0; j < result_depth.size(); j++) {
   //   if (result_depth[j] > 0)
@@ -1063,116 +1067,171 @@ void EnvObjectRecognition::PrintGPUClouds(
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 }
-void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
-                                                  std::vector<CostComputationOutput> *output,
-                                                  bool lazy) {
-  std::cout << "Computing costs in parallel GPU" << endl;
-  std::vector<cuda_renderer::Model::mat4x4> mat4_v;
-  std::vector<ContPose> contposes;
-  // std::cout << input_depth_image_path << endl;
-  cv::Mat cv_depth_image = cv::imread(input_depth_image_path, CV_32SC1);
-  // cv::Mat cv_depth_image = cv::imread(input_depth_image_path, CV_LOAD_IMAGE_UNCHANGED);
-  int num_poses = input.size();
-  // int num_poses = 5;
-  std::vector<int> rendered_cost(num_poses, 0);
+void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
+                                          vector<vector<uint8_t>>& result_color,
+                                          vector<int32_t>& result_depth)
+{
+  printf("GetStateImagesGPU() for %d poses\n", objects.size());
+  Eigen::Isometry3d cam_z_front, cam_to_body;
+  cam_to_body.matrix() << 0, 0, 1, 0,
+                    -1, 0, 0, 0,
+                    0, -1, 0, 0,
+                    0, 0, 0, 1;
+  cam_z_front = cam_to_world_ * cam_to_body;
+  Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
 
-  // for(int i =0; i <input.size(); i ++){
-  // concat all model triangles
-  std::vector<cuda_renderer::Model::Triangle> tris;
+  vector<cuda_renderer::Model::mat4x4> mat4_v;
+  vector<int> pose_model_map;
+  // vector<int> tris_model_count;
+  // vector<cuda_renderer::Model::Triangle> tris;
 
-  // store which pose is for which model
-  std::vector<int> pose_model_map;
-
-  // store num of triangles in each model
-  std::vector<int> tris_model_count;
-  int model_id_prev = input[0].child_id;
+  int num_poses = objects.size();
+  int model_id_prev = -1;
   for(int i = 0; i < num_poses; i ++) {
-    std::vector<ObjectState> objects = input[i].child_state.object_states();
-    // for(int n=0; n < objects.size();n++){
-    // Take the last object
-    int n = objects.size() - 1;
-    int model_id = objects[n].id();
-    ContPose cur = objects[n].cont_pose();
+    int model_id = objects[i].id();
+
+    ContPose cur = objects[i].cont_pose();
     Eigen::Matrix4d preprocess_transform = 
       obj_models_[model_id].preprocessing_transform().matrix().cast<double>();
-    contposes.push_back(cur);
-    // std::cout<<cur<<std::endl;
     Eigen::Matrix4d transform;
     transform = cur.ContPose::GetTransform().matrix().cast<double>();
     transform = preprocess_transform * transform;
-    Eigen::Isometry3d cam_z_front;
-    Eigen::Isometry3d cam_to_body;
-    cam_to_body.matrix() << 0, 0, 1, 0,
-                      -1, 0, 0, 0,
-                      0, -1, 0, 0,
-                      0, 0, 0, 1;
-    cam_z_front = cam_to_world_ * cam_to_body;
-    
-    Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
-    Eigen::Matrix4d pose_in_cam = cam_matrix*transform;
-    // std::cout<<transform<<std::endl;
-    // std::cout<<cam_matrix<<std::endl;
+    Eigen::Matrix4d pose_in_cam = cam_matrix * transform;
     cuda_renderer::Model::mat4x4 mat4;
-    //multiply 100 to change scale, data scale is in meter
-    int scale_factor = 100;
-    mat4.a0 = pose_in_cam(0,0)*scale_factor;
-    mat4.a1 = pose_in_cam(0,1)*scale_factor;
-    mat4.a2 = pose_in_cam(0,2)*scale_factor;
-    mat4.a3 = pose_in_cam(0,3)*scale_factor;
-    mat4.b0 = pose_in_cam(1,0)*scale_factor;
-    mat4.b1 = pose_in_cam(1,1)*scale_factor;
-    mat4.b2 = pose_in_cam(1,2)*scale_factor;
-    mat4.b3 = pose_in_cam(1,3)*scale_factor;
-    mat4.c0 = pose_in_cam(2,0)*scale_factor;
-    mat4.c1 = pose_in_cam(2,1)*scale_factor;
-    mat4.c2 = pose_in_cam(2,2)*scale_factor;
-    mat4.c3 = pose_in_cam(2,3)*scale_factor;
-    mat4.d0 = pose_in_cam(3,0);
-    mat4.d1 = pose_in_cam(3,1);
-    mat4.d2 = pose_in_cam(3,2);
-    mat4.d3 = pose_in_cam(3,3);
-    // std::cout<<mat4.a0<<", "<<mat4.a1<<", "<<mat4.a2<<", "<<mat4.a3<<"\n"
-    // <<mat4.b0<<", "<<mat4.b1<<", "<<mat4.b2<<", "<<mat4.b3<<"\n"
-    // <<mat4.c0<<", "<<mat4.c1<<", "<<mat4.c2<<", "<<mat4.c3<<"\n"
-    // <<mat4.d0<<", "<<mat4.d1<<", "<<mat4.d2<<", "<<mat4.d3<<"\n";
+    mat4.init_from_eigen(pose_in_cam, 100);
     mat4_v.push_back(mat4);
+
     pose_model_map.push_back(model_id);
-    if (i == 0 || model_id != model_id_prev)
-    {
-      // collect triangles in one vector. need to do only once
-      tris.insert(tris.end(), render_models_[model_id].tris.begin(), render_models_[model_id].tris.end());
-      tris_model_count.push_back(render_models_[model_id].tris.size());
-    }
-    // cout << model_id << endl;
-    model_id_prev = model_id;
+    // if (model_id != model_id_prev)
+    // {
+    //   // collect triangles in one vector. need to do only once for every object
+    //   tris.insert(tris.end(), render_models_[model_id].tris.begin(), render_models_[model_id].tris.end());
+    //   tris_model_count.push_back(render_models_[model_id].tris.size());
     // }
+    model_id_prev = model_id;
+
   }
-
-  // std::cout << "exclusive sum: ";
-  // std::exclusive_scan(tris_model_count.begin(), tris_model_count.end(), std::ostream_iterator<int>(std::cout, " "), 0);
-  #ifdef CUDA_ON
-  int render_size = 750;
-  int total_render_num = mat4_v.size();
-  int num_render = (total_render_num-1)/render_size+1;
-  std::vector<int> total_result_cost;
-  for(int i =0; i <num_render; i ++){
-    auto last = std::min(total_render_num, i*render_size + render_size);
-    std::vector<cuda_renderer::Model::mat4x4>::const_iterator start = mat4_v.begin() + i*render_size;
-    std::vector<cuda_renderer::Model::mat4x4>::const_iterator finish = mat4_v.begin() + last;
-    std::vector<cuda_renderer::Model::mat4x4> cur_transform(start,finish);
-    std::vector<std::vector<uint8_t>> result_color;
-    std::vector<int32_t> result_depth;
-
-    // auto result_dev = cuda_renderer::render_cuda(render_models_[0].tris, cur_transform,
-    //                            env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
-    auto result_dev = cuda_renderer::render_cuda_multi(
+  auto result_dev = cuda_renderer::render_cuda_multi(
                           tris,
-                          cur_transform,
+                          mat4_v,
                           pose_model_map,
                           tris_model_count,
                           env_params_.width, env_params_.height, 
                           env_params_.proj_mat, 
                           result_depth, result_color);
+}
+void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
+                                                  std::vector<CostComputationOutput> *output,
+                                                  bool lazy) {
+  std::cout << "Computing costs in parallel GPU" << endl;
+  // std::vector<cuda_renderer::Model::mat4x4> mat4_v, source_mat4_v;
+  // std::vector<ContPose> contposes;
+  // std::cout << input_depth_image_path << endl;
+  // cv::Mat cv_depth_image = cv::imread(input_depth_image_path, CV_32SC1);
+  // cv::Mat cv_depth_image = cv::imread(input_depth_image_path, CV_LOAD_IMAGE_UNCHANGED);
+  // int num_poses = 5;
+  std::vector<ObjectState> source_last_object_states;
+  std::vector<ObjectState> objects = input[0].source_state.object_states();
+  std::vector<std::vector<uint8_t>> source_result_color;
+  std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, kKinectMaxDepth);
+  if (objects.size() == 0)
+  {
+    cout << "Root Source State\n";
+  }
+  else
+  {
+    cout << input[0].source_state << endl;
+    source_last_object_states.push_back(objects[objects.size() - 1]);
+    GetStateImagesGPU(source_last_object_states, source_result_color, source_result_depth);
+    PrintGPUImages(source_result_depth, source_result_color, 1, "source");
+    // return;
+  }
+
+
+  // concat all model triangles
+  // std::vector<cuda_renderer::Model::Triangle> tris, source_tris;
+
+  // // store which pose is for which model
+  // std::vector<int> pose_model_map, source_pose_model_map;
+
+  // // store num of triangles in each model
+  // std::vector<int> tris_model_count, source_tris_model_count;
+
+  // int model_id_prev = input[0].child_id;
+  // Eigen::Isometry3d cam_z_front;
+  // Eigen::Isometry3d cam_to_body;
+  // cam_to_body.matrix() << 0, 0, 1, 0,
+  //                   -1, 0, 0, 0,
+  //                   0, -1, 0, 0,
+  //                   0, 0, 0, 1;
+  // cam_z_front = cam_to_world_ * cam_to_body;
+  
+  // Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
+  std::vector<ObjectState> last_object_states;
+  int num_poses = input.size();
+  std::vector<int> rendered_cost(num_poses, 0);
+
+  for(int i = 0; i < num_poses; i ++) {
+    std::vector<ObjectState> objects = input[i].child_state.object_states();
+    last_object_states.push_back(objects[objects.size() - 1]);
+    // // for(int n=0; n < objects.size();n++){
+    // // Take the last object
+    // int n = objects.size() - 1;
+    // int model_id = objects[n].id();
+    // ContPose cur = objects[n].cont_pose();
+    // Eigen::Matrix4d preprocess_transform = 
+    //   obj_models_[model_id].preprocessing_transform().matrix().cast<double>();
+    // // contposes.push_back(cur);
+    // // std::cout<<cur<<std::endl;
+    // Eigen::Matrix4d transform;
+    // transform = cur.ContPose::GetTransform().matrix().cast<double>();
+    // transform = preprocess_transform * transform;
+
+    // Eigen::Matrix4d pose_in_cam = cam_matrix*transform;
+    // // std::cout<<transform<<std::endl;
+    // // std::cout<<cam_matrix<<std::endl;
+    // cuda_renderer::Model::mat4x4 mat4;
+    // mat4.init_from_eigen(pose_in_cam, 100);
+    // mat4_v.push_back(mat4);
+    // pose_model_map.push_back(model_id);
+    // if (i == 0 || model_id != model_id_prev)
+    // {
+    //   // collect triangles in one vector. need to do only once for every object
+    //   tris.insert(tris.end(), render_models_[model_id].tris.begin(), render_models_[model_id].tris.end());
+    //   tris_model_count.push_back(render_models_[model_id].tris.size());
+    // }
+    // // cout << model_id << endl;
+    // model_id_prev = model_id;
+    // // }
+  }
+
+  // std::cout << "exclusive sum: ";
+  // std::exclusive_scan(tris_model_count.begin(), tris_model_count.end(), std::ostream_iterator<int>(std::cout, " "), 0);
+  #ifdef CUDA_ON
+  // int render_size = 750;
+  // int total_render_num = mat4_v.size();
+  // int num_render = (total_render_num-1)/render_size+1;
+  // std::vector<int> total_result_cost;
+  // for(int i =0; i < num_render; i ++){
+    // auto last = std::min(total_render_num, i*render_size + render_size);
+    // std::vector<cuda_renderer::Model::mat4x4>::const_iterator start = mat4_v.begin() + i*render_size;
+    // std::vector<cuda_renderer::Model::mat4x4>::const_iterator finish = mat4_v.begin() + last;
+    // std::vector<cuda_renderer::Model::mat4x4> cur_transform(start,finish);
+    std::vector<std::vector<uint8_t>> result_color;
+    std::vector<int32_t> result_depth;
+
+    // auto result_dev = cuda_renderer::render_cuda(render_models_[0].tris, cur_transform,
+    //                            env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
+    // auto result_dev = cuda_renderer::render_cuda_multi(
+    //                       tris,
+    //                       mat4_v,
+    //                       pose_model_map,
+    //                       tris_model_count,
+    //                       env_params_.width, env_params_.height, 
+    //                       env_params_.proj_mat, 
+    //                       result_depth, result_color);
+
+    GetStateImagesGPU(last_object_states, result_color, result_depth);
 
     // Compute rendered clouds
     // float* result_cloud = (float*) malloc(3 * result_depth.size() * sizeof(float));
@@ -1239,43 +1298,43 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     }
 
 
-    Mat3x3f K_((float*)env_params_.cam_intrinsic.data);
-    if (false)
-    {
-      std::vector<cuda_renderer::Model::mat4x4> post_icp_poses;
-      Scene_nn scene;
-      KDTree_cuda kdtree_cuda;
-      scene.init_Scene_nn_cuda(cv_input_filtered_depth_image, K_, kdtree_cuda);
+    // Mat3x3f K_((float*)env_params_.cam_intrinsic.data);
+    // if (false)
+    // {
+    //   std::vector<cuda_renderer::Model::mat4x4> post_icp_poses;
+    //   Scene_nn scene;
+    //   KDTree_cuda kdtree_cuda;
+    //   scene.init_Scene_nn_cuda(cv_input_filtered_depth_image, K_, kdtree_cuda);
 
-      std::vector<cuda_icp::RegistrationResult> result_poses(num_poses);
-      cuda_icp::ICPConvergenceCriteria criteria;
-      criteria.max_iteration_ = 10;
+    //   std::vector<cuda_icp::RegistrationResult> result_poses(num_poses);
+    //   cuda_icp::ICPConvergenceCriteria criteria;
+    //   criteria.max_iteration_ = 10;
 
-      Mat4x4f temp = reinterpret_cast<Mat4x4f&>(cur_transform[0]);
-      // cout << cur_transform[0] << end;
-      auto pcd1_cuda = cuda_icp::depth2cloud_cuda(result_dev.data(),
-                                              env_params_.width, env_params_.height, K_,
-                                              1, 0, 0);
+    //   Mat4x4f temp = reinterpret_cast<Mat4x4f&>(mat4_v[0]);
+    //   // cout << cur_transform[0] << end;
+    //   auto pcd1_cuda = cuda_icp::depth2cloud_cuda(result_dev.data(),
+    //                                           env_params_.width, env_params_.height, K_,
+    //                                           1, 0, 0);
 
-      result_poses[0] = cuda_icp::ICP_Point2Plane_cuda(pcd1_cuda, scene, criteria);
-      std::cout << "finally fitness_: " << result_poses[0].fitness_ << std::endl;
-      std::cout << "finally inlier_rmse_: " << result_poses[0].inlier_rmse_ << std::endl;
-      cout << result_poses[0].transformation_;
+    //   result_poses[0] = cuda_icp::ICP_Point2Plane_cuda(pcd1_cuda, scene, criteria);
+    //   std::cout << "finally fitness_: " << result_poses[0].fitness_ << std::endl;
+    //   std::cout << "finally inlier_rmse_: " << result_poses[0].inlier_rmse_ << std::endl;
+    //   cout << result_poses[0].transformation_;
 
-      temp = result_poses[0].transformation_ * temp;
-      result_poses[0].transformation_ = temp;
+    //   temp = result_poses[0].transformation_ * temp;
+    //   result_poses[0].transformation_ = temp;
 
-      // cout << result_poses[0].transformation_;
-      result_depth.clear();
-      result_color.clear();
+    //   // cout << result_poses[0].transformation_;
+    //   result_depth.clear();
+    //   result_color.clear();
 
-      cuda_renderer::Model::mat4x4 mat_4v = reinterpret_cast<cuda_renderer::Model::mat4x4&>(result_poses[0].transformation_);
-      post_icp_poses.push_back(mat_4v);
-      cuda_renderer::render_cuda(render_models_[0].tris, post_icp_poses,
-                            env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
-      PrintGPUImages(result_depth, result_color, 1, "icp");
+    //   cuda_renderer::Model::mat4x4 mat_4v = reinterpret_cast<cuda_renderer::Model::mat4x4&>(result_poses[0].transformation_);
+    //   post_icp_poses.push_back(mat_4v);
+    //   cuda_renderer::render_cuda(render_models_[0].tris, post_icp_poses,
+    //                         env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
+    //   PrintGPUImages(result_depth, result_color, 1, "icp");
 
-    }
+    // }
     
 
     // std::vector<uint8_t> r_v;
@@ -1296,12 +1355,11 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     // std::vector<int> result_cost = cuda_renderer::compute_cost(result_color,observed_color,env_params_.height,env_params_.width,cur_transform.size());
     // total_result_cost.insert(end(total_result_cost),begin(result_cost),end(result_cost));
 
-  }
+  // }
 
-  int num= input.size();
   assert(output != nullptr);
   output->clear();
-  output->resize(num);
+  output->resize(num_poses);
   std::vector<CostComputationOutput> output_gpu;
   vector<unsigned short> source_depth_image;
   source_depth_image.push_back(1);
@@ -1316,7 +1374,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   cv::Mat source_cv_color_image;
   int total_pixel = env_params_.height*env_params_.width;
 
-  for(int i =0; i <num; i ++){
+  for(int i =0; i <num_poses; i ++){
     CostComputationOutput cur_unit;
     // cur_unit.cost = total_result_cost[i];
     cur_unit.cost = rendered_cost[i];

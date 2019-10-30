@@ -28,6 +28,9 @@
 // #include <opencv2/highgui/highgui.hpp>
 // #include <opencv2/core/core.hpp>
 #include <iostream>
+#include <Eigen/Dense>
+
+
 namespace cuda_renderer {
 
 class Model{
@@ -90,7 +93,25 @@ public:
             temp = b3; b3=d1; d1=temp;
             temp = c3; c3=d2; d2=temp;
         }
-
+        void init_from_eigen(const Eigen::Matrix4d& pose_in_cam, int scale_factor){
+            // scale factor is to convert to cm for rendering
+            a0 = pose_in_cam(0,0)*scale_factor;
+            a1 = pose_in_cam(0,1)*scale_factor;
+            a2 = pose_in_cam(0,2)*scale_factor;
+            a3 = pose_in_cam(0,3)*scale_factor;
+            b0 = pose_in_cam(1,0)*scale_factor;
+            b1 = pose_in_cam(1,1)*scale_factor;
+            b2 = pose_in_cam(1,2)*scale_factor;
+            b3 = pose_in_cam(1,3)*scale_factor;
+            c0 = pose_in_cam(2,0)*scale_factor;
+            c1 = pose_in_cam(2,1)*scale_factor;
+            c2 = pose_in_cam(2,2)*scale_factor;
+            c3 = pose_in_cam(2,3)*scale_factor;
+            d0 = pose_in_cam(3,0);
+            d1 = pose_in_cam(3,1);
+            d2 = pose_in_cam(3,2);
+            d3 = pose_in_cam(3,3);
+        }
         void init_from_cv(const cv::Mat& pose){ // so stupid
             assert(pose.type() == CV_32F);
 
@@ -135,6 +156,13 @@ public:
 
             d0 = 0; d1 = 0;
             d2 = 0; d3 = 1;
+        }
+
+        void print(){
+            std::cout<<a0<<", "<<a1<<", "<<a2<<", "<<a3<<"\n"
+                <<b0<<", "<<b1<<", "<<b2<<", "<<b3<<"\n"
+                <<c0<<", "<<c1<<", "<<c2<<", "<<c3<<"\n"
+                <<d0<<", "<<d1<<", "<<d2<<", "<<d3<<"\n";
         }
     };
 
