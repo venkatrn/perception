@@ -347,6 +347,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintGPUImages(std::vector<int32_t>& result_depth, std::vector<std::vector<uint8_t>>& result_color, int num_poses, string suffix);
   void PrintGPUClouds(float* cloud, int* result_depth, int* dc_index, int num_poses, int cloud_point_num, int stride);
   void GetStateImagesGPU(const vector<ObjectState>& objects,
+                        const vector<vector<uint8_t>>& source_result_color,
+                        const vector<int32_t>& source_result_depth,
                         vector<vector<uint8_t>>& result_color,
                         vector<int32_t>& result_depth);
   // We should get rid of this eventually.
@@ -390,6 +392,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   /**@brief Mapping from State to State ID**/
   std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
+  std::unordered_map<int, std::vector<int32_t>> gpu_depth_image_cache_;
+  std::unordered_map<int, std::vector<std::vector<uint8_t>>> gpu_color_image_cache_;
   std::unordered_map<int, std::vector<int>> succ_cache;
   std::unordered_map<int, std::vector<int>> cost_cache;
   std::unordered_map<int, std::vector<ObjectState>> valid_succ_cache;

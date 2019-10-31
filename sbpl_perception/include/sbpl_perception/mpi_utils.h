@@ -37,6 +37,8 @@ struct CostComputationOutput {
   std::vector<std::vector<unsigned char>> color_image;
   std::vector<unsigned short> unadjusted_depth_image;
   std::vector<std::vector<unsigned char>> unadjusted_color_image;
+  std::vector<int32_t> gpu_depth_image;
+  std::vector<std::vector<uint8_t>> gpu_color_image;
   double histogram_score;
 };
 

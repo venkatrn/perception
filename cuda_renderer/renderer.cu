@@ -203,6 +203,90 @@ __device__ double color_distance(float l1,float a1,float b1,
     return cur_dist;
 }
 __device__
+void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last_row,
+                                        int32_t* depth_entry, size_t width, size_t height,
+                                        const Model::ROI roi, 
+                                        uint8_t* red_entry,uint8_t* green_entry,uint8_t* blue_entry,
+                                        int32_t* source_depth_entry,
+                                        uint8_t* source_red_entry,uint8_t* source_green_entry,uint8_t* source_blue_entry) {
+                                        // float* l_entry,float* a_entry,float* b_entry){
+    // refer to tiny renderer
+    // https://github.com/ssloy/tinyrenderer/blob/master/our_gl.cpp
+    float pts2[3][2];
+
+    // viewport transform(0, 0, width, height)
+    pts2[0][0] = dev_tri.v0.x/last_row.x*width/2.0f+width/2.0f; pts2[0][1] = dev_tri.v0.y/last_row.x*height/2.0f+height/2.0f;
+    pts2[1][0] = dev_tri.v1.x/last_row.y*width/2.0f+width/2.0f; pts2[1][1] = dev_tri.v1.y/last_row.y*height/2.0f+height/2.0f;
+    pts2[2][0] = dev_tri.v2.x/last_row.z*width/2.0f+width/2.0f; pts2[2][1] = dev_tri.v2.y/last_row.z*height/2.0f+height/2.0f;
+
+    float bboxmin[2] = {FLT_MAX,  FLT_MAX};
+    float bboxmax[2] = {-FLT_MAX, -FLT_MAX};
+
+    float clamp_max[2] = {float(width-1), float(height-1)};
+    float clamp_min[2] = {0, 0};
+
+    size_t real_width = width;
+    if(roi.width > 0 && roi.height > 0){  // depth will be flipped
+        clamp_min[0] = roi.x;
+        clamp_min[1] = height-1 - (roi.y + roi.height - 1);
+        clamp_max[0] = (roi.x + roi.width) - 1;
+        clamp_max[1] = height-1 - roi.y;
+        real_width = roi.width;
+    }
+
+
+    for (int i=0; i<3; i++) {
+        for (int j=0; j<2; j++) {
+            bboxmin[j] = std__max(clamp_min[j], std__min(bboxmin[j], pts2[i][j]));
+            bboxmax[j] = std__min(clamp_max[j], std__max(bboxmax[j], pts2[i][j]));
+        }
+    }
+
+    size_t P[2];
+    for(P[1] = size_t(bboxmin[1]+0.5f); P[1]<=bboxmax[1]; P[1] += 1){
+        for(P[0] = size_t(bboxmin[0]+0.5f); P[0]<=bboxmax[0]; P[0] += 1){
+            Model::float3 bc_screen  = barycentric(pts2[0], pts2[1], pts2[2], P);
+
+            if (bc_screen.x<-0.0f || bc_screen.y<-0.0f || bc_screen.z<-0.0f ||
+                    bc_screen.x>1.0f || bc_screen.y>1.0f || bc_screen.z>1.0f ) continue;
+
+            Model::float3 bc_over_z = {bc_screen.x/last_row.x, bc_screen.y/last_row.y, bc_screen.z/last_row.z};
+
+            // refer to https://en.wikibooks.org/wiki/Cg_Programming/Rasterization, Perspectively Correct Interpolation
+//            float frag_depth = (dev_tri.v0.z * bc_over_z.x + dev_tri.v1.z * bc_over_z.y + dev_tri.v2.z * bc_over_z.z)
+//                    /(bc_over_z.x + bc_over_z.y + bc_over_z.z);
+
+            // this seems better
+            float frag_depth = (bc_screen.x + bc_screen.y + bc_screen.z)
+                    /(bc_over_z.x + bc_over_z.y + bc_over_z.z);
+
+            size_t x_to_write = (P[0] + roi.x);
+            size_t y_to_write = (height-1 - P[1] - roi.y);
+            int32_t curr_depth = int32_t(frag_depth/**1000*/ + 0.5f);
+            // printf("x:%d, y:%d, depth:%d\n", x_to_write, y_to_write, curr_depth);
+            int32_t& depth_to_write = depth_entry[x_to_write+y_to_write*real_width];
+            int32_t& source_depth = source_depth_entry[x_to_write+y_to_write*real_width];
+            uint8_t source_red = source_red_entry[x_to_write+y_to_write*real_width];
+            uint8_t source_green = source_green_entry[x_to_write+y_to_write*real_width];
+            uint8_t source_blue = source_blue_entry[x_to_write+y_to_write*real_width];
+
+            if(depth_to_write > curr_depth){
+                red_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v0);
+                green_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v1);
+                blue_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v2);
+            }
+            atomicMin(&depth_to_write, curr_depth);
+            int32_t& new_depth = depth_entry[x_to_write+y_to_write*real_width];
+            if(new_depth > source_depth && source_depth > 0){
+                red_entry[x_to_write+y_to_write*real_width] = source_red;
+                green_entry[x_to_write+y_to_write*real_width] = source_green;
+                blue_entry[x_to_write+y_to_write*real_width] = source_blue;
+                atomicMin(&new_depth, source_depth);
+            }
+        }
+    }
+}
+__device__
 void rasterization(const Model::Triangle dev_tri, Model::float3 last_row,
                                         int32_t* depth_entry, size_t width, size_t height,
                                         const Model::ROI roi, uint8_t* red_entry,uint8_t* green_entry,uint8_t* blue_entry){
@@ -324,8 +408,9 @@ __global__ void render_triangle_multi(
                                 int* device_pose_model_map_ptr, int* device_tris_model_count_low_ptr,  
                                 int* device_tris_model_count_high_ptr,
                                 const Model::mat4x4 proj_mat, const Model::ROI roi,
-                                uint8_t* red_image_vec,uint8_t* green_image_vec,uint8_t* blue_image_vec) {
-                                 // float* l_vec,float* a_vec,float* b_vec){
+                                uint8_t* red_image_vec,uint8_t* green_image_vec,uint8_t* blue_image_vec,
+                                int32_t* device_source_depth_vec,
+                                uint8_t* device_source_red_vec,uint8_t* device_source_green_vec,uint8_t* device_source_blue_vec) {
     size_t pose_i = blockIdx.y;
     int model_id = device_pose_model_map_ptr[pose_i];
     size_t tri_i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -361,8 +446,12 @@ __global__ void render_triangle_multi(
     // projection transform
     local_tri = transform_triangle(local_tri, proj_mat);
 
-    // rasterization(local_tri, last_row, depth_entry, width, height, roi,red_entry,green_entry,blue_entry,l_entry,a_entry,b_entry);
-    rasterization(local_tri, last_row, depth_entry, width, height, roi,red_entry,green_entry,blue_entry);
+    // rasterization(local_tri, last_row, depth_entry, width, height, roi,red_entry,green_entry,blue_entry);
+    rasterization_with_source(
+        local_tri, last_row, depth_entry, width, height, roi,
+        red_entry,green_entry,blue_entry,
+        device_source_depth_vec,
+        device_source_red_vec, device_source_green_vec, device_source_blue_vec);
 }
 __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* blue_in,
                                     uint8_t* red_ob, uint8_t* green_ob,uint8_t* blue_ob, 
@@ -526,13 +615,67 @@ std::vector<int> compute_cost(const std::vector<std::vector<uint8_t>> input,
     
     return cost;
 }
+__global__ void merge_with_source( uint8_t* merged_red,uint8_t* merged_green,uint8_t* merged_blue,
+                                    int32_t* merged_depth,
+                                    uint8_t* rendered_red, uint8_t* rendered_green,uint8_t* rendered_blue, 
+                                    int32_t* rendered_depth,
+                                    uint8_t* source_red, uint8_t* source_green,uint8_t* source_blue, 
+                                    int32_t* source_depth, 
+                                    int width,
+                                    int height,
+                                    int num_rendered)
+{
+    //2D Index of current thread
+    int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/width);
+    const int x = (blockIdx.x * blockDim.x + threadIdx.x)%width;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
 
+    if(x >= width) return;
+    if(y >= height) return;
+    uint32_t idx_rendered = n * width * height + x + y*width;
+    uint32_t idx_source = x + y*width;
+
+    if (source_depth[idx_source] > 0 && rendered_depth[idx_rendered] == INT_MAX)
+    {
+
+    }
+
+}
+__global__ void copy_source_to_render(uint8_t* rendered_red, uint8_t* rendered_green,uint8_t* rendered_blue, 
+                                    int32_t* rendered_depth,
+                                    uint8_t* source_red, uint8_t* source_green,uint8_t* source_blue, 
+                                    int32_t* source_depth, 
+                                    int width,
+                                    int height,
+                                    int num_rendered)
+{
+    //2D Index of current thread
+    int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/width);
+    const int x = (blockIdx.x * blockDim.x + threadIdx.x)%width;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if(x >= width) return;
+    if(y >= height) return;
+    uint32_t idx_rendered = n * width * height + x + y*width;
+    uint32_t idx_source = x + y*width;
+
+    if (source_depth[idx_source] > 0)
+    {
+        rendered_red[idx_rendered] = source_red[idx_source];
+        rendered_green[idx_rendered] = source_green[idx_source];
+        rendered_blue[idx_rendered] = source_blue[idx_source];
+        rendered_depth[idx_rendered] = source_depth[idx_source];
+    }
+
+}
 device_vector_holder<int> render_cuda_multi(
                             const std::vector<Model::Triangle>& tris,
                             const std::vector<Model::mat4x4>& poses,
                             const std::vector<int> pose_model_map,
                             const std::vector<int> tris_model_count,
                             size_t width, size_t height, const Model::mat4x4& proj_mat,
+                            const std::vector<int32_t>& source_depth,
+                            const std::vector<std::vector<uint8_t>>& source_color,
                             std::vector<int32_t>& result_depth, 
                             std::vector<std::vector<uint8_t>>& result_color) {
 
@@ -544,6 +687,11 @@ device_vector_holder<int> render_cuda_multi(
     thrust::device_vector<int> device_tris_model_count_low = tris_model_count;
     thrust::device_vector<int> device_tris_model_count_high = tris_model_count;
     thrust::device_vector<int> device_pose_model_map = pose_model_map;
+
+    thrust::device_vector<int32_t> device_source_depth = source_depth;
+    thrust::device_vector<uint8_t> device_source_color_red = source_color[0];
+    thrust::device_vector<uint8_t> device_source_color_green = source_color[1];
+    thrust::device_vector<uint8_t> device_source_color_blue = source_color[2];
     // thrust::copy(
     //     device_tris_model_count.begin(),
     //     device_tris_model_count.end(), 
@@ -557,23 +705,23 @@ device_vector_holder<int> render_cuda_multi(
         device_tris_model_count_high.begin(), device_tris_model_count_high.end(), 
         device_tris_model_count_high.begin()
     ); // in-place scan
-    thrust::copy(
-        device_tris_model_count_low.begin(),
-        device_tris_model_count_low.end(), 
-        std::ostream_iterator<int>(std::cout, " ")
-    );
-    printf("\n");
-    thrust::copy(
-        device_tris_model_count_high.begin(),
-        device_tris_model_count_high.end(), 
-        std::ostream_iterator<int>(std::cout, " ")
-    );
-    printf("\n");
-    thrust::copy(
-        device_pose_model_map.begin(),
-        device_pose_model_map.end(), 
-        std::ostream_iterator<int>(std::cout, " ")
-    );
+    // thrust::copy(
+    //     device_tris_model_count_low.begin(),
+    //     device_tris_model_count_low.end(), 
+    //     std::ostream_iterator<int>(std::cout, " ")
+    // );
+    // printf("\n");
+    // thrust::copy(
+    //     device_tris_model_count_high.begin(),
+    //     device_tris_model_count_high.end(), 
+    //     std::ostream_iterator<int>(std::cout, " ")
+    // );
+    // printf("\n");
+    // thrust::copy(
+    //     device_pose_model_map.begin(),
+    //     device_pose_model_map.end(), 
+    //     std::ostream_iterator<int>(std::cout, " ")
+    // );
     printf("\nNumber of triangles : %d\n", tris.size());
     printf("Number of poses : %d\n", poses.size());
 
@@ -583,26 +731,44 @@ device_vector_holder<int> render_cuda_multi(
     // atomic min only support int32
     
     device_vector_holder<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
-
     // thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
     thrust::device_vector<uint8_t> device_red_int(poses.size()*real_width*real_height, 0);
     thrust::device_vector<uint8_t> device_green_int(poses.size()*real_width*real_height, 0);
     thrust::device_vector<uint8_t> device_blue_int(poses.size()*real_width*real_height, 0);
+
   
     Model::Triangle* device_tris_ptr = thrust::raw_pointer_cast(device_tris.data());
     Model::mat4x4* device_poses_ptr = thrust::raw_pointer_cast(device_poses.data());
+
+    // Mapping each pose to model
     int* device_pose_model_map_ptr = thrust::raw_pointer_cast(device_pose_model_map.data());
+
+    // Mapping each model to triangle range
     int* device_tris_model_count_low_ptr = thrust::raw_pointer_cast(device_tris_model_count_low.data());
     int* device_tris_model_count_high_ptr = thrust::raw_pointer_cast(device_tris_model_count_high.data());
     // int32_t* depth_image_vec = thrust::raw_pointer_cast(device_depth_int.data());
+
+    int32_t* device_source_depth_vec = thrust::raw_pointer_cast(device_source_depth.data());
+    uint8_t* device_source_red_vec = thrust::raw_pointer_cast(device_source_color_red.data());
+    uint8_t* device_source_green_vec = thrust::raw_pointer_cast(device_source_color_green.data());
+    uint8_t* device_source_blue_vec = thrust::raw_pointer_cast(device_source_color_blue.data());
+
     int32_t* depth_image_vec = device_depth_int.data();
     uint8_t* red_image_vec = thrust::raw_pointer_cast(device_red_int.data());
     uint8_t* green_image_vec = thrust::raw_pointer_cast(device_green_int.data());
     uint8_t* blue_image_vec = thrust::raw_pointer_cast(device_blue_int.data());
-    // float* l_vec = thrust::raw_pointer_cast(l.data());
-    // float* a_vec = thrust::raw_pointer_cast(a.data());
-    // float* b_vec = thrust::raw_pointer_cast(b.data());
 
+    // Initialize rendered images with source images
+    dim3 block(16,16);
+    dim3 grid((real_width*poses.size() + block.x - 1)/block.x, (real_height + block.y - 1)/block.y);
+    copy_source_to_render<<<grid,block>>>(red_image_vec,green_image_vec,blue_image_vec,
+                                depth_image_vec,
+                                device_source_red_vec, device_source_green_vec, device_source_blue_vec,
+                                device_source_depth_vec,
+                                width,height,poses.size());
+    cudaDeviceSynchronize();
+
+    // Render all poses
     dim3 numBlocks((tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
     render_triangle_multi<<<numBlocks, threadsPerBlock>>>(device_tris_ptr, tris.size(),
                                                     device_poses_ptr, poses.size(),
@@ -610,9 +776,10 @@ device_vector_holder<int> render_cuda_multi(
                                                     device_pose_model_map_ptr, device_tris_model_count_low_ptr,
                                                     device_tris_model_count_high_ptr,
                                                     proj_mat, roi,
-                                                    red_image_vec,green_image_vec,blue_image_vec);
+                                                    red_image_vec,green_image_vec,blue_image_vec,
+                                                    device_source_depth_vec,
+                                                    device_source_red_vec, device_source_green_vec, device_source_blue_vec);
     cudaDeviceSynchronize();
-
 
 
     result_depth.resize(poses.size()*real_width*real_height);
@@ -638,6 +805,7 @@ device_vector_holder<int> render_cuda_multi(
         thrust::copy(device_blue_int.begin(), device_blue_int.end(), result_blue.begin());
 
     }
+    if (result_color.size() > 0) result_color.clear();
     result_color.push_back(result_red);
     result_color.push_back(result_green);
     result_color.push_back(result_blue);

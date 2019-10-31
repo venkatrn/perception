@@ -1068,6 +1068,8 @@ void EnvObjectRecognition::PrintGPUClouds(
   }
 }
 void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
+                                          const vector<vector<uint8_t>>& source_result_color,
+                                          const vector<int32_t>& source_result_depth,
                                           vector<vector<uint8_t>>& result_color,
                                           vector<int32_t>& result_depth)
 {
@@ -1118,7 +1120,10 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                           tris_model_count,
                           env_params_.width, env_params_.height, 
                           env_params_.proj_mat, 
-                          result_depth, result_color);
+                          source_result_depth,
+                          source_result_color,
+                          result_depth, 
+                          result_color);
 }
 void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
                                                   std::vector<CostComputationOutput> *output,
@@ -1132,8 +1137,23 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   // int num_poses = 5;
   std::vector<ObjectState> source_last_object_states;
   std::vector<ObjectState> objects = input[0].source_state.object_states();
-  std::vector<std::vector<uint8_t>> source_result_color;
-  std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, kKinectMaxDepth);
+  
+  // Random is used as source for merging when rendering the source itself
+  std::vector<std::vector<uint8_t>> random_color(3);
+  std::vector<uint8_t> random_red(kCameraWidth * kCameraHeight, 255);
+  std::vector<uint8_t> random_green(kCameraWidth * kCameraHeight, 255);
+  std::vector<uint8_t> random_blue(kCameraWidth * kCameraHeight, 255);
+  random_color[0] = random_red;
+  random_color[1] = random_green;
+  random_color[2] = random_blue;
+  std::vector<int32_t> random_depth(kCameraWidth * kCameraHeight, 0);
+
+  std::vector<std::vector<uint8_t>> source_result_color(3);
+  source_result_color[0] = random_red;
+  source_result_color[1] = random_green;
+  source_result_color[2] = random_blue;
+  // By default source is set to max depth so that nothing happens when we merge with rendered
+  std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, 0);
   if (objects.size() == 0)
   {
     cout << "Root Source State\n";
@@ -1142,7 +1162,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   {
     cout << input[0].source_state << endl;
     source_last_object_states.push_back(objects[objects.size() - 1]);
-    GetStateImagesGPU(source_last_object_states, source_result_color, source_result_depth);
+    GetStateImagesGPU(source_last_object_states, random_color, random_depth, source_result_color, source_result_depth);
     PrintGPUImages(source_result_depth, source_result_color, 1, "source");
     // return;
   }
@@ -1231,7 +1251,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     //                       env_params_.proj_mat, 
     //                       result_depth, result_color);
 
-    GetStateImagesGPU(last_object_states, result_color, result_depth);
+    GetStateImagesGPU(last_object_states, source_result_color, source_result_depth, result_color, result_depth);
 
     // Compute rendered clouds
     // float* result_cloud = (float*) malloc(3 * result_depth.size() * sizeof(float));
@@ -1246,7 +1266,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
       num_poses, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
-    PrintGPUImages(result_depth, result_color, num_poses, "input");
+    // PrintGPUImages(result_depth, result_color, num_poses, "input");
     // PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride);
 
     // // Compute observed cloud
@@ -1369,10 +1389,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   source_depth_image.push_back(1);
   source_depth_image.push_back(1);
   source_depth_image.push_back(1);
-  vector<vector<unsigned char>> source_color_image;
-  cv::Mat source_cv_depth_image;
-  cv::Mat source_cv_color_image;
-  int total_pixel = env_params_.height*env_params_.width;
+  // vector<vector<unsigned char>> source_color_image;
+  // cv::Mat source_cv_depth_image;
+  // cv::Mat source_cv_color_image;
+  // int total_pixel = env_params_.height*env_params_.width;
 
   for(int i =0; i <num_poses; i ++){
     CostComputationOutput cur_unit;
@@ -1386,6 +1406,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     cur_unit.state_properties.source_cost = 0;
     cur_unit.state_properties.last_level_cost = 0;
     cur_unit.depth_image = source_depth_image;
+    std::vector<int32_t>::const_iterator start = result_depth.begin() + i*env_params_.width*env_params_.height;
+    std::vector<int32_t>::const_iterator finish = start + env_params_.width*env_params_.height;
+    std::vector<int32_t> curr_depth_image(start,finish);
+    cur_unit.gpu_depth_image = curr_depth_image;
     output_gpu.push_back(cur_unit);
     // output_gpu[i].color_image = ,
     // output_gpu[i].unadjusted_depth_image,
