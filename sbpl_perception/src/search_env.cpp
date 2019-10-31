@@ -967,7 +967,8 @@ void EnvObjectRecognition::ComputeCostsInParallel(std::vector<CostComputationInp
 
 void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth, 
                                       std::vector<std::vector<uint8_t>>& result_color, 
-                                      int num_poses, string suffix)
+                                      int num_poses, string suffix, 
+                                      vector<int> poses_occluded)
 {
   // for (int j = 0; j < result_depth.size(); j++) {
   //   if (result_depth[j] > 0)
@@ -978,7 +979,7 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
   for(int n = 0; n < num_poses; n ++){
       cv::Mat cv_color = cv::Mat(env_params_.height,env_params_.width,CV_8UC3);
       cv::Mat cv_depth = cv::Mat(env_params_.height,env_params_.width,CV_32SC1);//, result_depth.data() + n*env_params_.height*env_params_.width);
-
+      if (poses_occluded[n]) continue;
       for(int i = 0; i < env_params_.height; i ++){
           for(int j = 0; j < env_params_.width; j ++){
               int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
@@ -1071,7 +1072,8 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                                           const vector<vector<uint8_t>>& source_result_color,
                                           const vector<int32_t>& source_result_depth,
                                           vector<vector<uint8_t>>& result_color,
-                                          vector<int32_t>& result_depth)
+                                          vector<int32_t>& result_depth,
+                                          vector<int>& pose_occluded)
 {
   printf("GetStateImagesGPU() for %d poses\n", objects.size());
   Eigen::Isometry3d cam_z_front, cam_to_body;
@@ -1113,6 +1115,7 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
     model_id_prev = model_id;
 
   }
+  // std::vector<int> pose_occluded;
   auto result_dev = cuda_renderer::render_cuda_multi(
                           tris,
                           mat4_v,
@@ -1123,7 +1126,8 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                           source_result_depth,
                           source_result_color,
                           result_depth, 
-                          result_color);
+                          result_color,
+                          pose_occluded);
 }
 void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
                                                   std::vector<CostComputationOutput> *output,
@@ -1147,6 +1151,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   random_color[1] = random_green;
   random_color[2] = random_blue;
   std::vector<int32_t> random_depth(kCameraWidth * kCameraHeight, 0);
+  std::vector<int> random_poses_occluded(1, 0);
+
 
   std::vector<std::vector<uint8_t>> source_result_color(3);
   source_result_color[0] = random_red;
@@ -1162,8 +1168,11 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   {
     cout << input[0].source_state << endl;
     source_last_object_states.push_back(objects[objects.size() - 1]);
-    GetStateImagesGPU(source_last_object_states, random_color, random_depth, source_result_color, source_result_depth);
-    PrintGPUImages(source_result_depth, source_result_color, 1, "source");
+    GetStateImagesGPU(
+      source_last_object_states, random_color, random_depth, 
+      source_result_color, source_result_depth, random_poses_occluded
+    );
+    PrintGPUImages(source_result_depth, source_result_color, 1, "source", random_poses_occluded);
     // return;
   }
 
@@ -1190,6 +1199,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   std::vector<ObjectState> last_object_states;
   int num_poses = input.size();
   std::vector<int> rendered_cost(num_poses, 0);
+  std::vector<int> poses_occluded(num_poses, 0);
 
   for(int i = 0; i < num_poses; i ++) {
     std::vector<ObjectState> objects = input[i].child_state.object_states();
@@ -1251,7 +1261,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     //                       env_params_.proj_mat, 
     //                       result_depth, result_color);
 
-    GetStateImagesGPU(last_object_states, source_result_color, source_result_depth, result_color, result_depth);
+    GetStateImagesGPU(
+      last_object_states, source_result_color, source_result_depth, 
+      result_color, result_depth, poses_occluded
+    );
 
     // Compute rendered clouds
     // float* result_cloud = (float*) malloc(3 * result_depth.size() * sizeof(float));
@@ -1266,7 +1279,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
       num_poses, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
-    // PrintGPUImages(result_depth, result_color, num_poses, "input");
+    PrintGPUImages(result_depth, result_color, num_poses, "input", poses_occluded);
     // PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride);
 
     // // Compute observed cloud

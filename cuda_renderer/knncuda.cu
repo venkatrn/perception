@@ -370,6 +370,8 @@ bool depth2cloud_global(
         return false;
     }
     cudaDeviceSynchronize();
+
+    // Create mapping from pixel to corresponding index in point cloud
     int mask_back_temp = mask.back();
     thrust::exclusive_scan(mask.begin(), mask.end(), mask.begin(), 0); // in-place scan
     point_num = mask.back() + mask_back_temp;

@@ -208,7 +208,8 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                                         const Model::ROI roi, 
                                         uint8_t* red_entry,uint8_t* green_entry,uint8_t* blue_entry,
                                         int32_t* source_depth_entry,
-                                        uint8_t* source_red_entry,uint8_t* source_green_entry,uint8_t* source_blue_entry) {
+                                        uint8_t* source_red_entry,uint8_t* source_green_entry,uint8_t* source_blue_entry,
+                                        int* pose_occluded_entry) {
                                         // float* l_entry,float* a_entry,float* b_entry){
     // refer to tiny renderer
     // https://github.com/ssloy/tinyrenderer/blob/master/our_gl.cpp
@@ -278,10 +279,18 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
             atomicMin(&depth_to_write, curr_depth);
             int32_t& new_depth = depth_entry[x_to_write+y_to_write*real_width];
             if(new_depth > source_depth && source_depth > 0){
+                // when we are rendering at x,y where source pixel is also present at depth closer to camera
+                // valid condition as source occludes render
                 red_entry[x_to_write+y_to_write*real_width] = source_red;
                 green_entry[x_to_write+y_to_write*real_width] = source_green;
                 blue_entry[x_to_write+y_to_write*real_width] = source_blue;
                 atomicMin(&new_depth, source_depth);
+            }
+            // invalid condition where source pixel is behind and we are rendering a pixel at same x,y with lesser depth 
+            if(new_depth < source_depth && source_depth > 0){
+                // invalid as render occludes source
+                atomicOr(pose_occluded_entry, 1);
+                // printf("Occlusion\n");
             }
         }
     }
@@ -410,7 +419,8 @@ __global__ void render_triangle_multi(
                                 const Model::mat4x4 proj_mat, const Model::ROI roi,
                                 uint8_t* red_image_vec,uint8_t* green_image_vec,uint8_t* blue_image_vec,
                                 int32_t* device_source_depth_vec,
-                                uint8_t* device_source_red_vec,uint8_t* device_source_green_vec,uint8_t* device_source_blue_vec) {
+                                uint8_t* device_source_red_vec,uint8_t* device_source_green_vec,uint8_t* device_source_blue_vec,
+                                int* pose_occluded_vec) {
     size_t pose_i = blockIdx.y;
     int model_id = device_pose_model_map_ptr[pose_i];
     size_t tri_i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -431,6 +441,8 @@ __global__ void render_triangle_multi(
     uint8_t* red_entry = red_image_vec + pose_i*real_width*real_height;
     uint8_t* green_entry = green_image_vec + pose_i*real_width*real_height;
     uint8_t* blue_entry = blue_image_vec + pose_i*real_width*real_height;
+    int* pose_occluded_entry = pose_occluded_vec + pose_i;
+
     Model::mat4x4* pose_entry = device_poses_ptr + pose_i; // length: 16 32bits float
     Model::Triangle* tri_entry = device_tris_ptr + tri_i; // length: 9 32bits float
 
@@ -451,7 +463,8 @@ __global__ void render_triangle_multi(
         local_tri, last_row, depth_entry, width, height, roi,
         red_entry,green_entry,blue_entry,
         device_source_depth_vec,
-        device_source_red_vec, device_source_green_vec, device_source_blue_vec);
+        device_source_red_vec, device_source_green_vec, device_source_blue_vec,
+        pose_occluded_entry);
 }
 __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* blue_in,
                                     uint8_t* red_ob, uint8_t* green_ob,uint8_t* blue_ob, 
@@ -677,8 +690,10 @@ device_vector_holder<int> render_cuda_multi(
                             const std::vector<int32_t>& source_depth,
                             const std::vector<std::vector<uint8_t>>& source_color,
                             std::vector<int32_t>& result_depth, 
-                            std::vector<std::vector<uint8_t>>& result_color) {
+                            std::vector<std::vector<uint8_t>>& result_color,
+                            std::vector<int>& pose_occluded) {
 
+    // Create device inputs
     const Model::ROI roi= {0, 0, 0, 0};
     const size_t threadsPerBlock = 256;
     // std::cout <<tris[0].color.v1;
@@ -730,6 +745,9 @@ device_vector_holder<int> render_cuda_multi(
 
     // atomic min only support int32
     
+    // Create device outputs
+    thrust::device_vector<int> device_pose_occluded(poses.size(), 0);
+
     device_vector_holder<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
     // thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
     thrust::device_vector<uint8_t> device_red_int(poses.size()*real_width*real_height, 0);
@@ -747,6 +765,8 @@ device_vector_holder<int> render_cuda_multi(
     int* device_tris_model_count_low_ptr = thrust::raw_pointer_cast(device_tris_model_count_low.data());
     int* device_tris_model_count_high_ptr = thrust::raw_pointer_cast(device_tris_model_count_high.data());
     // int32_t* depth_image_vec = thrust::raw_pointer_cast(device_depth_int.data());
+
+    int* device_pose_occluded_vec = thrust::raw_pointer_cast(device_pose_occluded.data());
 
     int32_t* device_source_depth_vec = thrust::raw_pointer_cast(device_source_depth.data());
     uint8_t* device_source_red_vec = thrust::raw_pointer_cast(device_source_color_red.data());
@@ -778,9 +798,16 @@ device_vector_holder<int> render_cuda_multi(
                                                     proj_mat, roi,
                                                     red_image_vec,green_image_vec,blue_image_vec,
                                                     device_source_depth_vec,
-                                                    device_source_red_vec, device_source_green_vec, device_source_blue_vec);
+                                                    device_source_red_vec, device_source_green_vec, device_source_blue_vec,
+                                                    device_pose_occluded_vec);
     cudaDeviceSynchronize();
-
+    printf("\n");
+    thrust::copy(
+        device_pose_occluded.begin(),
+        device_pose_occluded.end(), 
+        std::ostream_iterator<int>(std::cout, " ")
+    );
+    thrust::copy(device_pose_occluded.begin(), device_pose_occluded.end(), pose_occluded.begin());
 
     result_depth.resize(poses.size()*real_width*real_height);
     {
