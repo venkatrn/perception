@@ -303,9 +303,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void ComputeCostsInParallel(std::vector<CostComputationInput> &input,
                               std::vector<CostComputationOutput> *output, bool lazy);
 
-  void ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
-                              std::vector<CostComputationOutput> *output, bool lazy);
-
   void PrintValidStates();
 
   void SetDebugOptions(bool image_debug);
@@ -342,13 +339,26 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
   // void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
 
+  // CUDA GPU stuff
+  std::unordered_map<int, std::vector<int32_t>> gpu_depth_image_cache_;
+  std::unordered_map<int, std::vector<std::vector<uint8_t>>> gpu_color_image_cache_;
+  void ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
+                              std::vector<CostComputationOutput> *output, bool lazy);
   vector<int> tris_model_count;
   vector<cuda_renderer::Model::Triangle> tris;
   void PrintGPUImages(vector<int32_t>& result_depth, 
                       vector<vector<uint8_t>>& result_color, 
                       int num_poses, string suffix, 
-                      vector<int> poses_occlude);
-  void PrintGPUClouds(float* cloud, int* result_depth, int* dc_index, int num_poses, int cloud_point_num, int stride);
+                      vector<int> pose_occluded);
+
+  void PrintGPUClouds(float* cloud, 
+                      int* result_depth, 
+                      int* dc_index, 
+                      int num_poses, 
+                      int cloud_point_num, 
+                      int stride,
+                      int* pose_occluded);
+
   void GetStateImagesGPU(const vector<ObjectState>& objects,
                         const vector<vector<uint8_t>>& source_result_color,
                         const vector<int32_t>& source_result_depth,
@@ -396,8 +406,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   /**@brief Mapping from State to State ID**/
   std::unordered_map<int, std::vector<unsigned short>> depth_image_cache_;
-  std::unordered_map<int, std::vector<int32_t>> gpu_depth_image_cache_;
-  std::unordered_map<int, std::vector<std::vector<uint8_t>>> gpu_color_image_cache_;
   std::unordered_map<int, std::vector<int>> succ_cache;
   std::unordered_map<int, std::vector<int>> cost_cache;
   std::unordered_map<int, std::vector<ObjectState>> valid_succ_cache;

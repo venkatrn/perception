@@ -801,14 +801,15 @@ device_vector_holder<int> render_cuda_multi(
                                                     device_source_red_vec, device_source_green_vec, device_source_blue_vec,
                                                     device_pose_occluded_vec);
     cudaDeviceSynchronize();
-    printf("\n");
+    printf("Pose Occlusions\n");
     thrust::copy(
         device_pose_occluded.begin(),
         device_pose_occluded.end(), 
         std::ostream_iterator<int>(std::cout, " ")
     );
+    printf("\n");
     thrust::copy(device_pose_occluded.begin(), device_pose_occluded.end(), pose_occluded.begin());
-
+    
     result_depth.resize(poses.size()*real_width*real_height);
     {
         thrust::device_vector<int32_t> v3(depth_image_vec, depth_image_vec + poses.size()*real_width*real_height);

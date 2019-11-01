@@ -1944,13 +1944,13 @@ def run_sameshape_gpu():
     base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed/Final"
     # base_dir = "/media/sbpl/Data/Aditya/datasets/Zed"
     image_directory = base_dir
-    annotation_file = base_dir + '/instances_newmap1_reduced_2_2018.json'
+    # annotation_file = base_dir + '/instances_newmap1_reduced_2_2018.json'
     # annotation_file = base_dir + '/instances_newmap1_turbosquid_2018.json'
-    # annotation_file = base_dir + '/instances_newmap1_turbosquid_can_only_2018.json'
+    annotation_file = base_dir + '/instances_newmap1_turbosquid_can_only_2018.json'
 
-    # model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
+    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
     # model_dir = "/media/sbpl/Data/Aditya/datasets/turbosquid/models"
-    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models"
+    # model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models"
     fat_image = FATImage(
         coco_annotation_file=annotation_file,
         coco_image_directory=image_directory,
@@ -1968,10 +1968,10 @@ def run_sameshape_gpu():
 
     # required_objects = ['coke_can', 'coke_bottle', 'pepsi_can']
     # required_objects = ['coke_bottle']
-    required_objects = ['010_potted_meat_can', '008_pudding_box']
+    # required_objects = ['010_potted_meat_can', '008_pudding_box']
     # required_objects = ['008_pudding_box']
     # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
-    # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
+    required_objects = ['pepsi_can', 'coke_can', '7up_can']
 
     f_accuracy.write("name ")
 
@@ -1982,8 +1982,8 @@ def run_sameshape_gpu():
     read_results_only = False
     for img_i in range(7,8):
 
-        image_name = 'NewMap1_reduced_2/0000{}.left.png'.format(str(img_i).zfill(2))
-        # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
+        # image_name = 'NewMap1_reduced_2/0000{}.left.png'.format(str(img_i).zfill(2))
+        image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
         image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
         yaw_only_objects, max_min_dict, transformed_annotations = \
                 fat_image.visualize_pose_ros(image_data, annotations, frame='table', camera_optical_frame=False)

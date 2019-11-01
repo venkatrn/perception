@@ -271,7 +271,7 @@ __global__ void add_query_points_norm_and_sqrt(float * array, int width, int pit
     if (xIndex<width && yIndex<k)
         array[yIndex*pitch + xIndex] = sqrt(array[yIndex*pitch + xIndex] + norm[xIndex]);
 }
-__global__ void depth_to_mask(int32_t* depth, int* mask, int width, int height, int stride)
+__global__ void depth_to_mask(int32_t* depth, int* mask, int width, int height, int stride, int* pose_occluded)
 {
     int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/(width/stride));
     int x = (blockIdx.x * blockDim.x + threadIdx.x)%(width/stride);
@@ -283,7 +283,7 @@ __global__ void depth_to_mask(int32_t* depth, int* mask, int width, int height, 
     uint32_t idx_depth = n * width * height + x + y*width;
     uint32_t idx_mask = n * width * height + x + y*width;
 
-    if(depth[idx_depth] > 0) 
+    if(depth[idx_depth] > 0 && !pose_occluded[n]) 
     {
         mask[idx_mask] = 1;
     }
@@ -326,21 +326,21 @@ __global__ void depth_to_cloud(
     // cloud[3*cloud_idx + 2] = z_pcd;
 }
 
-bool depth2cloud_global(
-    int32_t* depth_data,
-    float* &result_cloud,
-    int* &dc_index,
-    int &point_num,
-    int width, 
-    int height, 
-    int num_poses,
-    float kCameraCX, 
-    float kCameraCY, 
-    float kCameraFX, 
-    float kCameraFY,
-    float depth_factor,
-    int stride,
-    int point_dim)
+bool depth2cloud_global(int32_t* depth_data,
+                        float* &result_cloud,
+                        int* &dc_index,
+                        int &point_num,
+                        int width, 
+                        int height, 
+                        int num_poses,
+                        int* pose_occluded,
+                        float kCameraCX, 
+                        float kCameraCY, 
+                        float kCameraFX, 
+                        float kCameraFY,
+                        float depth_factor,
+                        int stride,
+                        int point_dim)
 {
     printf("depth2cloud_global()\n");
     // int size = num_poses * width * height * sizeof(float);
@@ -353,17 +353,21 @@ bool depth2cloud_global(
     // cudaMalloc(&mask, size);
 
     int32_t* depth_data_cuda;
+    int* pose_occluded_cuda;
     // int stride = 5;
     cudaMalloc(&depth_data_cuda, num_poses * width * height * sizeof(int32_t));
     cudaMemcpy(depth_data_cuda, depth_data, num_poses * width * height * sizeof(int32_t), cudaMemcpyHostToDevice);
     
+    cudaMalloc(&pose_occluded_cuda, num_poses * sizeof(int));
+    cudaMemcpy(pose_occluded_cuda, pose_occluded, num_poses * sizeof(int), cudaMemcpyHostToDevice);
+
     dim3 threadsPerBlock(16, 16);
     dim3 numBlocks((width/stride * num_poses + threadsPerBlock.x - 1)/threadsPerBlock.x, (height/stride + threadsPerBlock.y - 1)/threadsPerBlock.y);
 
     thrust::device_vector<int> mask(width*height*num_poses, 0);
     int* mask_ptr = thrust::raw_pointer_cast(mask.data());
 
-    depth_to_mask<<<numBlocks, threadsPerBlock>>>(depth_data_cuda, mask_ptr, width, height, stride);
+    depth_to_mask<<<numBlocks, threadsPerBlock>>>(depth_data_cuda, mask_ptr, width, height, stride, pose_occluded_cuda);
     if (cudaGetLastError() != cudaSuccess) 
     {
         printf("ERROR: Unable to execute kernel\n");

@@ -36,6 +36,7 @@ namespace cuda_renderer {
                             int width, 
                             int height, 
                             int num_poses,
+                            int* pose_occluded,
                             float kCameraCX, 
                             float kCameraCY, 
                             float kCameraFX, 

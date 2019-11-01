@@ -1023,8 +1023,13 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
   
 }
 
-void EnvObjectRecognition::PrintGPUClouds(
-  float* result_cloud, int* result_depth, int* dc_index, int num_poses, int cloud_point_num, int stride)
+void EnvObjectRecognition::PrintGPUClouds(float* result_cloud, 
+                                          int* result_depth, 
+                                          int* dc_index, 
+                                          int num_poses, 
+                                          int cloud_point_num, 
+                                          int stride,
+                                          int* pose_occluded)
 { 
   uint8_t rgb[3] = {0,0,0};
   Eigen::Isometry3d transform;
@@ -1037,6 +1042,7 @@ void EnvObjectRecognition::PrintGPUClouds(
 
   for(int n = 0; n < num_poses; n ++)
   {
+    if(pose_occluded[n]) continue;
     PointCloudPtr cloud(new PointCloud);
     PointCloudPtr transformed_cloud(new PointCloud);
 
@@ -1160,19 +1166,23 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   source_result_color[2] = random_blue;
   // By default source is set to max depth so that nothing happens when we merge with rendered
   std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, 0);
+  int source_id = input[0].source_id;
+
   if (objects.size() == 0)
   {
     cout << "Root Source State\n";
   }
   else
   {
+    cout << "Expanding " << source_id << endl;
     cout << input[0].source_state << endl;
+    cout << "Num objects : " << objects.size() << endl;
     source_last_object_states.push_back(objects[objects.size() - 1]);
     GetStateImagesGPU(
       source_last_object_states, random_color, random_depth, 
       source_result_color, source_result_depth, random_poses_occluded
     );
-    PrintGPUImages(source_result_depth, source_result_color, 1, "source", random_poses_occluded);
+    PrintGPUImages(source_result_depth, source_result_color, 1, "expansion_" + std::to_string(source_id), random_poses_occluded);
     // return;
   }
 
@@ -1250,17 +1260,6 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     std::vector<std::vector<uint8_t>> result_color;
     std::vector<int32_t> result_depth;
 
-    // auto result_dev = cuda_renderer::render_cuda(render_models_[0].tris, cur_transform,
-    //                            env_params_.width, env_params_.height, env_params_.proj_mat, result_depth, result_color);
-    // auto result_dev = cuda_renderer::render_cuda_multi(
-    //                       tris,
-    //                       mat4_v,
-    //                       pose_model_map,
-    //                       tris_model_count,
-    //                       env_params_.width, env_params_.height, 
-    //                       env_params_.proj_mat, 
-    //                       result_depth, result_color);
-
     GetStateImagesGPU(
       last_object_states, source_result_color, source_result_depth, 
       result_color, result_depth, poses_occluded
@@ -1277,10 +1276,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int rendered_point_num;
     cuda_renderer::depth2cloud_global(
       depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
-      num_poses, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
+      num_poses, poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
-    PrintGPUImages(result_depth, result_color, num_poses, "input", poses_occluded);
-    // PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride);
+    PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
+    // PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride, poses_occluded.data());
 
     // // Compute observed cloud
     // free(dc_index);
@@ -1291,9 +1290,9 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int observed_point_num;
     cuda_renderer::depth2cloud_global(
       observed_depth_data, result_observed_cloud, observed_dc_index, observed_point_num, env_params_.width, env_params_.height, 
-      1, kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
+      1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
-    // PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, stride);
+    // PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, stride, random_poses_occluded.data());
 
     // Do KNN
     int k = 1;
@@ -1306,23 +1305,31 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     );
     // cuda_renderer::knn_test(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, point_dim, k, knn_dist, knn_index);
     for(int n = 0; n < num_poses; n ++){
+      // For every pixel in every pose, check if the corresponding point in the cloud has neighbour within tolerance
       float total_count = 0.0;
       float avg_distance = 0.0;
-      for(int i = 0; i < env_params_.height; i = i + stride){
-          for(int j = 0; j < env_params_.width; j = j + stride){
-            int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
-            int cloud_index = dc_index[index];
-            if (result_depth[index] > 0)
-            {
-              // printf("dist:%f\n", knn_dist[cloud_index]);
-              total_count += 1;
-              avg_distance += knn_dist[cloud_index];
-              if (knn_dist[cloud_index] > 0.005)
+      if (poses_occluded[n])
+      {
+        rendered_cost[n] = -1;
+      }
+      else
+      {
+        for(int i = 0; i < env_params_.height; i = i + stride){
+            for(int j = 0; j < env_params_.width; j = j + stride){
+              int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
+              int cloud_index = dc_index[index];
+              if (result_depth[index] > 0)
               {
-                rendered_cost[n] += 1;
+                // printf("dist:%f\n", knn_dist[cloud_index]);
+                total_count += 1;
+                avg_distance += knn_dist[cloud_index];
+                if (knn_dist[cloud_index] > 0.005)
+                {
+                  rendered_cost[n] += 1;
+                }
               }
             }
-          }
+        }
       }
       // rendered_cost[n] = rendered_cost[n]/total_count * 100;
       avg_distance /= total_count;
