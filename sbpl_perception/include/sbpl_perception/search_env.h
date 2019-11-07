@@ -59,6 +59,7 @@
 #include <sbpl_perception/ColorSpace/Comparison.h>
 #include <chrono>
 #include <thread>
+#include <fstream>
 
 int *difffilter(const cv::Mat& input,const cv::Mat& input1, cv::Mat& output);
 namespace sbpl_perception {
@@ -357,14 +358,16 @@ class EnvObjectRecognition : public EnvironmentMHA {
                       int num_poses, 
                       int cloud_point_num, 
                       int stride,
-                      int* pose_occluded);
+                      int* pose_occluded,
+                      string suffix);
 
   void GetStateImagesGPU(const vector<ObjectState>& objects,
                         const vector<vector<uint8_t>>& source_result_color,
                         const vector<int32_t>& source_result_depth,
                         vector<vector<uint8_t>>& result_color,
                         vector<int32_t>& result_depth,
-                        vector<int>& pose_occluded);
+                        vector<int>& pose_occluded,
+                        int single_result_image);
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
 

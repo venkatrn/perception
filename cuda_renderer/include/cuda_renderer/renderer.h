@@ -245,7 +245,8 @@ device_vector_holder<int> render_cuda_multi(
                             const std::vector<std::vector<uint8_t>>& source_result_color,
                             std::vector<int32_t>& result_depth, 
                             std::vector<std::vector<uint8_t>>& result_color,
-                            std::vector<int>& pose_occluded);
+                            std::vector<int>& pose_occluded,
+                            int single_result_image);
 
 device_vector_holder<int> render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
                             size_t width, size_t height, const Model::mat4x4& proj_mat, 
