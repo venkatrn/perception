@@ -1090,23 +1090,30 @@ void EnvObjectRecognition::GetICPAdjustedPosesGPU(float* result_rendered_clouds,
                                                   int total_rendered_point_num,
                                                   int* poses_occluded)
 {
-  int num_points_first_pose = dc_index[env_params_.width * env_params_.height-1];
-  int num_points_observed = observed_dc_index[env_params_.width * env_params_.height-1];
-  // printf("Number of scene points : %d\n", num_points_observed);
+  int num_points_observed = observed_dc_index[env_params_.width * env_params_.height-1];  
+  // #pragma omp parallel for
+  for (int i = 0; i < num_poses-1; i++)
+  {
+    int n = i;
+    int begin_points_curr_pose = dc_index[n*env_params_.width * env_params_.height];
+    int end_points_curr_pose = dc_index[(n+1)*env_params_.width * env_params_.height];
+    int num_points_curr_pose = end_points_curr_pose - begin_points_curr_pose;
+    printf("Number of target points (c++): %d\n", num_points_curr_pose);
 
-  ICP* icp_gpu = new ICP(result_observed_cloud, 
-                        num_points_observed,
-                        result_rendered_clouds,
-                        num_points_first_pose,
-                        total_rendered_point_num);
+    ICP* icp_gpu = new ICP(result_observed_cloud, 
+                          num_points_observed,
+                          result_rendered_clouds,
+                          begin_points_curr_pose,
+                          end_points_curr_pose,
+                          total_rendered_point_num);
 
-  float* rendered_icp_adjusted_cloud = (float*) malloc(3 * num_points_first_pose * sizeof(float));
-  icp_gpu->iterateGPU(rendered_icp_adjusted_cloud);
-  // icp_gpu->endSimulation();
-  free(icp_gpu);
-  PrintGPUClouds(rendered_icp_adjusted_cloud, depth_data, dc_index, 1, num_points_first_pose, 1, poses_occluded, "icp");
-
-
+    float* rendered_icp_adjusted_cloud = (float*) malloc(3 * num_points_curr_pose * sizeof(float));
+    icp_gpu->iterateGPU(rendered_icp_adjusted_cloud);
+    // icp_gpu->endSimulation();
+    // PrintGPUClouds(rendered_icp_adjusted_cloud, depth_data, dc_index, 1, num_points_curr_pose, 1, poses_occluded, "icp");
+    free(rendered_icp_adjusted_cloud);
+    free(icp_gpu);
+  }
 }
 void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                                           const vector<vector<uint8_t>>& source_result_color,
@@ -1268,15 +1275,15 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int32_t* depth_data = result_depth.data();
     float depth_factor = 100.0;
     int point_dim = 3;
-    int stride = 8;
+    int stride = 4;
     int rendered_point_num;
     cuda_renderer::depth2cloud_global(
       depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
       num_poses, poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
     // PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
-    if (root_level)
-    PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride, poses_occluded.data(), "rendered");
+    // if (root_level)
+    // PrintGPUClouds(result_cloud, depth_data, dc_index, num_poses, rendered_point_num, stride, poses_occluded.data(), "rendered");
 
     // // Compute observed cloud
     // free(dc_index);
@@ -1289,8 +1296,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       observed_depth_data, result_observed_cloud, observed_dc_index, observed_point_num, env_params_.width, env_params_.height, 
       1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
-    if (root_level)
-      PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, stride, random_poses_occluded.data(), "observed");
+    // if (root_level)
+      // PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, stride, random_poses_occluded.data(), "observed");
 
     if (root_level)
     {
@@ -4839,8 +4846,6 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
       GraphState empty_state;
       GraphState committed_state;
       double total_score = 0;
-      #pragma omp parallel for
-
       for (int model_id : model_ids) {
 
         auto model_bank_it = model_bank_.find(obj_models_[model_id].name());
@@ -4857,14 +4862,14 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
         cout << "Greedy ICP for model: " << model_id << endl;
         int model_succ_count = 0;
 
-        #pragma omp parallel for
+        // #pragma omp parallel for
         for (double x = env_params_.x_min; x <= env_params_.x_max;
             x += search_resolution) {
-          #pragma omp parallel for
+          // #pragma omp parallel for
 
           for (double y = env_params_.y_min; y <= env_params_.y_max;
               y += search_resolution) {
-            #pragma omp parallel for
+            // #pragma omp parallel for
 
             for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
               ContPose p_in(x, y, env_params_.table_height, 0.0, 0.0, theta);
@@ -4952,7 +4957,7 @@ GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
     GraphState empty_state;
     GraphState committed_state;
     double total_score = 0;
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (int model_id : model_ids) {
 
       auto model_bank_it = model_bank_.find(obj_models_[model_id].name());
@@ -5390,13 +5395,13 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
         int succ_count = 0;
         if (source_state.object_states().size() == 0)
         {
-          #pragma omp parallel for
+          // #pragma omp parallel for
           for (double x = env_params_.x_min; x <= env_params_.x_max;
               x += res) {
-            #pragma omp parallel for
+            // #pragma omp parallel for
             for (double y = env_params_.y_min; y <= env_params_.y_max;
                 y += res) {
-              #pragma omp parallel for
+              // #pragma omp parallel for
               // for (double pitch = 0; pitch < M_PI; pitch+=M_PI/2) {
               for (double theta = 0; theta < 2 * M_PI; theta += env_params_.theta_res) {
                 // ContPose p(x, y, env_params_.table_height, 0.0, pitch, theta);

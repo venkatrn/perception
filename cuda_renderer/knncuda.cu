@@ -419,6 +419,7 @@ bool depth2cloud_global(int32_t* depth_data,
     printf("depth2cloud_global() Done\n");
     cudaFree(depth_data_cuda);
     cudaFree(cuda_cloud);
+    cudaFree(pose_occluded_cuda);
     return true;
 }
 bool knn_cuda_global(const float * ref,

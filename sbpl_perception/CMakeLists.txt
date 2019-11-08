@@ -17,7 +17,7 @@ endif()
 if(USE_CUDA)
 # cuda
 find_package(CUDA REQUIRED)
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -O3")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -O3 -fopenmp --default-stream per-thread")
 list(APPEND renderer_inc ${CUDA_INCLUDE_DIRS})
 list(APPEND renderer_lib ${CUDA_LIBRARIES})
 endif()
@@ -27,7 +27,7 @@ endif()
 
 
 set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -fopenmp")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_COLOR_MAKEFILE ON)
 # set(ROS_COMPILE_FLAGS "-W -Wno-reorder")
