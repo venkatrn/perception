@@ -1057,6 +1057,7 @@ void EnvObjectRecognition::PrintGPUClouds(float* result_cloud,
           pcl::PointXYZRGB point;
           int index = n*env_params_.width*env_params_.height + (i*env_params_.width + j);
           int cloud_index = dc_index[index];
+          // printf("for image:(%d,%d,%d), cloud_index:%d\n", n,i,j, cloud_index);
           if (result_depth[index] > 0)
           {
             // printf("x:%f,y:%f,z:%f\n", result_cloud[3*index], result_cloud[3*index + 1], result_cloud[3*index + 2]);
@@ -1079,6 +1080,33 @@ void EnvObjectRecognition::PrintGPUClouds(float* result_cloud,
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     myfile.close();
   }
+}
+void EnvObjectRecognition::GetICPAdjustedPosesGPU(float* result_rendered_clouds,
+                                                  int* dc_index,
+                                                  int32_t* depth_data,
+                                                  int num_poses,
+                                                  float* result_observed_cloud,
+                                                  int* observed_dc_index,
+                                                  int total_rendered_point_num,
+                                                  int* poses_occluded)
+{
+  int num_points_first_pose = dc_index[env_params_.width * env_params_.height-1];
+  int num_points_observed = observed_dc_index[env_params_.width * env_params_.height-1];
+  // printf("Number of scene points : %d\n", num_points_observed);
+
+  ICP* icp_gpu = new ICP(result_observed_cloud, 
+                        num_points_observed,
+                        result_rendered_clouds,
+                        num_points_first_pose,
+                        total_rendered_point_num);
+
+  float* rendered_icp_adjusted_cloud = (float*) malloc(3 * num_points_first_pose * sizeof(float));
+  icp_gpu->iterateGPU(rendered_icp_adjusted_cloud);
+  // icp_gpu->endSimulation();
+  free(icp_gpu);
+  PrintGPUClouds(rendered_icp_adjusted_cloud, depth_data, dc_index, 1, num_points_first_pose, 1, poses_occluded, "icp");
+
+
 }
 void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                                           const vector<vector<uint8_t>>& source_result_color,
@@ -1201,25 +1229,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   }
 
 
-  // concat all model triangles
-  // std::vector<cuda_renderer::Model::Triangle> tris, source_tris;
 
-  // // store which pose is for which model
-  // std::vector<int> pose_model_map, source_pose_model_map;
-
-  // // store num of triangles in each model
-  // std::vector<int> tris_model_count, source_tris_model_count;
-
-  // int model_id_prev = input[0].child_id;
-  // Eigen::Isometry3d cam_z_front;
-  // Eigen::Isometry3d cam_to_body;
-  // cam_to_body.matrix() << 0, 0, 1, 0,
-  //                   -1, 0, 0, 0,
-  //                   0, -1, 0, 0,
-  //                   0, 0, 0, 1;
-  // cam_z_front = cam_to_world_ * cam_to_body;
-  
-  // Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
   std::vector<ObjectState> last_object_states;
   int num_poses = input.size();
   std::vector<int> rendered_cost(num_poses, 0);
@@ -1228,35 +1238,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   for(int i = 0; i < num_poses; i ++) {
     std::vector<ObjectState> objects = input[i].child_state.object_states();
     last_object_states.push_back(objects[objects.size() - 1]);
-    // // for(int n=0; n < objects.size();n++){
-    // // Take the last object
-    // int n = objects.size() - 1;
-    // int model_id = objects[n].id();
-    // ContPose cur = objects[n].cont_pose();
-    // Eigen::Matrix4d preprocess_transform = 
-    //   obj_models_[model_id].preprocessing_transform().matrix().cast<double>();
-    // // contposes.push_back(cur);
-    // // std::cout<<cur<<std::endl;
-    // Eigen::Matrix4d transform;
-    // transform = cur.ContPose::GetTransform().matrix().cast<double>();
-    // transform = preprocess_transform * transform;
 
-    // Eigen::Matrix4d pose_in_cam = cam_matrix*transform;
-    // // std::cout<<transform<<std::endl;
-    // // std::cout<<cam_matrix<<std::endl;
-    // cuda_renderer::Model::mat4x4 mat4;
-    // mat4.init_from_eigen(pose_in_cam, 100);
-    // mat4_v.push_back(mat4);
-    // pose_model_map.push_back(model_id);
-    // if (i == 0 || model_id != model_id_prev)
-    // {
-    //   // collect triangles in one vector. need to do only once for every object
-    //   tris.insert(tris.end(), render_models_[model_id].tris.begin(), render_models_[model_id].tris.end());
-    //   tris_model_count.push_back(render_models_[model_id].tris.size());
-    // }
-    // // cout << model_id << endl;
-    // model_id_prev = model_id;
-    // // }
   }
 
   // std::cout << "exclusive sum: ";
@@ -1308,8 +1290,19 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, point_dim
     );
     if (root_level)
-    PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, stride, random_poses_occluded.data(), "observed");
+      PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, stride, random_poses_occluded.data(), "observed");
 
+    if (root_level)
+    {
+      GetICPAdjustedPosesGPU(result_cloud,
+                            dc_index,
+                            depth_data,
+                            num_poses,
+                            result_observed_cloud,
+                            observed_dc_index,
+                            rendered_point_num,
+                            poses_occluded.data());
+    }
     // Do KNN
     int k = 1;
     float* knn_dist   = (float*) malloc(rendered_point_num * k * sizeof(float));

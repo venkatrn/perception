@@ -60,6 +60,9 @@
 #include <chrono>
 #include <thread>
 #include <fstream>
+#include <cuda_icp_custom/kernel.h>
+#include <cuda_icp_custom/kdtree.hpp>
+// #include <cuda_icp_custom/pointcloud.h>
 
 int *difffilter(const cv::Mat& input,const cv::Mat& input1, cv::Mat& output);
 namespace sbpl_perception {
@@ -368,6 +371,16 @@ class EnvObjectRecognition : public EnvironmentMHA {
                         vector<int32_t>& result_depth,
                         vector<int>& pose_occluded,
                         int single_result_image);
+
+  void GetICPAdjustedPosesGPU(float* result_rendered_clouds,
+                              int* dc_index,
+                              int32_t* depth_data,
+                              int num_poses,
+                              float* result_observed_cloud,
+                              int* observed_dc_index,
+                              int total_rendered_points,
+                              int* poses_occluded);
+
   // We should get rid of this eventually.
   friend class ObjectRecognizer;
 

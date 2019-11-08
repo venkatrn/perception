@@ -51,6 +51,7 @@ find_package(catkin REQUIRED COMPONENTS
   kinect_sim
   cuda_renderer
   cuda_icp
+  cuda_icp_custom
   perception_utils
   pcl_ros
   roscpp
@@ -136,6 +137,7 @@ catkin_package(
     kinect_sim
     cuda_renderer
     cuda_icp
+    cuda_icp_custom
     perception_utils
     pcl_ros
     roscpp
