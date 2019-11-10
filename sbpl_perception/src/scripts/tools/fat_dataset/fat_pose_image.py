@@ -1969,10 +1969,10 @@ def run_sameshape_gpu():
     # required_objects = ['coke_can', 'coke_bottle', 'pepsi_can']
     # required_objects = ['coke_bottle']
     # required_objects = ['010_potted_meat_can', '008_pudding_box']
-    # required_objects = ['008_pudding_box']
+    # required_objects = ['010_potted_meat_can']
     # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
-    # required_objects = ['pepsi_can', 'coke_can', '7up_can']
-    required_objects = ['pepsi_can']
+    # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
+    required_objects = ['pepsi_can', 'coke_can', '7up_can']
 
     f_accuracy.write("name ")
 

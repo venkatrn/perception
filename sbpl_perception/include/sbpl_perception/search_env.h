@@ -63,6 +63,7 @@
 #include <cuda_icp_custom/kernel.h>
 #include <cuda_icp_custom/kdtree.hpp>
 // #include <cuda_icp_custom/pointcloud.h>
+#include <numeric>
 
 int *difffilter(const cv::Mat& input,const cv::Mat& input1, cv::Mat& output);
 namespace sbpl_perception {
@@ -350,19 +351,25 @@ class EnvObjectRecognition : public EnvironmentMHA {
                               std::vector<CostComputationOutput> *output, bool lazy);
   vector<int> tris_model_count;
   vector<cuda_renderer::Model::Triangle> tris;
+  float gpu_depth_factor = 100.0;
+  int gpu_point_dim = 3;
+  int gpu_stride = 4;
   void PrintGPUImages(vector<int32_t>& result_depth, 
                       vector<vector<uint8_t>>& result_color, 
                       int num_poses, string suffix, 
                       vector<int> pose_occluded);
 
-  void PrintGPUClouds(float* cloud, 
+  void PrintGPUClouds(const vector<ObjectState>& objects,
+                      float* cloud, 
                       int* result_depth, 
                       int* dc_index, 
                       int num_poses, 
                       int cloud_point_num, 
                       int stride,
                       int* pose_occluded,
-                      string suffix);
+                      string suffix,
+                      vector<ObjectState>& modified_objects,
+                      bool do_icp);
 
   void GetStateImagesGPU(const vector<ObjectState>& objects,
                         const vector<vector<uint8_t>>& source_result_color,

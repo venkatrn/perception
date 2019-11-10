@@ -812,12 +812,12 @@ device_vector_holder<int> render_cuda_multi(
     // Initialize rendered images with source images
     dim3 block(16,16);
     dim3 grid((real_width*num_images + block.x - 1)/block.x, (real_height + block.y - 1)/block.y);
-    copy_source_to_render<<<grid,block>>>(red_image_vec,green_image_vec,blue_image_vec,
-                                depth_image_vec,
-                                device_source_red_vec, device_source_green_vec, device_source_blue_vec,
-                                device_source_depth_vec,
-                                width,height,num_images);
-    cudaDeviceSynchronize();
+    // copy_source_to_render<<<grid,block>>>(red_image_vec,green_image_vec,blue_image_vec,
+    //                             depth_image_vec,
+    //                             device_source_red_vec, device_source_green_vec, device_source_blue_vec,
+    //                             device_source_depth_vec,
+    //                             width,height,num_images);
+    // cudaDeviceSynchronize();
 
     // Render all poses
     dim3 numBlocks((tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
