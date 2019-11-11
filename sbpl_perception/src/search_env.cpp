@@ -1083,16 +1083,16 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
     cloud->height = cloud->points.size();
     cloud->is_dense = false;
     transformPointCloud (*cloud, *transformed_cloud, transform.matrix().cast<float>());
-    PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
+    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     if (do_icp)
     {
       GetICPAdjustedPose(transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels);
       // cout << "pose_in " << pose_in << endl;
       // cout << "pose_out " << pose_out << endl;
-      PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      // PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
+      // std::this_thread::sleep_for(std::chrono::milliseconds(500));
       ObjectState modified_object_state(objects[n].id(),
                                             objects[n].symmetric(), pose_out);
       modified_objects.push_back(modified_object_state);
@@ -1168,7 +1168,7 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
       obj_models_[model_id].preprocessing_transform().matrix().cast<double>();
     Eigen::Matrix4d transform;
     transform = cur.ContPose::GetTransform().matrix().cast<double>();
-    transform = preprocess_transform * transform;
+    transform = transform * preprocess_transform;
     Eigen::Matrix4d pose_in_cam = cam_matrix * transform;
     cuda_renderer::Model::mat4x4 mat4;
     mat4.init_from_eigen(pose_in_cam, 100);
@@ -1245,7 +1245,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       source_last_object_states, random_color, random_depth, 
       source_result_color, source_result_depth, random_poses_occluded, 1
     );
-    PrintGPUImages(source_result_depth, source_result_color, 1, "expansion_" + std::to_string(source_id), random_poses_occluded);
+    // PrintGPUImages(source_result_depth, source_result_color, 1, "expansion_" + std::to_string(source_id), random_poses_occluded);
     // return;
   }
 
@@ -1300,7 +1300,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       result_color, result_depth, poses_occluded, 0
     );
 
-    PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
+    // PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
 
 
     // // Compute observed cloud
@@ -1362,7 +1362,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
           num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
         );
         
-        PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
 
         // GetICPAdjustedPosesGPU(result_cloud,
         //                       dc_index,
