@@ -281,13 +281,25 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
             if(new_depth > source_depth && source_depth > 0){
                 // when we are rendering at x,y where source pixel is also present at depth closer to camera
                 // valid condition as source occludes render
-                red_entry[x_to_write+y_to_write*real_width] = source_red;
-                green_entry[x_to_write+y_to_write*real_width] = source_green;
-                blue_entry[x_to_write+y_to_write*real_width] = source_blue;
-                atomicMin(&new_depth, source_depth);
+                // if (false)
+                // {
+                //     // add source pixels
+                //     red_entry[x_to_write+y_to_write*real_width] = source_red;
+                //     green_entry[x_to_write+y_to_write*real_width] = source_green;
+                //     blue_entry[x_to_write+y_to_write*real_width] = source_blue;
+                //     atomicMin(&new_depth, source_depth);
+                // }
+                // else
+                // {
+                    // add black
+                    red_entry[x_to_write+y_to_write*real_width] = 0;
+                    green_entry[x_to_write+y_to_write*real_width] = 0;
+                    blue_entry[x_to_write+y_to_write*real_width] = 0;
+                    atomicMin(&new_depth, INT_MAX);
+                // }
             }
             // invalid condition where source pixel is behind and we are rendering a pixel at same x,y with lesser depth 
-            if(new_depth < source_depth && source_depth > 0){
+            else if(new_depth <= source_depth && source_depth > 0){
                 // invalid as render occludes source
                 atomicOr(pose_occluded_entry, 1);
                 // printf("Occlusion\n");
