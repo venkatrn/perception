@@ -1046,7 +1046,10 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
                     0, -1, 0, 0,
                     0, 0, 0, 1;
   transform = cam_to_world_ * cam_to_body;
+  ObjectState temp;
+  modified_objects.resize(objects.size(), temp);
 
+  #pragma omp parallel for
   for(int n = 0; n < num_poses; n ++)
   {
     if(pose_occluded[n]) continue;
@@ -1095,7 +1098,7 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
       // std::this_thread::sleep_for(std::chrono::milliseconds(500));
       ObjectState modified_object_state(objects[n].id(),
                                             objects[n].symmetric(), pose_out);
-      modified_objects.push_back(modified_object_state);
+      modified_objects[n] = modified_object_state;
     }
     // myfile.close();
   }
