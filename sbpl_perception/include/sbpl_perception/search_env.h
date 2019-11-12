@@ -354,6 +354,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   float gpu_depth_factor = 100.0;
   int gpu_point_dim = 3;
   int gpu_stride = 4;
+  float* result_observed_cloud;
+  int observed_point_num;
+  int* observed_dc_index;
+  int32_t* observed_depth_data;
   void PrintGPUImages(vector<int32_t>& result_depth, 
                       vector<vector<uint8_t>>& result_color, 
                       int num_poses, string suffix, 
