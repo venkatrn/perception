@@ -737,22 +737,22 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
 
     succ_cache[source_state_id].push_back(candidate_succ_ids[ii]);
     costs->push_back(candidate_costs[ii]);
-    image_debug_=false;
+    // image_debug_=false;
     if (image_debug_) {
-      std::stringstream ss;
-      ss.precision(20);
-      ss << debug_dir_ + "succ_depth_" << candidate_succ_ids[ii] << ".png";
-      std::stringstream ssc;
-      ssc.precision(20);
-      ssc << debug_dir_ + "succ_color_" << candidate_succ_ids[ii] << ".png";
-      //PrintImage(ss.str(), output_unit.depth_image);
-      PrintState(output_unit.adjusted_state , ss.str(), ssc.str());
+      // std::stringstream ss;
+      // ss.precision(20);
+      // ss << debug_dir_ + "succ_depth_" << candidate_succ_ids[ii] << ".png";
+      // std::stringstream ssc;
+      // ssc.precision(20);
+      // ssc << debug_dir_ + "succ_color_" << candidate_succ_ids[ii] << ".png";
+      // //PrintImage(ss.str(), output_unit.depth_image);
+      // PrintState(output_unit.adjusted_state , ss.str(), ssc.str());
 
-      uint8_t rgb[3] = {255,0,0};
+      // uint8_t rgb[3] = {255,0,0};
+      // // auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
+      // //                                      output_unit.depth_image, output_unit.color_image);
       // auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
-      //                                      output_unit.depth_image, output_unit.color_image);
-      auto gravity_aligned_point_cloud = GetGravityAlignedPointCloud(
-          output_unit.depth_image, rgb);
+      //     output_unit.depth_image, rgb);
       // PrintPointCloud(gravity_aligned_point_cloud, candidate_succ_ids[ii], render_point_cloud_topic);
 
       printf("State %d,       %d      %d      %d      %d      %d\n",
@@ -1263,8 +1263,9 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   vector<ObjectState> modified_last_object_states;
 
   int num_poses = input.size();
-  std::vector<int> rendered_cost(num_poses, -1);
-  std::vector<int> last_level_cost(num_poses, -1);
+  std::vector<int> rendered_cost(num_poses, 0);
+  std::vector<int> last_level_cost(num_poses, 0);
+  std::vector<int> observed_cost(num_poses, 0);
   std::vector<int> poses_occluded(num_poses, 0);
   std::vector<int> adjusted_poses_occluded(num_poses, 0);
 
@@ -1333,6 +1334,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     
     float* result_cloud;
     int* dc_index;
+    int* cloud_pose_map;
     int32_t* depth_data = result_depth.data();
     int rendered_point_num;
     int k = 1;
@@ -1341,7 +1343,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     if (num_valid_poses > 0)
     {
       cuda_renderer::depth2cloud_global(
-        depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
+        depth_data, result_cloud, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
         num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
       );
 
@@ -1366,7 +1368,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         poses_occluded_ptr = adjusted_poses_occluded.data();
 
         cuda_renderer::depth2cloud_global(
-          depth_data, result_cloud, dc_index, rendered_point_num, env_params_.width, env_params_.height, 
+          depth_data, result_cloud, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
           num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
         );
         
@@ -1388,11 +1390,25 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       // int observed_nb = env_params_.width * env_params_.height;
       // int rendered_nb = num_poses * env_params_.width * env_params_.height;
       cuda_renderer::knn_cuda_global(
-        result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, gpu_point_dim, k, knn_dist, knn_index
+        result_observed_cloud, observed_point_num, result_cloud, 
+        rendered_point_num, gpu_point_dim, k, knn_dist, knn_index
       );
       // }
       // cuda_renderer::knn_test(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, gpu_point_dim, k, knn_dist, knn_index);
       cout << "KNN done\n";
+      // float* rendered_cost_gpu;
+      // float sensor_resolution = 0.01;
+      // cuda_renderer::compute_cost(
+      //   sensor_resolution, knn_dist, knn_index, poses_occluded_ptr, cloud_pose_map,
+      //   result_observed_cloud, rendered_point_num, num_poses, rendered_cost_gpu
+      // );
+      Eigen::Isometry3d transform;
+      Eigen::Isometry3d cam_to_body;
+      cam_to_body.matrix() << 0, 0, 1, 0,
+                        -1, 0, 0, 0,
+                        0, -1, 0, 0,
+                        0, 0, 0, 1;
+      transform = cam_to_world_ * cam_to_body;
       for(int n = 0; n < num_poses; n ++){
         // For every pixel in every pose, check if the corresponding point in the cloud has neighbour within tolerance
         float total_count = 0.0;
@@ -1401,6 +1417,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         {
           rendered_cost[n] = -1;
           last_level_cost[n] = -1;
+          observed_cost[n] = -1;
           avg_distance = INT_MAX;
         }
         else
@@ -1421,14 +1438,58 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
                   }
                   else
                   {
-                    // mark coressponding observed point as explained
+                    // mark coressponding observed point as explained because they have neighbour in render
                     observed_mask[knn_index[cloud_index]] = 1;
                   }
                 }
               }
           }
           // last_level_cost[n] = observed_point_num - rendered_cost[n];
-          last_level_cost[n] = accumulate(observed_mask.begin(), observed_mask.end(), 0);
+          if (last_level)
+          {
+            // number of unexplained points left in observed at last level
+            last_level_cost[n] = observed_point_num - accumulate(observed_mask.begin(), observed_mask.end(), 0);
+          }
+          else
+          {
+            ContPose cur;
+            if (root_level)
+              cur = modified_last_object_states[n].cont_pose();
+            else
+              cur = last_object_states[n].cont_pose();
+            float pose_x = cur.x();
+            float pose_y = cur.y();
+            for (int i = 0; i < observed_point_num; i++)
+            {
+              if (observed_mask[i] == 0)
+              {
+                //if the point is unexplained
+                float x = result_observed_cloud[i + 0*observed_point_num];
+                float y = result_observed_cloud[i + 1*observed_point_num];
+                float z = result_observed_cloud[i + 2*observed_point_num];
+                // printf("x:%f, y:%f, z:%f\n", x, y, z);
+
+                Eigen::Vector4f point, transformed_point;
+                point << x, y, z, 1;
+                transformed_point = transform.matrix().cast<float>() * point;
+                transformed_point[0] /= transformed_point[3];
+                transformed_point[1] /= transformed_point[3];
+                // printf("x:%f, y:%f, z:%f\n", point[0], point[1], point[2]);
+                float distance = sqrt(pow(transformed_point[0]-pose_x, 2) + pow(transformed_point[1]-pose_y,2));
+                // printf("distance : %f\n", distance);
+                if (distance < 0.05)
+                {
+                  observed_cost[n] += 1;
+                }
+              }
+            }
+          }
+          float r_c = 1.0 * rendered_cost[n] / total_count;
+          float l_c = 1.0 * last_level_cost[n] / observed_point_num;
+          float o_c = 1.0 * observed_cost[n] / observed_point_num;
+          rendered_cost[n] = r_c * 100;
+          last_level_cost[n] = l_c * 100;
+          observed_cost[n] = o_c * 100;
         }
         // if (rendered_cost[n] != -1)
         // rendered_cost[n] = rendered_cost[n]/total_count * 100;
@@ -1436,6 +1497,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         printf("average_distance:%f\n", avg_distance);
         printf("render cost:%d\n", rendered_cost[n]);
         printf("last level cost:%d\n", last_level_cost[n]);
+        printf("observed cost:%d\n", observed_cost[n]);
       }
     }
 
@@ -1467,12 +1529,12 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     {
       if (last_level)
       {
-        cur_unit.cost = rendered_cost[i] + last_level_cost[i];
+        cur_unit.cost = rendered_cost[i] + last_level_cost[i] + observed_cost[i];
         // cur_unit.cost = rendered_cost[i];
       }
       else
       {
-        cur_unit.cost = rendered_cost[i];
+        cur_unit.cost = rendered_cost[i] + observed_cost[i];
       }
     }
     if (root_level)
@@ -1488,17 +1550,17 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       cur_unit.adjusted_state.mutable_object_states()[input[i].child_state.object_states().size()-1] 
         = last_object_states[i];
     }
-    cur_unit.state_properties.last_max_depth = kKinectMaxDepth;
+    cur_unit.state_properties.last_max_depth = 0;
     cur_unit.state_properties.last_min_depth = 0;
     // cur_unit.state_properties.target_cost =  total_result_cost[i];
     cur_unit.state_properties.target_cost =  rendered_cost[i];
-    cur_unit.state_properties.source_cost = 0;
-    cur_unit.state_properties.last_level_cost = 0;
+    cur_unit.state_properties.source_cost = observed_cost[i];
+    cur_unit.state_properties.last_level_cost = last_level_cost[i];
     cur_unit.depth_image = source_depth_image;
-    std::vector<int32_t>::const_iterator start = result_depth.begin() + i*env_params_.width*env_params_.height;
-    std::vector<int32_t>::const_iterator finish = start + env_params_.width*env_params_.height;
-    std::vector<int32_t> curr_depth_image(start,finish);
-    cur_unit.gpu_depth_image = curr_depth_image;
+    // std::vector<int32_t>::const_iterator start = result_depth.begin() + i*env_params_.width*env_params_.height;
+    // std::vector<int32_t>::const_iterator finish = start + env_params_.width*env_params_.height;
+    // std::vector<int32_t> curr_depth_image(start,finish);
+    // cur_unit.gpu_depth_image = curr_depth_image;
     output_gpu.push_back(cur_unit);
     // output_gpu[i].color_image = ,
     // output_gpu[i].unadjusted_depth_image,
@@ -4657,9 +4719,10 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
       observed_depth_data = cv_input_filtered_depth_image.ptr<int>(0);
       observed_point_num;
       std::vector<int> random_poses_occluded(1, 0);
+      int * cloud_pose_map;
 
       cuda_renderer::depth2cloud_global(
-        observed_depth_data, result_observed_cloud, observed_dc_index, observed_point_num, env_params_.width, env_params_.height, 
+        observed_depth_data, result_observed_cloud, observed_dc_index, observed_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
         1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
       );
       // PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, gpu_stride, random_poses_occluded.data(), "observed");

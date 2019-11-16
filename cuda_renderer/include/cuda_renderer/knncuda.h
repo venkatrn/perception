@@ -25,6 +25,9 @@
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/copy.h>
 
 namespace cuda_renderer {
     
@@ -33,6 +36,7 @@ namespace cuda_renderer {
                             float* &result_cloud, 
                             int* &dc_index,
                             int &point_num,
+                            int* &cloud_pose_map,
                             int width, 
                             int height, 
                             int num_poses,
@@ -45,11 +49,16 @@ namespace cuda_renderer {
                             int stride,
                             int point_dim);
 
-    // bool depth2cloud_global(
-    //     std::vector<int32_t> result_depth,  
-    //     int width, 
-    //     int height, 
-    //     cv::Mat cam_intrinsics);
+    bool compute_cost(
+        float &sensor_resolution,
+        float* knn_dist,
+        int* knn_index,
+        int* poses_occluded,
+        int* cloud_pose_map,
+        float* result_observed_cloud,
+        int point_num,
+        int num_poses,
+        float* &rendered_cost);
 
     bool knn_cuda_global(const float * ref,
                         int           ref_nb,

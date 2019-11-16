@@ -271,7 +271,8 @@ __global__ void add_query_points_norm_and_sqrt(float * array, int width, int pit
     if (xIndex<width && yIndex<k)
         array[yIndex*pitch + xIndex] = sqrt(array[yIndex*pitch + xIndex] + norm[xIndex]);
 }
-__global__ void depth_to_mask(int32_t* depth, int* mask, int width, int height, int stride, int* pose_occluded)
+__global__ void depth_to_mask(
+    int32_t* depth, int* mask, int width, int height, int stride, int* pose_occluded)
 {
     int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/(width/stride));
     int x = (blockIdx.x * blockDim.x + threadIdx.x)%(width/stride);
@@ -290,9 +291,9 @@ __global__ void depth_to_mask(int32_t* depth, int* mask, int width, int height, 
 }
 
 __global__ void depth_to_cloud(
-    int32_t* depth, float* cloud, int cloud_point_num, int* mask, int width, int height, 
+    int32_t* depth, float* cloud, int cloud_rendered_cloud_point_num, int* mask, int width, int height, 
     float kCameraCX, float kCameraCY, float kCameraFX, float kCameraFY, float depth_factor,
-    int stride)
+    int stride, int* cloud_pose_map)
 {
     int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/(width/stride));
     int x = (blockIdx.x * blockDim.x + threadIdx.x)%(width/stride);
@@ -318,9 +319,12 @@ __global__ void depth_to_cloud(
     // printf("x:%d,y:%d, x_pcd:%f, y_pcd:%f, z_pcd:%f\n", x,y,x_pcd, y_pcd, z_pcd);
     uint32_t idx_mask = n * width * height + x + y*width;
     int cloud_idx = mask[idx_mask];
-    cloud[cloud_idx + 0*cloud_point_num] = x_pcd;
-    cloud[cloud_idx + 1*cloud_point_num] = y_pcd;
-    cloud[cloud_idx + 2*cloud_point_num] = z_pcd;
+    cloud[cloud_idx + 0*cloud_rendered_cloud_point_num] = x_pcd;
+    cloud[cloud_idx + 1*cloud_rendered_cloud_point_num] = y_pcd;
+    cloud[cloud_idx + 2*cloud_rendered_cloud_point_num] = z_pcd;
+    cloud_pose_map[cloud_idx] = n;
+    // printf("cloud_idx:%d\n", cloud_pose_map[cloud_idx]);
+
     // cloud[3*cloud_idx + 0] = x_pcd;
     // cloud[3*cloud_idx + 1] = y_pcd;
     // cloud[3*cloud_idx + 2] = z_pcd;
@@ -329,7 +333,8 @@ __global__ void depth_to_cloud(
 bool depth2cloud_global(int32_t* depth_data,
                         float* &result_cloud,
                         int* &dc_index,
-                        int &point_num,
+                        int &rendered_cloud_point_num,
+                        int* &cloud_pose_map,
                         int width, 
                         int height, 
                         int num_poses,
@@ -378,22 +383,31 @@ bool depth2cloud_global(int32_t* depth_data,
     // Create mapping from pixel to corresponding index in point cloud
     int mask_back_temp = mask.back();
     thrust::exclusive_scan(mask.begin(), mask.end(), mask.begin(), 0); // in-place scan
-    point_num = mask.back() + mask_back_temp;
-    printf("Actual points in all clouds : %d\n", point_num);
+    rendered_cloud_point_num = mask.back() + mask_back_temp;
+    printf("Actual points in all clouds : %d\n", rendered_cloud_point_num);
 
     float* cuda_cloud;
-    cudaMalloc(&cuda_cloud, point_dim * point_num * sizeof(float));
-    result_cloud = (float*) malloc(point_dim * point_num * sizeof(float));
+    int* cuda_cloud_pose_map;
+    cudaMalloc(&cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float));
+    cudaMalloc(&cuda_cloud_pose_map, rendered_cloud_point_num * sizeof(int));
+
+    result_cloud = (float*) malloc(point_dim * rendered_cloud_point_num * sizeof(float));
     dc_index = (int*) malloc(num_poses * width * height * sizeof(int));
+    cloud_pose_map = (int*) malloc(rendered_cloud_point_num * sizeof(int));
 
     depth_to_cloud<<<numBlocks, threadsPerBlock>>>(
-                        depth_data_cuda, cuda_cloud, point_num, mask_ptr, width, height, 
-                        kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride);
+                        depth_data_cuda, cuda_cloud, rendered_cloud_point_num, mask_ptr, width, height, 
+                        kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map);
         
     cudaDeviceSynchronize();
-    cudaMemcpy(result_cloud, cuda_cloud, point_dim * point_num * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(result_cloud, cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(dc_index, mask_ptr, num_poses * width * height * sizeof(int), cudaMemcpyDeviceToHost);
-
+    cudaMemcpy(cloud_pose_map, cuda_cloud_pose_map, rendered_cloud_point_num * sizeof(int), cudaMemcpyDeviceToHost);
+    // for (int i = 0; i < rendered_cloud_point_num; i++)
+    // {
+    //     printf("%d ", cloud_pose_map[i]);
+    // }
+    // printf("\n");
     // for(int n = 0; n < num_poses; n ++)
     // {
     //     for(int i = 0; i < height; i ++)
@@ -420,6 +434,113 @@ bool depth2cloud_global(int32_t* depth_data,
     cudaFree(depth_data_cuda);
     cudaFree(cuda_cloud);
     cudaFree(pose_occluded_cuda);
+    return true;
+}
+__global__ void compute_render_cost(
+        float* cuda_knn_dist,
+        int* cuda_cloud_pose_map,
+        int* cuda_poses_occluded,
+        float* cuda_rendered_cost,
+        float sensor_resolution,
+        int rendered_cloud_point_num
+    )
+{
+    size_t point_index = blockIdx.x*blockDim.x + threadIdx.x;
+    if(point_index >= rendered_cloud_point_num) return;
+
+    int pose_index = cuda_cloud_pose_map[point_index];
+    if (cuda_poses_occluded[pose_index])
+    {
+        cuda_rendered_cost[pose_index] = -1;
+    }
+    else
+    {
+        if (cuda_knn_dist[point_index] > sensor_resolution)
+        {
+            atomicAdd(&cuda_rendered_cost[pose_index], 1);
+        }
+    }
+}
+bool compute_cost(
+    float &sensor_resolution,
+    float* knn_dist,
+    int* knn_index,
+    int* poses_occluded,
+    int* cloud_pose_map,
+    float* result_observed_cloud,
+    int rendered_cloud_point_num,
+    int num_poses,
+    float* &rendered_cost
+)
+{
+    for (int i = 0; i < num_poses; i++)
+    {
+        printf("%d ", poses_occluded[i]);
+    }
+    // printf("\n");
+    printf("compute_cost()\n");
+
+    float* cuda_knn_dist;
+    // float* cuda_sensor_resolution;
+    int* cuda_poses_occluded;
+    int* cuda_cloud_pose_map;
+    float* cuda_rendered_cost;
+
+    const unsigned int size_of_float = sizeof(float);
+    const unsigned int size_of_int   = sizeof(int);
+
+    cudaMalloc(&cuda_knn_dist, rendered_cloud_point_num * size_of_float);
+    cudaMalloc(&cuda_cloud_pose_map, rendered_cloud_point_num * size_of_int);
+    cudaMalloc(&cuda_poses_occluded, num_poses * size_of_int);
+    thrust::device_vector<float> cuda_rendered_cost_vec(num_poses, 0);
+    cuda_rendered_cost = thrust::raw_pointer_cast(cuda_rendered_cost_vec.data());
+    // cudaMalloc(&cuda_rendered_cost, num_poses * size_of_int);
+
+    cudaMemcpy(cuda_knn_dist, knn_dist, rendered_cloud_point_num * size_of_float, cudaMemcpyHostToDevice);
+    cudaMemcpy(cuda_cloud_pose_map, cloud_pose_map, rendered_cloud_point_num * size_of_int, cudaMemcpyHostToDevice);
+    cudaMemcpy(cuda_poses_occluded, poses_occluded, num_poses * size_of_int, cudaMemcpyHostToDevice);
+    // cudaMemcpy(cuda_sensor_resolution, &sensor_resolution, size_of_float, cudaMemcpyHostToDevice);
+    // cudaMemset(cuda_rendered_cost, 0, num_poses * size_of_int);
+
+    const size_t threadsPerBlock = 256;
+    dim3 numBlocks((rendered_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
+    compute_render_cost<<<numBlocks, threadsPerBlock>>>(
+        cuda_knn_dist,
+        cuda_cloud_pose_map,
+        cuda_poses_occluded,
+        cuda_rendered_cost,
+        sensor_resolution,
+        rendered_cloud_point_num
+    );
+
+    if (cudaGetLastError() != cudaSuccess) {
+        printf("ERROR: Unable to execute kernel\n");
+        cudaFree(cuda_knn_dist);
+        cudaFree(cuda_cloud_pose_map); 
+        cudaFree(cuda_poses_occluded); 
+        cudaFree(cuda_rendered_cost); 
+        return false;
+    }
+
+    thrust::device_vector<float> rendered_divider_val(num_poses, rendered_cloud_point_num);
+    // thrust::transform(
+    //     cuda_rendered_cost_vec.begin(), cuda_rendered_cost_vec.end(), 
+    //     rendered_divider_val.begin(), cuda_rendered_cost_vec.begin(), 
+    //     thrust::divides<float>()
+    // );
+    rendered_cost = (float*) malloc(num_poses * size_of_float);
+    cudaMemcpy(rendered_cost, cuda_rendered_cost, num_poses * size_of_float, cudaMemcpyDeviceToHost);
+
+    for (int i = 0; i < num_poses; i++)
+    {
+        printf("%f ", rendered_cost[i]);
+    }
+    printf("\n");
+
+    cudaFree(cuda_knn_dist);
+    cudaFree(cuda_cloud_pose_map); 
+    cudaFree(cuda_poses_occluded); 
+    // cudaFree(cuda_rendered_cost); 
     return true;
 }
 bool knn_cuda_global(const float * ref,
