@@ -442,7 +442,8 @@ __global__ void compute_render_cost(
         int* cuda_poses_occluded,
         float* cuda_rendered_cost,
         float sensor_resolution,
-        int rendered_cloud_point_num
+        int rendered_cloud_point_num,
+        float* cuda_pose_point_num
     )
 {
     size_t point_index = blockIdx.x*blockDim.x + threadIdx.x;
@@ -455,6 +456,7 @@ __global__ void compute_render_cost(
     }
     else
     {
+        atomicAdd(&cuda_pose_point_num[pose_index], 1);
         if (cuda_knn_dist[point_index] > sensor_resolution)
         {
             atomicAdd(&cuda_rendered_cost[pose_index], 1);
@@ -473,10 +475,10 @@ bool compute_cost(
     float* &rendered_cost
 )
 {
-    for (int i = 0; i < num_poses; i++)
-    {
-        printf("%d ", poses_occluded[i]);
-    }
+    // for (int i = 0; i < num_poses; i++)
+    // {
+    //     printf("%d ", poses_occluded[i]);
+    // }
     // printf("\n");
     printf("compute_cost()\n");
 
@@ -485,6 +487,7 @@ bool compute_cost(
     int* cuda_poses_occluded;
     int* cuda_cloud_pose_map;
     float* cuda_rendered_cost;
+    float* cuda_pose_point_num;
 
     const unsigned int size_of_float = sizeof(float);
     const unsigned int size_of_int   = sizeof(int);
@@ -494,7 +497,8 @@ bool compute_cost(
     cudaMalloc(&cuda_poses_occluded, num_poses * size_of_int);
     thrust::device_vector<float> cuda_rendered_cost_vec(num_poses, 0);
     cuda_rendered_cost = thrust::raw_pointer_cast(cuda_rendered_cost_vec.data());
-    // cudaMalloc(&cuda_rendered_cost, num_poses * size_of_int);
+    thrust::device_vector<float> cuda_pose_point_num_vec(num_poses, 0);
+    cuda_pose_point_num = thrust::raw_pointer_cast(cuda_pose_point_num_vec.data());
 
     cudaMemcpy(cuda_knn_dist, knn_dist, rendered_cloud_point_num * size_of_float, cudaMemcpyHostToDevice);
     cudaMemcpy(cuda_cloud_pose_map, cloud_pose_map, rendered_cloud_point_num * size_of_int, cudaMemcpyHostToDevice);
@@ -510,7 +514,8 @@ bool compute_cost(
         cuda_poses_occluded,
         cuda_rendered_cost,
         sensor_resolution,
-        rendered_cloud_point_num
+        rendered_cloud_point_num,
+        cuda_pose_point_num
     );
 
     if (cudaGetLastError() != cudaSuccess) {
@@ -522,21 +527,27 @@ bool compute_cost(
         return false;
     }
 
-    thrust::device_vector<float> rendered_divider_val(num_poses, rendered_cloud_point_num);
-    // thrust::transform(
-    //     cuda_rendered_cost_vec.begin(), cuda_rendered_cost_vec.end(), 
-    //     rendered_divider_val.begin(), cuda_rendered_cost_vec.begin(), 
-    //     thrust::divides<float>()
-    // );
+    thrust::transform(
+        cuda_rendered_cost_vec.begin(), cuda_rendered_cost_vec.end(), 
+        cuda_pose_point_num_vec.begin(), cuda_rendered_cost_vec.begin(), 
+        thrust::divides<float>()
+    );
+    thrust::device_vector<float> rendered_multiplier_val(num_poses, 100);
+    thrust::transform(
+        cuda_rendered_cost_vec.begin(), cuda_rendered_cost_vec.end(), 
+        rendered_multiplier_val.begin(), cuda_rendered_cost_vec.begin(), 
+        thrust::multiplies<float>()
+    );
     rendered_cost = (float*) malloc(num_poses * size_of_float);
     cudaMemcpy(rendered_cost, cuda_rendered_cost, num_poses * size_of_float, cudaMemcpyDeviceToHost);
 
-    for (int i = 0; i < num_poses; i++)
-    {
-        printf("%f ", rendered_cost[i]);
-    }
-    printf("\n");
+    // for (int i = 0; i < num_poses; i++)
+    // {
+    //     printf("%f ", rendered_cost[i]);
+    // }
+    // printf("\n");
 
+    printf("compute_cost() done\n");
     cudaFree(cuda_knn_dist);
     cudaFree(cuda_cloud_pose_map); 
     cudaFree(cuda_poses_occluded); 

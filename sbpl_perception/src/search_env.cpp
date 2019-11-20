@@ -1264,6 +1264,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
 
   int num_poses = input.size();
   std::vector<int> rendered_cost(num_poses, 0);
+  float* rendered_cost_gpu;
   std::vector<int> last_level_cost(num_poses, 0);
   std::vector<int> observed_cost(num_poses, 0);
   std::vector<int> poses_occluded(num_poses, 0);
@@ -1396,109 +1397,115 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       // }
       // cuda_renderer::knn_test(result_observed_cloud, observed_point_num, result_cloud, rendered_point_num, gpu_point_dim, k, knn_dist, knn_index);
       cout << "KNN done\n";
-      // float* rendered_cost_gpu;
-      // float sensor_resolution = 0.01;
-      // cuda_renderer::compute_cost(
-      //   sensor_resolution, knn_dist, knn_index, poses_occluded_ptr, cloud_pose_map,
-      //   result_observed_cloud, rendered_point_num, num_poses, rendered_cost_gpu
-      // );
-      Eigen::Isometry3d transform;
-      Eigen::Isometry3d cam_to_body;
-      cam_to_body.matrix() << 0, 0, 1, 0,
-                        -1, 0, 0, 0,
-                        0, -1, 0, 0,
-                        0, 0, 0, 1;
-      transform = cam_to_world_ * cam_to_body;
-      for(int n = 0; n < num_poses; n ++){
-        // For every pixel in every pose, check if the corresponding point in the cloud has neighbour within tolerance
-        float total_count = 0.0;
-        float avg_distance = 0.0;
-        if (poses_occluded_ptr[n])
-        {
-          rendered_cost[n] = -1;
-          last_level_cost[n] = -1;
-          observed_cost[n] = -1;
-          avg_distance = INT_MAX;
-        }
-        else
-        {
-          vector<int> observed_mask(observed_point_num, 0);
-          for(int i = 0; i < env_params_.height; i = i + gpu_stride){
-              for(int j = 0; j < env_params_.width; j = j + gpu_stride){
-                int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
-                int cloud_index = dc_index[index];
-                if (depth_data[index] > 0)
-                {
-                  // printf("dist:%f\n", knn_dist[cloud_index]);
-                  total_count += 1;
-                  avg_distance += knn_dist[cloud_index];
-                  if (knn_dist[cloud_index] > 0.01)
-                  {
-                    rendered_cost[n] += 1;
-                  }
-                  else
-                  {
-                    // mark coressponding observed point as explained because they have neighbour in render
-                    observed_mask[knn_index[cloud_index]] = 1;
-                  }
-                }
-              }
-          }
-          // last_level_cost[n] = observed_point_num - rendered_cost[n];
-          if (last_level)
-          {
-            // number of unexplained points left in observed at last level
-            last_level_cost[n] = observed_point_num - accumulate(observed_mask.begin(), observed_mask.end(), 0);
-          }
-          else
-          {
-            ContPose cur;
-            if (root_level)
-              cur = modified_last_object_states[n].cont_pose();
-            else
-              cur = last_object_states[n].cont_pose();
-            float pose_x = cur.x();
-            float pose_y = cur.y();
-            for (int i = 0; i < observed_point_num; i++)
-            {
-              if (observed_mask[i] == 0)
-              {
-                //if the point is unexplained
-                float x = result_observed_cloud[i + 0*observed_point_num];
-                float y = result_observed_cloud[i + 1*observed_point_num];
-                float z = result_observed_cloud[i + 2*observed_point_num];
-                // printf("x:%f, y:%f, z:%f\n", x, y, z);
+      float sensor_resolution = 0.01;
+      cuda_renderer::compute_cost(
+        sensor_resolution, knn_dist, knn_index, poses_occluded_ptr, cloud_pose_map,
+        result_observed_cloud, rendered_point_num, num_poses, rendered_cost_gpu
+      );
+      // Eigen::Isometry3d transform;
+      // Eigen::Isometry3d cam_to_body;
+      // cam_to_body.matrix() << 0, 0, 1, 0,
+      //                   -1, 0, 0, 0,
+      //                   0, -1, 0, 0,
+      //                   0, 0, 0, 1;
+      // transform = cam_to_world_ * cam_to_body;
+      // for(int n = 0; n < num_poses; n ++){
+      //   // For every pixel in every pose, check if the corresponding point in the cloud has neighbour within tolerance
+      //   float total_count = 0.0;
+      //   float avg_distance = 0.0;
+      //   if (poses_occluded_ptr[n])
+      //   {
+      //     rendered_cost[n] = -1;
+      //     last_level_cost[n] = -1;
+      //     observed_cost[n] = -1;
+      //     avg_distance = INT_MAX;
+      //   }
+      //   else
+      //   {
+      //     vector<int> observed_mask(observed_point_num, 0);
+      //     for(int i = 0; i < env_params_.height; i = i + gpu_stride){
+      //         for(int j = 0; j < env_params_.width; j = j + gpu_stride){
+      //           int index = n*env_params_.width*env_params_.height+(i*env_params_.width+j);
+      //           int cloud_index = dc_index[index];
+      //           if (depth_data[index] > 0)
+      //           {
+      //             // printf("dist:%f\n", knn_dist[cloud_index]);
+      //             total_count += 1;
+      //             avg_distance += knn_dist[cloud_index];
+      //             if (knn_dist[cloud_index] > 0.01)
+      //             {
+      //               rendered_cost[n] += 1;
+      //             }
+      //             else
+      //             {
+      //               // mark coressponding observed point as explained because they have neighbour in render
+      //               observed_mask[knn_index[cloud_index]] = 1;
+      //             }
+      //           }
+      //         }
+      //     }
+      //     // last_level_cost[n] = observed_point_num - rendered_cost[n];
+      //     int total_points_in_cylinder = 0;
+      //     if (last_level)
+      //     {
+      //       // number of unexplained points left in observed at last level
+      //       // wrong because this should take into account all objects in the rendered scene
+      //       last_level_cost[n] = observed_point_num - accumulate(observed_mask.begin(), observed_mask.end(), 0);
+      //     }
+      //     else
+      //     {
+      //       ContPose cur;
+      //       if (root_level)
+      //         cur = modified_last_object_states[n].cont_pose();
+      //       else
+      //         cur = last_object_states[n].cont_pose();
+      //       float pose_x = cur.x();
+      //       float pose_y = cur.y();
+      //       for (int i = 0; i < observed_point_num; i++)
+      //       {
+      //         // if (observed_mask[i] == 0)
+      //         // {
+      //           //if the point is unexplained
+      //         float x = result_observed_cloud[i + 0*observed_point_num];
+      //         float y = result_observed_cloud[i + 1*observed_point_num];
+      //         float z = result_observed_cloud[i + 2*observed_point_num];
+      //         // printf("x:%f, y:%f, z:%f\n", x, y, z);
 
-                Eigen::Vector4f point, transformed_point;
-                point << x, y, z, 1;
-                transformed_point = transform.matrix().cast<float>() * point;
-                transformed_point[0] /= transformed_point[3];
-                transformed_point[1] /= transformed_point[3];
-                // printf("x:%f, y:%f, z:%f\n", point[0], point[1], point[2]);
-                float distance = sqrt(pow(transformed_point[0]-pose_x, 2) + pow(transformed_point[1]-pose_y,2));
-                // printf("distance : %f\n", distance);
-                if (distance < 0.05)
-                {
-                  observed_cost[n] += 1;
-                }
-              }
-            }
-          }
-          float r_c = 1.0 * rendered_cost[n] / total_count;
-          float l_c = 1.0 * last_level_cost[n] / observed_point_num;
-          float o_c = 1.0 * observed_cost[n] / observed_point_num;
-          rendered_cost[n] = r_c * 100;
-          last_level_cost[n] = l_c * 100;
-          observed_cost[n] = o_c * 100;
-        }
-        // if (rendered_cost[n] != -1)
-        // rendered_cost[n] = rendered_cost[n]/total_count * 100;
-        avg_distance /= total_count;
-        printf("average_distance:%f\n", avg_distance);
-        printf("render cost:%d\n", rendered_cost[n]);
-        printf("last level cost:%d\n", last_level_cost[n]);
-        printf("observed cost:%d\n", observed_cost[n]);
-      }
+      //         Eigen::Vector4f point, transformed_point;
+      //         point << x, y, z, 1;
+      //         transformed_point = transform.matrix().cast<float>() * point;
+      //         // transformed_point[0] /= transformed_point[3];
+      //         // transformed_point[1] /= transformed_point[3];
+      //         // printf("x:%f, y:%f, z:%f\n", point[0], point[1], point[2]);
+      //         float distance = sqrt(pow(transformed_point[0]-pose_x, 2) + pow(transformed_point[1]-pose_y,2));
+      //         // printf("distance : %f\n", distance);
+      //         if (distance < 0.08 && observed_mask[i] == 0)
+      //         {
+      //           // lies within cylinder and is unexplained already
+      //           observed_cost[n] += 1;
+      //         }
+      //         if (distance < 0.08)
+      //         {
+      //           total_points_in_cylinder += 1;
+      //         }
+      //         // }
+      //       }
+      //     }
+      //     float r_c = 1.0 * rendered_cost[n] / total_count;
+      //     float l_c = 1.0 * last_level_cost[n] / observed_point_num;
+      //     float o_c = 1.0 * observed_cost[n] / total_points_in_cylinder;
+      //     rendered_cost[n] = r_c * 100;
+      //     last_level_cost[n] = l_c * 100;
+      //     observed_cost[n] = o_c * 100;
+      //   }
+      //   // if (rendered_cost[n] != -1)
+      //   // rendered_cost[n] = rendered_cost[n]/total_count * 100;
+      //   avg_distance /= total_count;
+      //   printf("average_distance:%f\n", avg_distance);
+      //   printf("render cost:%d\n", rendered_cost[n]);
+      //   printf("last level cost:%d\n", last_level_cost[n]);
+      //   printf("observed cost:%d\n", observed_cost[n]);
+      // }
     }
 
   assert(output != nullptr);
@@ -1529,12 +1536,13 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     {
       if (last_level)
       {
-        cur_unit.cost = rendered_cost[i] + last_level_cost[i] + observed_cost[i];
-        // cur_unit.cost = rendered_cost[i];
+        cur_unit.cost = (int) rendered_cost_gpu[i] + last_level_cost[i] + observed_cost[i];
+        // cur_unit.cost = rendered_cost[i] + last_level_cost[i] + observed_cost[i];
       }
       else
       {
-        cur_unit.cost = rendered_cost[i] + observed_cost[i];
+        // cur_unit.cost = rendered_cost[i] + observed_cost[i];
+        cur_unit.cost = (int) rendered_cost_gpu[i] + observed_cost[i];
       }
     }
     if (root_level)
@@ -1553,7 +1561,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     cur_unit.state_properties.last_max_depth = 0;
     cur_unit.state_properties.last_min_depth = 0;
     // cur_unit.state_properties.target_cost =  total_result_cost[i];
-    cur_unit.state_properties.target_cost =  rendered_cost[i];
+    // cur_unit.state_properties.target_cost =  rendered_cost[i];
+    cur_unit.state_properties.target_cost =  (int) rendered_cost_gpu[i];
     cur_unit.state_properties.source_cost = observed_cost[i];
     cur_unit.state_properties.last_level_cost = last_level_cost[i];
     cur_unit.depth_image = source_depth_image;
