@@ -1025,6 +1025,7 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
 
 void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
                                           float* result_cloud, 
+                                          uint8_t* result_cloud_color,
                                           int* result_depth, 
                                           int* dc_index, 
                                           int num_poses, 
@@ -1046,15 +1047,16 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
                     0, -1, 0, 0,
                     0, 0, 0, 1;
   transform = cam_to_world_ * cam_to_body;
-  ObjectState temp;
-  modified_objects.resize(objects.size(), temp);
-
+  if (objects.size() > 0)
+  {
+    ObjectState temp;
+    modified_objects.resize(objects.size(), temp);
+  }
   #pragma omp parallel for
   for(int n = 0; n < num_poses; n ++)
   {
     if(pose_occluded[n]) continue;
-    ContPose pose_in = objects[n].cont_pose();
-    ContPose pose_out;
+
     // myfile.open(suffix + "_" + to_string(n) + ".txt");
     PointCloudPtr cloud(new PointCloud);
     PointCloudPtr transformed_cloud(new PointCloud);
@@ -1074,6 +1076,10 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
             point.x = result_cloud[cloud_index + 0*cloud_point_num];
             point.y = result_cloud[cloud_index + 1*cloud_point_num];
             point.z = result_cloud[cloud_index + 2*cloud_point_num];
+            rgb[2] = result_cloud_color[cloud_index + 0*cloud_point_num];
+            rgb[1] = result_cloud_color[cloud_index + 1*cloud_point_num];
+            rgb[0] = result_cloud_color[cloud_index + 2*cloud_point_num];
+            // uint32_t rgbc = ((uint32_t)rgb[2] << 16 | (uint32_t)rgb[1]<< 8 | (uint32_t)rgb[0]);
             uint32_t rgbc = ((uint32_t)rgb[2] << 16 | (uint32_t)rgb[1]<< 8 | (uint32_t)rgb[0]);
             point.rgb = *reinterpret_cast<float*>(&rgbc);
 
@@ -1086,11 +1092,13 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
     cloud->height = cloud->points.size();
     cloud->is_dense = false;
     transformPointCloud (*cloud, *transformed_cloud, transform.matrix().cast<float>());
-    // PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
-    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
     if (do_icp)
     {
+      ContPose pose_in = objects[n].cont_pose();
+      ContPose pose_out;
       GetICPAdjustedPose(transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels);
       // cout << "pose_in " << pose_in << endl;
       // cout << "pose_out " << pose_out << endl;
@@ -1334,6 +1342,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       // Compute clouds needed for Pre-icp
     
     float* result_cloud;
+    uint8_t* result_cloud_color;
     int* dc_index;
     int* cloud_pose_map;
     int32_t* depth_data = result_depth.data();
@@ -1344,7 +1353,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     if (num_valid_poses > 0)
     {
       cuda_renderer::depth2cloud_global(
-        depth_data, result_cloud, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
+        depth_data, result_color, result_cloud, result_cloud_color, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
         num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
       );
 
@@ -1352,7 +1361,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       if (root_level && true)
       {
         PrintGPUClouds(
-          last_object_states, result_cloud, depth_data, dc_index, 
+          last_object_states, result_cloud, result_cloud_color, depth_data, dc_index, 
           num_poses, rendered_point_num, gpu_stride, poses_occluded_ptr, "rendered",
           modified_last_object_states, true
         );
@@ -1369,7 +1378,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         poses_occluded_ptr = adjusted_poses_occluded.data();
 
         cuda_renderer::depth2cloud_global(
-          depth_data, result_cloud, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
+          depth_data, adjusted_result_color, result_cloud, result_cloud_color, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
           num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
         );
         
@@ -3382,7 +3391,11 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
   printf("GetGravityAlignedPointCloudCV()\n");
   cv::Size s = depth_image.size();
   cv::Mat filtered_depth_image(s.height, s.width, CV_32SC1, cv::Scalar(0));
-  // std::cout << "depth_image size " << s << endl;
+  cv::Mat filtered_color_image = cv::Mat(s.height, s.width, CV_8UC3, cv::Scalar(0,0,0));
+  vector<uint8_t> r_vec(s.height * s.width, 0);
+  vector<uint8_t> g_vec(s.height * s.width, 0);
+  vector<uint8_t> b_vec(s.height * s.width, 0);
+// std::cout << "depth_image size " << s << endl;
   // std::cout<<cam_to_world_.matrix()<<endl;
   Eigen::Isometry3d transform;
   if (env_params_.use_external_render == 1) {
@@ -3404,6 +3417,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       pcl::PointXYZRGB point;
 
       // https://stackoverflow.com/questions/8932893/accessing-certain-pixel-rgb-value-in-opencv
+      cv::Vec3b cv_vec = color_image.at<cv::Vec3b>(v,u);
       uint32_t rgbc = ((uint32_t)color_image.at<cv::Vec3b>(v,u)[2] << 16 | (uint32_t)color_image.at<cv::Vec3b>(v,u)[1]<< 8 | (uint32_t)color_image.at<cv::Vec3b>(v,u)[0]);
       point.rgb = *reinterpret_cast<float*>(&rgbc);
       // printf("depth data : %f\n", static_cast<float>(depth_image.at<uchar>(v,u)));
@@ -3441,6 +3455,10 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
           {
             cloud->points.push_back(point);
             filtered_depth_image.at<int32_t>(v,u) = static_cast<int32_t>(depth_image.at<uchar>(v,u));
+            filtered_color_image.at<cv::Vec3b>(v,u) = color_image.at<cv::Vec3b>(v,u);
+            r_vec[u + v * s.width] = static_cast<uchar>(cv_vec[2]);
+            g_vec[u + v * s.width] = static_cast<uchar>(cv_vec[1]);
+            b_vec[u + v * s.width] = static_cast<uchar>(cv_vec[0]);
             // if (static_cast<int32_t>(depth_image.at<uchar>(v,u)/255) > 0)
             // printf("%d\n", static_cast<int32_t>(depth_image.at<uchar>(v,u)/255));
           }
@@ -3452,8 +3470,13 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       }
     }
   }
-  cv::imwrite("test_filter.png", filtered_depth_image);
+  // cv::imwrite("test_filter_depth.png", filtered_depth_image);
   cv_input_filtered_depth_image = filtered_depth_image;
+  cv_input_filtered_color_image = filtered_color_image;
+  cv_input_filtered_color_image_vec.push_back(r_vec);
+  cv_input_filtered_color_image_vec.push_back(g_vec);
+  cv_input_filtered_color_image_vec.push_back(b_vec);
+  // cv::imwrite("test_filter_color.png", filtered_color_image);
   cloud->width = 1;
   cloud->height = cloud->points.size();
   cloud->is_dense = false;
@@ -4724,17 +4747,24 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     #ifdef CUDA_ON
       // depthCVToShort(cv_depth_image, &depth_image);
       result_observed_cloud = (float*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(float));
+      result_observed_cloud_color = (uint8_t*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(uint8_t));
       observed_dc_index;
       observed_depth_data = cv_input_filtered_depth_image.ptr<int>(0);
       observed_point_num;
       std::vector<int> random_poses_occluded(1, 0);
       int * cloud_pose_map;
+      std::vector<ObjectState> last_object_states;
+      vector<ObjectState> modified_last_object_states;
 
       cuda_renderer::depth2cloud_global(
-        observed_depth_data, result_observed_cloud, observed_dc_index, observed_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
+        observed_depth_data, cv_input_filtered_color_image_vec, result_observed_cloud, result_observed_cloud_color, observed_dc_index, observed_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
         1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
       );
-      // PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, gpu_stride, random_poses_occluded.data(), "observed");
+      PrintGPUClouds(
+        last_object_states, result_observed_cloud, result_observed_cloud_color, 
+        observed_depth_data, observed_dc_index, 1, 
+        observed_point_num, gpu_stride, random_poses_occluded.data(), "observed",
+        modified_last_object_states, false);
 
     #endif
 

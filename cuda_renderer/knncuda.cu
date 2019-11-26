@@ -291,7 +291,7 @@ __global__ void depth_to_mask(
 }
 
 __global__ void depth_to_cloud(
-    int32_t* depth, float* cloud, int cloud_rendered_cloud_point_num, int* mask, int width, int height, 
+    int32_t* depth, uint8_t* r_in, uint8_t* g_in, uint8_t* b_in, float* cloud, uint8_t* cloud_color, int cloud_rendered_cloud_point_num, int* mask, int width, int height, 
     float kCameraCX, float kCameraCY, float kCameraFX, float kCameraFY, float depth_factor,
     int stride, int* cloud_pose_map)
 {
@@ -322,6 +322,11 @@ __global__ void depth_to_cloud(
     cloud[cloud_idx + 0*cloud_rendered_cloud_point_num] = x_pcd;
     cloud[cloud_idx + 1*cloud_rendered_cloud_point_num] = y_pcd;
     cloud[cloud_idx + 2*cloud_rendered_cloud_point_num] = z_pcd;
+
+    cloud_color[cloud_idx + 0*cloud_rendered_cloud_point_num] = r_in[idx_depth];
+    cloud_color[cloud_idx + 1*cloud_rendered_cloud_point_num] = g_in[idx_depth];
+    cloud_color[cloud_idx + 2*cloud_rendered_cloud_point_num] = b_in[idx_depth];
+
     cloud_pose_map[cloud_idx] = n;
     // printf("cloud_idx:%d\n", cloud_pose_map[cloud_idx]);
 
@@ -331,7 +336,9 @@ __global__ void depth_to_cloud(
 }
 
 bool depth2cloud_global(int32_t* depth_data,
+                        std::vector<std::vector<u_int8_t>>& color_data,
                         float* &result_cloud,
+                        uint8_t* &result_cloud_color,
                         int* &dc_index,
                         int &rendered_cloud_point_num,
                         int* &cloud_pose_map,
@@ -375,7 +382,7 @@ bool depth2cloud_global(int32_t* depth_data,
     depth_to_mask<<<numBlocks, threadsPerBlock>>>(depth_data_cuda, mask_ptr, width, height, stride, pose_occluded_cuda);
     if (cudaGetLastError() != cudaSuccess) 
     {
-        printf("ERROR: Unable to execute kernel\n");
+        printf("ERROR: Unable to execute kernel depth_to_mask\n");
         return false;
     }
     cudaDeviceSynchronize();
@@ -387,20 +394,33 @@ bool depth2cloud_global(int32_t* depth_data,
     printf("Actual points in all clouds : %d\n", rendered_cloud_point_num);
 
     float* cuda_cloud;
+    uint8_t* cuda_cloud_color;
     int* cuda_cloud_pose_map;
     cudaMalloc(&cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float));
+    cudaMalloc(&cuda_cloud_color, point_dim * rendered_cloud_point_num * sizeof(uint8_t));
     cudaMalloc(&cuda_cloud_pose_map, rendered_cloud_point_num * sizeof(int));
 
     result_cloud = (float*) malloc(point_dim * rendered_cloud_point_num * sizeof(float));
+    result_cloud_color = (uint8_t*) malloc(point_dim * rendered_cloud_point_num * sizeof(uint8_t));
     dc_index = (int*) malloc(num_poses * width * height * sizeof(int));
     cloud_pose_map = (int*) malloc(rendered_cloud_point_num * sizeof(int));
 
+    thrust::device_vector<uint8_t> d_red_in = color_data[0];
+    thrust::device_vector<uint8_t> d_green_in = color_data[1];
+    thrust::device_vector<uint8_t> d_blue_in = color_data[2];
+
+    uint8_t* red_in = thrust::raw_pointer_cast(d_red_in.data());
+    uint8_t* green_in = thrust::raw_pointer_cast(d_green_in.data());
+    uint8_t* blue_in = thrust::raw_pointer_cast(d_blue_in.data());
+
     depth_to_cloud<<<numBlocks, threadsPerBlock>>>(
-                        depth_data_cuda, cuda_cloud, rendered_cloud_point_num, mask_ptr, width, height, 
+                        depth_data_cuda, red_in, green_in, blue_in,
+                        cuda_cloud, cuda_cloud_color, rendered_cloud_point_num, mask_ptr, width, height, 
                         kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map);
         
     cudaDeviceSynchronize();
     cudaMemcpy(result_cloud, cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(result_cloud_color, cuda_cloud_color, point_dim * rendered_cloud_point_num * sizeof(uint8_t), cudaMemcpyDeviceToHost);
     cudaMemcpy(dc_index, mask_ptr, num_poses * width * height * sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(cloud_pose_map, cuda_cloud_pose_map, rendered_cloud_point_num * sizeof(int), cudaMemcpyDeviceToHost);
     // for (int i = 0; i < rendered_cloud_point_num; i++)
@@ -427,12 +447,13 @@ bool depth2cloud_global(int32_t* depth_data,
     // }
     if (cudaGetLastError() != cudaSuccess) 
     {
-        printf("ERROR: Unable to execute kernel\n");
+        printf("ERROR: Unable to execute kernel depth_to_cloud\n");
         return false;
     }
     printf("depth2cloud_global() Done\n");
     cudaFree(depth_data_cuda);
     cudaFree(cuda_cloud);
+    cudaFree(cuda_cloud_color);
     cudaFree(pose_occluded_cuda);
     return true;
 }

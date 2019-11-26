@@ -355,9 +355,13 @@ class EnvObjectRecognition : public EnvironmentMHA {
   int gpu_point_dim = 3;
   int gpu_stride = 4;
   float* result_observed_cloud;
+  uint8_t* result_observed_cloud_color;
   int observed_point_num;
   int* observed_dc_index;
   int32_t* observed_depth_data;
+
+  cv::Mat cv_input_filtered_depth_image, cv_input_filtered_color_image;
+  vector<vector<uint8_t>> cv_input_filtered_color_image_vec;
   void PrintGPUImages(vector<int32_t>& result_depth, 
                       vector<vector<uint8_t>>& result_color, 
                       int num_poses, string suffix, 
@@ -365,6 +369,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   void PrintGPUClouds(const vector<ObjectState>& objects,
                       float* cloud, 
+                      uint8_t* cloud_color,
                       int* result_depth, 
                       int* dc_index, 
                       int num_poses, 
@@ -401,7 +406,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   ros::Publisher downsampled_input_point_cloud_topic;
   ros::Publisher downsampled_mesh_cloud_topic;
   ros::Publisher input_point_cloud_topic;
-  cv::Mat cv_input_color_image, cv_input_filtered_depth_image;
+  cv::Mat cv_input_color_image;
   std::string input_depth_image_path;
 
   

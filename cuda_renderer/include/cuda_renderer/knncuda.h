@@ -33,7 +33,9 @@ namespace cuda_renderer {
     
 
     bool depth2cloud_global(int32_t* depth_data, 
+                            std::vector<std::vector<u_int8_t>>& color_data,
                             float* &result_cloud, 
+                            uint8_t* &result_cloud_color,
                             int* &dc_index,
                             int &point_num,
                             int* &cloud_pose_map,
