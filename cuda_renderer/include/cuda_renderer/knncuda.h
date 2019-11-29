@@ -51,14 +51,18 @@ namespace cuda_renderer {
                             int stride,
                             int point_dim);
 
-    bool compute_cost(
+    bool compute_rgbd_cost(
         float &sensor_resolution,
         float* knn_dist,
         int* knn_index,
         int* poses_occluded,
         int* cloud_pose_map,
         float* result_observed_cloud,
-        int point_num,
+        uint8_t* result_observed_cloud_color,
+        float* result_rendered_cloud,
+        uint8_t* result_rendered_cloud_color,
+        int rendered_cloud_point_num,
+        int observed_cloud_point_num,
         int num_poses,
         float* &rendered_cost);
 

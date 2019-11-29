@@ -353,7 +353,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   vector<cuda_renderer::Model::Triangle> tris;
   float gpu_depth_factor = 100.0;
   int gpu_point_dim = 3;
-  int gpu_stride = 4;
+  int gpu_stride = 6;
   float* result_observed_cloud;
   uint8_t* result_observed_cloud_color;
   int observed_point_num;
@@ -378,7 +378,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                       int* pose_occluded,
                       string suffix,
                       vector<ObjectState>& modified_objects,
-                      bool do_icp);
+                      bool do_icp,
+                      ros::Publisher render_point_cloud_topic);
 
   void GetStateImagesGPU(const vector<ObjectState>& objects,
                         const vector<vector<uint8_t>>& source_result_color,

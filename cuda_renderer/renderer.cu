@@ -295,7 +295,7 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                     red_entry[x_to_write+y_to_write*real_width] = 0;
                     green_entry[x_to_write+y_to_write*real_width] = 0;
                     blue_entry[x_to_write+y_to_write*real_width] = 0;
-                    atomicMin(&new_depth, INT_MAX);
+                    atomicMax(&new_depth, INT_MAX);
                 // }
             }
             // invalid condition where source pixel is behind and we are rendering a pixel at same x,y with lesser depth 
@@ -592,16 +592,6 @@ __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* b
     }
 }
 
-std::vector<int> compute_rgbd_cost(
-    const std::vector<std::vector<uint8_t>> input_color,
-    std::vector<int32_t> input_depth,
-    const std::vector<std::vector<uint8_t>> observed_color,
-    std::vector<int32_t> observed_depth,
-    size_t height, size_t width, size_t num_rendered
-)
-{
-    
-}
 std::vector<int> compute_rgb_cost(const std::vector<std::vector<uint8_t>> input,
                                   const std::vector<std::vector<uint8_t>> observed,
                                   size_t height, size_t width,size_t num_rendered) 
@@ -844,7 +834,7 @@ device_vector_holder<int> render_cuda_multi(
                                                     device_source_red_vec, device_source_green_vec, device_source_blue_vec,
                                                     device_pose_occluded_vec,
                                                     device_single_result_image);
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
     printf("Pose Occlusions\n");
     thrust::copy(
         device_pose_occluded.begin(),

@@ -3,6 +3,7 @@
 #include <cublas.h>
 #include "cuda_renderer/renderer.h"
 #include "cuda_renderer/knncuda.h"
+#include "cuda_renderer/common.cuh"
 #include <thrust/transform_reduce.h>
 #include <thrust/functional.h>
 
@@ -385,7 +386,7 @@ bool depth2cloud_global(int32_t* depth_data,
         printf("ERROR: Unable to execute kernel depth_to_mask\n");
         return false;
     }
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 
     // Create mapping from pixel to corresponding index in point cloud
     int mask_back_temp = mask.back();
@@ -418,7 +419,7 @@ bool depth2cloud_global(int32_t* depth_data,
                         cuda_cloud, cuda_cloud_color, rendered_cloud_point_num, mask_ptr, width, height, 
                         kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map);
         
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
     cudaMemcpy(result_cloud, cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(result_cloud_color, cuda_cloud_color, point_dim * rendered_cloud_point_num * sizeof(uint8_t), cudaMemcpyDeviceToHost);
     cudaMemcpy(dc_index, mask_ptr, num_poses * width * height * sizeof(int), cudaMemcpyDeviceToHost);
@@ -459,39 +460,72 @@ bool depth2cloud_global(int32_t* depth_data,
 }
 __global__ void compute_render_cost(
         float* cuda_knn_dist,
+        int* cuda_knn_index,
         int* cuda_cloud_pose_map,
         int* cuda_poses_occluded,
         float* cuda_rendered_cost,
         float sensor_resolution,
         int rendered_cloud_point_num,
-        float* cuda_pose_point_num
-    )
+        int observed_cloud_point_num,
+        float* cuda_pose_point_num,
+        uint8_t* rendered_cloud_color,
+        uint8_t* observed_cloud_color)
 {
     size_t point_index = blockIdx.x*blockDim.x + threadIdx.x;
     if(point_index >= rendered_cloud_point_num) return;
 
     int pose_index = cuda_cloud_pose_map[point_index];
+    int o_point_index = cuda_knn_index[point_index];
     if (cuda_poses_occluded[pose_index])
     {
         cuda_rendered_cost[pose_index] = -1;
     }
     else
     {
+        // count total number of points in this pose for normalization later
         atomicAdd(&cuda_pose_point_num[pose_index], 1);
         if (cuda_knn_dist[point_index] > sensor_resolution)
         {
             atomicAdd(&cuda_rendered_cost[pose_index], 1);
         }
+        else
+        {
+            // compute color cost
+            if (false)
+            {
+                uint8_t red2  = rendered_cloud_color[point_index + 2*rendered_cloud_point_num];
+                uint8_t green2  = rendered_cloud_color[point_index + 1*rendered_cloud_point_num];
+                uint8_t blue2  = rendered_cloud_color[point_index + 0*rendered_cloud_point_num];
+                float lab2[3];
+                rgb2lab(red2,green2,blue2,lab2);
+
+                uint8_t red1  = observed_cloud_color[o_point_index + 2*observed_cloud_point_num];
+                uint8_t green1  = observed_cloud_color[o_point_index + 1*observed_cloud_point_num];
+                uint8_t blue1  = observed_cloud_color[o_point_index + 0*observed_cloud_point_num];
+                float lab1[3];
+                rgb2lab(red1,green1,blue1,lab1);
+
+                double cur_dist = color_distance(lab1[0],lab1[1],lab1[2],lab2[0],lab2[1],lab2[2]);
+                // printf("color distance :%f\n", cur_dist);
+                if(cur_dist > 25){
+                    atomicAdd(&cuda_rendered_cost[pose_index], 1);
+                }
+            }
+        }
     }
 }
-bool compute_cost(
+bool compute_rgbd_cost(
     float &sensor_resolution,
     float* knn_dist,
     int* knn_index,
     int* poses_occluded,
     int* cloud_pose_map,
-    float* result_observed_cloud,
+    float* observed_cloud,
+    uint8_t* observed_cloud_color,
+    float* rendered_cloud,
+    uint8_t* rendered_cloud_color,
     int rendered_cloud_point_num,
+    int observed_cloud_point_num,
     int num_poses,
     float* &rendered_cost
 )
@@ -504,17 +538,24 @@ bool compute_cost(
     printf("compute_cost()\n");
 
     float* cuda_knn_dist;
+    int* cuda_knn_index;
     // float* cuda_sensor_resolution;
     int* cuda_poses_occluded;
     int* cuda_cloud_pose_map;
     float* cuda_rendered_cost;
     float* cuda_pose_point_num;
+    uint8_t* cuda_observed_cloud_color;
+    uint8_t* cuda_rendered_cloud_color;
 
     const unsigned int size_of_float = sizeof(float);
     const unsigned int size_of_int   = sizeof(int);
+    const unsigned int size_of_uint   = sizeof(uint8_t);
 
     cudaMalloc(&cuda_knn_dist, rendered_cloud_point_num * size_of_float);
+    cudaMalloc(&cuda_knn_index, rendered_cloud_point_num * size_of_int);
     cudaMalloc(&cuda_cloud_pose_map, rendered_cloud_point_num * size_of_int);
+    cudaMalloc(&cuda_observed_cloud_color, 3 * observed_cloud_point_num * size_of_uint);
+    cudaMalloc(&cuda_rendered_cloud_color, 3 * rendered_cloud_point_num * size_of_uint);
     cudaMalloc(&cuda_poses_occluded, num_poses * size_of_int);
     thrust::device_vector<float> cuda_rendered_cost_vec(num_poses, 0);
     cuda_rendered_cost = thrust::raw_pointer_cast(cuda_rendered_cost_vec.data());
@@ -522,7 +563,10 @@ bool compute_cost(
     cuda_pose_point_num = thrust::raw_pointer_cast(cuda_pose_point_num_vec.data());
 
     cudaMemcpy(cuda_knn_dist, knn_dist, rendered_cloud_point_num * size_of_float, cudaMemcpyHostToDevice);
+    cudaMemcpy(cuda_knn_index, knn_index, rendered_cloud_point_num * size_of_int, cudaMemcpyHostToDevice);
     cudaMemcpy(cuda_cloud_pose_map, cloud_pose_map, rendered_cloud_point_num * size_of_int, cudaMemcpyHostToDevice);
+    cudaMemcpy(cuda_observed_cloud_color, observed_cloud_color, 3 * observed_cloud_point_num * size_of_uint, cudaMemcpyHostToDevice);
+    cudaMemcpy(cuda_rendered_cloud_color, rendered_cloud_color, 3 * rendered_cloud_point_num * size_of_uint, cudaMemcpyHostToDevice);
     cudaMemcpy(cuda_poses_occluded, poses_occluded, num_poses * size_of_int, cudaMemcpyHostToDevice);
     // cudaMemcpy(cuda_sensor_resolution, &sensor_resolution, size_of_float, cudaMemcpyHostToDevice);
     // cudaMemset(cuda_rendered_cost, 0, num_poses * size_of_int);
@@ -531,13 +575,16 @@ bool compute_cost(
     dim3 numBlocks((rendered_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
     compute_render_cost<<<numBlocks, threadsPerBlock>>>(
         cuda_knn_dist,
+        cuda_knn_index,
         cuda_cloud_pose_map,
         cuda_poses_occluded,
         cuda_rendered_cost,
         sensor_resolution,
         rendered_cloud_point_num,
-        cuda_pose_point_num
-    );
+        observed_cloud_point_num,
+        cuda_pose_point_num,
+        cuda_rendered_cloud_color,
+        cuda_observed_cloud_color);
 
     if (cudaGetLastError() != cudaSuccess) {
         printf("ERROR: Unable to execute kernel\n");
