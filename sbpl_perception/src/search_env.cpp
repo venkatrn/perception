@@ -68,7 +68,7 @@ namespace {
 
   constexpr double kNormalizeCostBase = 100;
 
-  bool kUseColorCost = false;
+  bool kUseColorCost = true;
 
   bool kUseColorPruning = false;
 
@@ -81,6 +81,8 @@ namespace {
   bool kUseOctomapPruning = false;
 
   bool cost_debug_msgs = true;
+
+  bool kUseGPU = true;
 }  // namespace
 
 namespace sbpl_perception {
@@ -608,10 +610,16 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
     input_unit.source_counted_pixels = counted_pixels_map_[source_state_id];
   }
   vector<CostComputationOutput> cost_computation_output;
-  // ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
-  //                        false);
-  ComputeCostsInParallelGPU(cost_computation_input, &cost_computation_output,
+  if (kUseGPU)
+  {
+    ComputeCostsInParallelGPU(cost_computation_input, &cost_computation_output,
+                          false);
+  }
+  else
+  {
+    ComputeCostsInParallel(cost_computation_input, &cost_computation_output,
                          false);
+  }
   // hash_manager_.Print();
 
   // Sort in increasing order of cost for debugging
@@ -1018,7 +1026,7 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
       PointCloudPtr depth_img_cloud = 
         GetGravityAlignedPointCloudCV(cv_depth, cv_color, 100.0);
       PrintPointCloud(depth_img_cloud, 1, render_point_cloud_topic);
-
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
   
 }
@@ -1035,7 +1043,8 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
                                           string suffix,
                                           vector<ObjectState>& modified_objects,
                                           bool do_icp,
-                                          ros::Publisher render_point_cloud_topic)
+                                          ros::Publisher render_point_cloud_topic,
+                                          bool print_cloud)
 { 
   // ofstream myfile;
   vector<int> parent_counted_pixels;
@@ -1093,9 +1102,12 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
     cloud->height = cloud->points.size();
     cloud->is_dense = false;
     transformPointCloud (*cloud, *transformed_cloud, transform.matrix().cast<float>());
-    PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
+    
+    if (print_cloud)
+    {
+      PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
     if (do_icp)
     {
       ContPose pose_in = objects[n].cont_pose();
@@ -1258,7 +1270,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       source_last_object_states, random_color, random_depth, 
       source_result_color, source_result_depth, random_poses_occluded, 1
     );
-    PrintGPUImages(source_result_depth, source_result_color, 1, "expansion_" + std::to_string(source_id), random_poses_occluded);
+    // PrintGPUImages(source_result_depth, source_result_color, 1, "expansion_" + std::to_string(source_id), random_poses_occluded);
     // return;
   }
   if (objects.size() == env_params_.num_objects)
@@ -1321,7 +1333,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       result_color, result_depth, poses_occluded, 0
     );
 
-    PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
+    // PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
 
 
     // // Compute observed cloud
@@ -1370,7 +1382,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         PrintGPUClouds(
           last_object_states, result_cloud, result_cloud_color, depth_data, dc_index, 
           num_poses, rendered_point_num, gpu_stride, poses_occluded_ptr, "rendered",
-          modified_last_object_states, true, render_point_cloud_topic
+          modified_last_object_states, true, render_point_cloud_topic, false
         );
         GetStateImagesGPU(
           modified_last_object_states, source_result_color, source_result_depth, 
@@ -1383,7 +1395,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         // free(depth_data);
         depth_data = adjusted_result_depth.data();
         poses_occluded_ptr = adjusted_poses_occluded.data();
-
+        // Override adjusted clouds to same variable
         cuda_renderer::depth2cloud_global(
           depth_data, adjusted_result_color, result_cloud, result_cloud_color, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
           num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
@@ -1422,6 +1434,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         rendered_point_num, observed_point_num,
         num_poses, rendered_cost_gpu
       );
+      // if (source_id == 50)
+      // if (objects.size() == 1)
+      // PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
+
       // Eigen::Isometry3d transform;
       // Eigen::Isometry3d cam_to_body;
       // cam_to_body.matrix() << 0, 0, 1, 0,
@@ -4758,30 +4774,32 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     } else {
       depthCVToShort(cv_depth_image, &depth_image);
     }
+    if (kUseGPU)
+    {
+      #ifdef CUDA_ON
+        // depthCVToShort(cv_depth_image, &depth_image);
+        result_observed_cloud = (float*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(float));
+        result_observed_cloud_color = (uint8_t*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(uint8_t));
+        observed_dc_index;
+        observed_depth_data = cv_input_filtered_depth_image.ptr<int>(0);
+        observed_point_num;
+        std::vector<int> random_poses_occluded(1, 0);
+        int * cloud_pose_map;
+        std::vector<ObjectState> last_object_states;
+        vector<ObjectState> modified_last_object_states;
 
-    #ifdef CUDA_ON
-      // depthCVToShort(cv_depth_image, &depth_image);
-      result_observed_cloud = (float*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(float));
-      result_observed_cloud_color = (uint8_t*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(uint8_t));
-      observed_dc_index;
-      observed_depth_data = cv_input_filtered_depth_image.ptr<int>(0);
-      observed_point_num;
-      std::vector<int> random_poses_occluded(1, 0);
-      int * cloud_pose_map;
-      std::vector<ObjectState> last_object_states;
-      vector<ObjectState> modified_last_object_states;
+        cuda_renderer::depth2cloud_global(
+          observed_depth_data, cv_input_filtered_color_image_vec, result_observed_cloud, result_observed_cloud_color, observed_dc_index, observed_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
+          1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
+        );
+        PrintGPUClouds(
+          last_object_states, result_observed_cloud, result_observed_cloud_color, 
+          observed_depth_data, observed_dc_index, 1, 
+          observed_point_num, gpu_stride, random_poses_occluded.data(), "observed",
+          modified_last_object_states, false, input_point_cloud_topic, true);
 
-      cuda_renderer::depth2cloud_global(
-        observed_depth_data, cv_input_filtered_color_image_vec, result_observed_cloud, result_observed_cloud_color, observed_dc_index, observed_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
-        1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
-      );
-      PrintGPUClouds(
-        last_object_states, result_observed_cloud, result_observed_cloud_color, 
-        observed_depth_data, observed_dc_index, 1, 
-        observed_point_num, gpu_stride, random_poses_occluded.data(), "observed",
-        modified_last_object_states, false, input_point_cloud_topic);
-
-    #endif
+      #endif
+    }
 
   }
   else {

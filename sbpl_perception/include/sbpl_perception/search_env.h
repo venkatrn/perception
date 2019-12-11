@@ -379,7 +379,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                       string suffix,
                       vector<ObjectState>& modified_objects,
                       bool do_icp,
-                      ros::Publisher render_point_cloud_topic);
+                      ros::Publisher render_point_cloud_topic,
+                      bool print_cloud);
 
   void GetStateImagesGPU(const vector<ObjectState>& objects,
                         const vector<vector<uint8_t>>& source_result_color,

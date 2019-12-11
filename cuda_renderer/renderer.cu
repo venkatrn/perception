@@ -209,7 +209,8 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                                         uint8_t* red_entry,uint8_t* green_entry,uint8_t* blue_entry,
                                         int32_t* source_depth_entry,
                                         uint8_t* source_red_entry,uint8_t* source_green_entry,uint8_t* source_blue_entry,
-                                        int* pose_occluded_entry) {
+                                        int* pose_occluded_entry,
+                                        int32_t* lock_entry) {
                                         // float* l_entry,float* a_entry,float* b_entry){
     // refer to tiny renderer
     // https://github.com/ssloy/tinyrenderer/blob/master/our_gl.cpp
@@ -271,12 +272,25 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
             uint8_t source_green = source_green_entry[x_to_write+y_to_write*real_width];
             uint8_t source_blue = source_blue_entry[x_to_write+y_to_write*real_width];
 
-            if(depth_to_write > curr_depth){
-                red_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v0);
-                green_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v1);
-                blue_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v2);
+            // if(depth_to_write > curr_depth){
+            //     red_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v0);
+            //     green_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v1);
+            //     blue_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v2);
+            // }
+            // atomicMin(&depth_to_write, curr_depth);
+            bool wait = true;
+            while(wait){
+                if(0 == atomicExch(&lock_entry[x_to_write+y_to_write*real_width], 1)){
+                    if(curr_depth < depth_entry[x_to_write+y_to_write*real_width]){
+                        depth_entry[x_to_write+y_to_write*real_width] = curr_depth;
+                        red_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v0);
+                        green_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v1);
+                        blue_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v2);
+                    }
+                    lock_entry[x_to_write+y_to_write*real_width] = 0;
+                    wait = false;
+                }
             }
-            atomicMin(&depth_to_write, curr_depth);
             int32_t& new_depth = depth_entry[x_to_write+y_to_write*real_width];
             if(new_depth > source_depth && source_depth > 0){
                 // when we are rendering at x,y where source pixel is also present at depth closer to camera
@@ -433,7 +447,8 @@ __global__ void render_triangle_multi(
                                 int32_t* device_source_depth_vec,
                                 uint8_t* device_source_red_vec,uint8_t* device_source_green_vec,uint8_t* device_source_blue_vec,
                                 int* pose_occluded_vec,
-                                int* device_single_result_image) {
+                                int* device_single_result_image,
+                                int32_t* lock_int_vec) {
     size_t pose_i = blockIdx.y;
     int model_id = device_pose_model_map_ptr[pose_i];
     size_t tri_i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -450,6 +465,7 @@ __global__ void render_triangle_multi(
         real_height = roi.height;
     }
     int32_t* depth_entry;
+    int32_t* lock_entry;
     uint8_t* red_entry;
     uint8_t* green_entry;
     uint8_t* blue_entry;
@@ -462,10 +478,12 @@ __global__ void render_triangle_multi(
         green_entry = green_image_vec;
         blue_entry = blue_image_vec;
         pose_occluded_entry = pose_occluded_vec;
+        lock_entry = lock_int_vec;
     }
     else
     {
         depth_entry = depth_image_vec + pose_i*real_width*real_height; //length: width*height 32bits int
+        lock_entry = lock_int_vec + pose_i*real_width*real_height;
         red_entry = red_image_vec + pose_i*real_width*real_height;
         green_entry = green_image_vec + pose_i*real_width*real_height;
         blue_entry = blue_image_vec + pose_i*real_width*real_height;
@@ -494,7 +512,8 @@ __global__ void render_triangle_multi(
         red_entry,green_entry,blue_entry,
         device_source_depth_vec,
         device_source_red_vec, device_source_green_vec, device_source_blue_vec,
-        pose_occluded_entry);
+        pose_occluded_entry,
+        lock_entry);
 }
 __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* blue_in,
                                     uint8_t* red_ob, uint8_t* green_ob,uint8_t* blue_ob, 
@@ -783,6 +802,7 @@ device_vector_holder<int> render_cuda_multi(
 
     device_vector_holder<int32_t> device_depth_int(num_images*real_width*real_height, INT_MAX);
     // thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+    thrust::device_vector<int32_t> device_lock_int(num_images*real_width*real_height, 0);
     thrust::device_vector<uint8_t> device_red_int(num_images*real_width*real_height, 0);
     thrust::device_vector<uint8_t> device_green_int(num_images*real_width*real_height, 0);
     thrust::device_vector<uint8_t> device_blue_int(num_images*real_width*real_height, 0);
@@ -807,6 +827,7 @@ device_vector_holder<int> render_cuda_multi(
     uint8_t* device_source_blue_vec = thrust::raw_pointer_cast(device_source_color_blue.data());
 
     int32_t* depth_image_vec = device_depth_int.data();
+    int32_t* lock_int_vec = thrust::raw_pointer_cast(device_lock_int.data());
     uint8_t* red_image_vec = thrust::raw_pointer_cast(device_red_int.data());
     uint8_t* green_image_vec = thrust::raw_pointer_cast(device_green_int.data());
     uint8_t* blue_image_vec = thrust::raw_pointer_cast(device_blue_int.data());
@@ -833,7 +854,8 @@ device_vector_holder<int> render_cuda_multi(
                                                     device_source_depth_vec,
                                                     device_source_red_vec, device_source_green_vec, device_source_blue_vec,
                                                     device_pose_occluded_vec,
-                                                    device_single_result_image);
+                                                    device_single_result_image,
+                                                    lock_int_vec);
     // cudaDeviceSynchronize();
     printf("Pose Occlusions\n");
     thrust::copy(

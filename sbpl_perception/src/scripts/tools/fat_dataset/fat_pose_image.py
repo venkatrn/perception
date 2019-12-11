@@ -870,7 +870,7 @@ class FATImage:
             # 'y_max' : max_min_dict['ymin'] + 2 * self.search_resolution_translation,
             'required_object' : required_object,
             # 'table_height' :  max_min_dict['zmin'],
-            'table_height' :  0.010,
+            'table_height' :  0.004,
             'use_external_render' : use_external_render,
             'camera_pose': camera_pose,
             'reference_frame_': frame,
@@ -1983,7 +1983,7 @@ def run_sameshape_gpu():
 
     read_results_only = False
     # 5 in can only
-    for img_i in range(5,6):
+    for img_i in range(0,25):
 
         # image_name = 'NewMap1_reduced_2/0000{}.left.png'.format(str(img_i).zfill(2))
         image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
@@ -1993,7 +1993,6 @@ def run_sameshape_gpu():
                 fat_image.visualize_pose_ros(image_data, annotations, frame='table', camera_optical_frame=False)
 
         if read_results_only == False:
-
 
             max_min_dict['ymax'] = 1.5
             max_min_dict['ymin'] = -1.5
@@ -2015,17 +2014,18 @@ def run_sameshape_gpu():
         # print(perch_annotations)
         # print(transformed_annotations)
 
-        f_accuracy.write("{},".format(image_data['file_name']))
-        add_dict, add_s_dict = fat_image.compare_clouds(transformed_annotations, perch_annotations, downsample=True, use_add_s=True)
+        if perch_annotations is not None:
+            f_accuracy.write("{},".format(image_data['file_name']))
+            add_dict, add_s_dict = fat_image.compare_clouds(transformed_annotations, perch_annotations, downsample=True, use_add_s=True)
 
-        for object_name in required_objects:
-            if (object_name in add_dict) and (object_name in add_s_dict):
-                f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name]))
-            else:
-                f_accuracy.write(" , ,")
-        f_accuracy.write("\n")
+            for object_name in required_objects:
+                if (object_name in add_dict) and (object_name in add_s_dict):
+                    f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name]))
+                else:
+                    f_accuracy.write(" , ,")
+            f_accuracy.write("\n")
 
-        f_runtime.write("{} {} {}\n".format(image_name, stats['expands'], stats['runtime']))
+            f_runtime.write("{} {} {}\n".format(image_name, stats['expands'], stats['runtime']))
 
     f_runtime.close()
     f_accuracy.close()
