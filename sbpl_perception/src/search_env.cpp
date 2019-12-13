@@ -270,11 +270,13 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
              obj_model.GetInscribedRadius());
       printf("\n");
     }
-    cuda_renderer::Model render_model(model_meta_data.file.c_str()); 
-    render_models_.push_back(render_model);
-    tris.insert(tris.end(), render_model.tris.begin(), render_model.tris.end());
-    tris_model_count.push_back(render_model.tris.size());
-
+    if (kUseGPU)
+    {
+        cuda_renderer::Model render_model(model_meta_data.file.c_str()); 
+        render_models_.push_back(render_model);
+        tris.insert(tris.end(), render_model.tris.begin(), render_model.tris.end());
+        tris_model_count.push_back(render_model.tris.size());
+    }
   }
 }
 
@@ -1065,61 +1067,75 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
   #pragma omp parallel for
   for(int n = 0; n < num_poses; n ++)
   {
-    if(pose_occluded[n]) continue;
-
-    // myfile.open(suffix + "_" + to_string(n) + ".txt");
+    // if(pose_occluded[n]) continue;
     PointCloudPtr cloud(new PointCloud);
     PointCloudPtr transformed_cloud(new PointCloud);
     PointCloudPtr cloud_out(new PointCloud);
 
-    for(int i = 0; i < env_params_.height; i = i + stride)
+    // myfile.open(suffix + "_" + to_string(n) + ".txt");
+    if ((do_icp && pose_occluded[n]) || (!do_icp && print_cloud))
     {
-        for(int j = 0; j < env_params_.width; j = j + stride)
-        {
-          pcl::PointXYZRGB point;
-          int index = n*env_params_.width*env_params_.height + (i*env_params_.width + j);
-          int cloud_index = dc_index[index];
-          // printf("for image:(%d,%d,%d), cloud_index:%d\n", n,i,j, cloud_index);
-          if (result_depth[index] > 0)
-          {
-            // printf("x:%f,y:%f,z:%f\n", result_cloud[3*index], result_cloud[3*index + 1], result_cloud[3*index + 2]);
-            point.x = result_cloud[cloud_index + 0*cloud_point_num];
-            point.y = result_cloud[cloud_index + 1*cloud_point_num];
-            point.z = result_cloud[cloud_index + 2*cloud_point_num];
-            rgb[2] = result_cloud_color[cloud_index + 0*cloud_point_num];
-            rgb[1] = result_cloud_color[cloud_index + 1*cloud_point_num];
-            rgb[0] = result_cloud_color[cloud_index + 2*cloud_point_num];
-            // uint32_t rgbc = ((uint32_t)rgb[2] << 16 | (uint32_t)rgb[1]<< 8 | (uint32_t)rgb[0]);
-            uint32_t rgbc = ((uint32_t)rgb[2] << 16 | (uint32_t)rgb[1]<< 8 | (uint32_t)rgb[0]);
-            point.rgb = *reinterpret_cast<float*>(&rgbc);
 
-            cloud->points.push_back(point);
-            // myfile << point.x << "," << point.y << "," << point.z << endl;
+      for(int i = 0; i < env_params_.height; i = i + stride)
+      {
+          for(int j = 0; j < env_params_.width; j = j + stride)
+          {
+            pcl::PointXYZRGB point;
+            int index = n*env_params_.width*env_params_.height + (i*env_params_.width + j);
+            int cloud_index = dc_index[index];
+            // printf("for image:(%d,%d,%d), cloud_index:%d\n", n,i,j, cloud_index);
+            if (result_depth[index] > 0)
+            {
+              // printf("x:%f,y:%f,z:%f\n", result_cloud[3*index], result_cloud[3*index + 1], result_cloud[3*index + 2]);
+              point.x = result_cloud[cloud_index + 0*cloud_point_num];
+              point.y = result_cloud[cloud_index + 1*cloud_point_num];
+              point.z = result_cloud[cloud_index + 2*cloud_point_num];
+              rgb[2] = result_cloud_color[cloud_index + 0*cloud_point_num];
+              rgb[1] = result_cloud_color[cloud_index + 1*cloud_point_num];
+              rgb[0] = result_cloud_color[cloud_index + 2*cloud_point_num];
+              // uint32_t rgbc = ((uint32_t)rgb[2] << 16 | (uint32_t)rgb[1]<< 8 | (uint32_t)rgb[0]);
+              uint32_t rgbc = ((uint32_t)rgb[2] << 16 | (uint32_t)rgb[1]<< 8 | (uint32_t)rgb[0]);
+              point.rgb = *reinterpret_cast<float*>(&rgbc);
+
+              cloud->points.push_back(point);
+              // myfile << point.x << "," << point.y << "," << point.z << endl;
+            }
           }
-        }
+      }
+      cloud->width = 1;
+      cloud->height = cloud->points.size();
+      cloud->is_dense = false;
+      transformPointCloud (*cloud, *transformed_cloud, transform.matrix().cast<float>());
+      
+      if (print_cloud)
+      {
+        PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      }
     }
-    cloud->width = 1;
-    cloud->height = cloud->points.size();
-    cloud->is_dense = false;
-    transformPointCloud (*cloud, *transformed_cloud, transform.matrix().cast<float>());
-    
-    if (print_cloud)
-    {
-      PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    }
+    // cout << pose_occluded[n] << endl;
     if (do_icp)
     {
-      ContPose pose_in = objects[n].cont_pose();
-      ContPose pose_out;
-      GetICPAdjustedPose(transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels);
-      // cout << "pose_in " << pose_in << endl;
-      // cout << "pose_out " << pose_out << endl;
-      // PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
-      // std::this_thread::sleep_for(std::chrono::milliseconds(500));
-      ObjectState modified_object_state(objects[n].id(),
-                                            objects[n].symmetric(), pose_out);
-      modified_objects[n] = modified_object_state;
+      if(pose_occluded[n])
+      {
+        ContPose pose_in = objects[n].cont_pose();
+        ContPose pose_out;
+        GetICPAdjustedPose(transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels);
+        // cout << "pose_in " << pose_in << endl;
+        // cout << "pose_out " << pose_out << endl;
+        if (print_cloud)
+        {
+          PrintPointCloud(cloud_out, 1, render_point_cloud_topic);
+          std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+        ObjectState modified_object_state(objects[n].id(),
+                                              objects[n].symmetric(), pose_out);
+        modified_objects[n] = modified_object_state;
+      }
+      else
+      {
+        modified_objects[n] = objects[n];
+      }
     }
     // myfile.close();
   }
@@ -1164,7 +1180,8 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                                           vector<vector<uint8_t>>& result_color,
                                           vector<int32_t>& result_depth,
                                           vector<int>& pose_occluded,
-                                          int single_result_image)
+                                          int single_result_image,
+                                          vector<int>& pose_occluded_other)
 {
   printf("GetStateImagesGPU() for %d poses\n", objects.size());
   Eigen::Isometry3d cam_z_front, cam_to_body;
@@ -1215,7 +1232,8 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                           result_depth, 
                           result_color,
                           pose_occluded,
-                          single_result_image);
+                          single_result_image,
+                          pose_occluded_other);
 }
 void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
                                                   std::vector<CostComputationOutput> *output,
@@ -1240,6 +1258,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   random_color[2] = random_blue;
   std::vector<int32_t> random_depth(kCameraWidth * kCameraHeight, 0);
   std::vector<int> random_poses_occluded(1, 0);
+  std::vector<int> random_poses_occluded_other(1, 0);
 
 
   std::vector<std::vector<uint8_t>> source_result_color(3);
@@ -1268,7 +1287,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     }
     GetStateImagesGPU(
       source_last_object_states, random_color, random_depth, 
-      source_result_color, source_result_depth, random_poses_occluded, 1
+      source_result_color, source_result_depth, random_poses_occluded, 1,
+      random_poses_occluded_other
     );
     // PrintGPUImages(source_result_depth, source_result_color, 1, "expansion_" + std::to_string(source_id), random_poses_occluded);
     // return;
@@ -1290,7 +1310,9 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   std::vector<int> last_level_cost(num_poses, 0);
   std::vector<int> observed_cost(num_poses, 0);
   std::vector<int> poses_occluded(num_poses, 0);
+  std::vector<int> poses_occluded_other(num_poses, 0);
   std::vector<int> adjusted_poses_occluded(num_poses, 0);
+  std::vector<int> adjusted_poses_occluded_other(num_poses, 0);
 
   for(int i = 0; i < num_poses; i ++) {
     // For non-root level, this should be adjusted state
@@ -1315,7 +1337,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
 
   // std::cout << "exclusive sum: ";
   // std::exclusive_scan(tris_model_count.begin(), tris_model_count.end(), std::ostream_iterator<int>(std::cout, " "), 0);
-  #ifdef CUDA_ON
+  // #ifdef CUDA_ON
   // int render_size = 750;
   // int total_render_num = mat4_v.size();
   // int num_render = (total_render_num-1)/render_size+1;
@@ -1330,9 +1352,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
 
     GetStateImagesGPU(
       last_object_states, source_result_color, source_result_depth, 
-      result_color, result_depth, poses_occluded, 0
+      result_color, result_depth, poses_occluded, 0,
+      poses_occluded_other
     );
-
+    // if (objects.size() == 3)
     // PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
 
 
@@ -1364,8 +1387,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     int k = 1;
     int* poses_occluded_ptr = poses_occluded.data();
 
-    if (num_valid_poses > 0)
-    {
+    
       cuda_renderer::depth2cloud_global(
         depth_data, result_color, result_cloud, result_cloud_color, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
         num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
@@ -1377,17 +1399,24 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       //   modified_last_object_states, false, render_point_cloud_topic
       // );
       // Do ICP if at root
-      if (root_level && true)
+      // if (root_level && true)
+      if (root_level)
+      {
+        fill(poses_occluded_other.begin(), poses_occluded_other.end(), 1);
+      }
       {
         PrintGPUClouds(
           last_object_states, result_cloud, result_cloud_color, depth_data, dc_index, 
-          num_poses, rendered_point_num, gpu_stride, poses_occluded_ptr, "rendered",
+          num_poses, rendered_point_num, gpu_stride, poses_occluded_other.data(), "rendered",
           modified_last_object_states, true, render_point_cloud_topic, false
         );
         GetStateImagesGPU(
           modified_last_object_states, source_result_color, source_result_depth, 
-          adjusted_result_color, adjusted_result_depth, adjusted_poses_occluded, 0
+          adjusted_result_color, adjusted_result_depth, adjusted_poses_occluded, 0,
+          adjusted_poses_occluded_other
         );
+        // if (source_id == 136)
+        // if (objects.size() == 2)
         // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "icp_succ_" + std::to_string(source_id), adjusted_poses_occluded);
 
         // free(result_cloud);
@@ -1402,6 +1431,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         );
         
         // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        num_valid_poses = adjusted_poses_occluded.size() - accumulate(adjusted_poses_occluded.begin(), adjusted_poses_occluded.end(), 0);
+        printf("Num valid poses after icp : %d\n", num_valid_poses);
 
         // GetICPAdjustedPosesGPU(result_cloud,
         //                       dc_index,
@@ -1412,7 +1443,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         //                       rendered_point_num,
         //                       poses_occluded.data());
       }
-
+    if (num_valid_poses > 0)
+    {
       // Do KNN
       float* knn_dist   = (float*) malloc(rendered_point_num * k * sizeof(float));
       int* knn_index  = (int*)   malloc(rendered_point_num * k * sizeof(int));
@@ -1434,9 +1466,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         rendered_point_num, observed_point_num,
         num_poses, rendered_cost_gpu
       );
-      // if (source_id == 50)
-      // if (objects.size() == 1)
+      // if (source_id == 315 || source_id == 196 )
+      // if (objects.size() == 3)
       // PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
+      // if (objects.size() == 2)
 
       // Eigen::Isometry3d transform;
       // Eigen::Isometry3d cam_to_body;
@@ -1585,19 +1618,19 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         cur_unit.cost = (int) rendered_cost_gpu[i] + observed_cost[i];
       }
     }
-    if (root_level)
+    // if (root_level)
     {
       cur_unit.adjusted_state = input[i].child_state;
-      cur_unit.adjusted_state.mutable_object_states()[0] 
+      cur_unit.adjusted_state.mutable_object_states()[input[i].child_state.object_states().size()-1]
         = modified_last_object_states[i];
     }
-    else
-    {
-      // Need to make last object equal to restored adjusted state from cache
-      cur_unit.adjusted_state = input[i].child_state;
-      cur_unit.adjusted_state.mutable_object_states()[input[i].child_state.object_states().size()-1] 
-        = last_object_states[i];
-    }
+    // else
+    // {
+    //   // Need to make last object equal to restored adjusted state from cache
+    //   cur_unit.adjusted_state = input[i].child_state;
+    //   cur_unit.adjusted_state.mutable_object_states()[input[i].child_state.object_states().size()-1] 
+    //     = last_object_states[i];
+    // }
     cur_unit.state_properties.last_max_depth = 0;
     cur_unit.state_properties.last_min_depth = 0;
     // cur_unit.state_properties.target_cost =  total_result_cost[i];
@@ -1616,7 +1649,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     // output_gpu[i].unadjusted_color_image
   }
   *output = output_gpu;
-  #endif
+  // #endif
 
 }
 
@@ -4792,11 +4825,11 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
           observed_depth_data, cv_input_filtered_color_image_vec, result_observed_cloud, result_observed_cloud_color, observed_dc_index, observed_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
           1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
         );
-        PrintGPUClouds(
-          last_object_states, result_observed_cloud, result_observed_cloud_color, 
-          observed_depth_data, observed_dc_index, 1, 
-          observed_point_num, gpu_stride, random_poses_occluded.data(), "observed",
-          modified_last_object_states, false, input_point_cloud_topic, true);
+        // PrintGPUClouds(
+        //   last_object_states, result_observed_cloud, result_observed_cloud_color, 
+        //   observed_depth_data, observed_dc_index, 1, 
+        //   observed_point_num, gpu_stride, random_poses_occluded.data(), "observed",
+        //   modified_last_object_states, false, input_point_cloud_topic, true);
 
       #endif
     }

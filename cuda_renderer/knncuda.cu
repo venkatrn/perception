@@ -285,7 +285,8 @@ __global__ void depth_to_mask(
     uint32_t idx_depth = n * width * height + x + y*width;
     uint32_t idx_mask = n * width * height + x + y*width;
 
-    if(depth[idx_depth] > 0 && !pose_occluded[n]) 
+    // if(depth[idx_depth] > 0 && !pose_occluded[n]) 
+    if(depth[idx_depth] > 0) 
     {
         mask[idx_mask] = 1;
     }

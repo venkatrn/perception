@@ -155,7 +155,8 @@ class FATPerch():
         return annotations, stats
 
     def run_perch_node(self, model_poses_file):
-        command = "{}/mpirun --mca mpi_yield_when_idle 1 --use-hwthread-cpus -n 1 {} {}".format(self.MPI_BIN_ROOT, self.PERCH_EXEC, self.output_dir_name)
+        # command = "{}/mpirun --mca mpi_yield_when_idle 1 --use-hwthread-cpus -n 1 {} {}".format(self.MPI_BIN_ROOT, self.PERCH_EXEC, self.output_dir_name)
+        command = "{} {}".format(self.PERCH_EXEC, self.output_dir_name)
         print("Running command : {}".format(command))
         # print(subprocess.check_output(command.split(" ")))
         # output = subprocess.check_output(command, shell=True).decode("utf-8")

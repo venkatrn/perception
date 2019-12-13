@@ -210,7 +210,8 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                                         int32_t* source_depth_entry,
                                         uint8_t* source_red_entry,uint8_t* source_green_entry,uint8_t* source_blue_entry,
                                         int* pose_occluded_entry,
-                                        int32_t* lock_entry) {
+                                        int32_t* lock_entry,
+                                        int* pose_occluded_other_entry) {
                                         // float* l_entry,float* a_entry,float* b_entry){
     // refer to tiny renderer
     // https://github.com/ssloy/tinyrenderer/blob/master/our_gl.cpp
@@ -310,6 +311,7 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                     green_entry[x_to_write+y_to_write*real_width] = 0;
                     blue_entry[x_to_write+y_to_write*real_width] = 0;
                     atomicMax(&new_depth, INT_MAX);
+                    atomicOr(pose_occluded_other_entry, 1);
                 // }
             }
             // invalid condition where source pixel is behind and we are rendering a pixel at same x,y with lesser depth 
@@ -448,7 +450,8 @@ __global__ void render_triangle_multi(
                                 uint8_t* device_source_red_vec,uint8_t* device_source_green_vec,uint8_t* device_source_blue_vec,
                                 int* pose_occluded_vec,
                                 int* device_single_result_image,
-                                int32_t* lock_int_vec) {
+                                int32_t* lock_int_vec,
+                                int* pose_occluded_other_vec) {
     size_t pose_i = blockIdx.y;
     int model_id = device_pose_model_map_ptr[pose_i];
     size_t tri_i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -470,6 +473,7 @@ __global__ void render_triangle_multi(
     uint8_t* green_entry;
     uint8_t* blue_entry;
     int* pose_occluded_entry;
+    int* pose_occluded_other_entry;
     // printf("device_single_result_image:%d\n",device_single_result_image);
     if (*device_single_result_image)
     {
@@ -479,6 +483,7 @@ __global__ void render_triangle_multi(
         blue_entry = blue_image_vec;
         pose_occluded_entry = pose_occluded_vec;
         lock_entry = lock_int_vec;
+        pose_occluded_other_entry = pose_occluded_other_vec;
     }
     else
     {
@@ -488,6 +493,7 @@ __global__ void render_triangle_multi(
         green_entry = green_image_vec + pose_i*real_width*real_height;
         blue_entry = blue_image_vec + pose_i*real_width*real_height;
         pose_occluded_entry = pose_occluded_vec + pose_i;
+        pose_occluded_other_entry = pose_occluded_other_vec + pose_i;
     }
     
 
@@ -513,7 +519,8 @@ __global__ void render_triangle_multi(
         device_source_depth_vec,
         device_source_red_vec, device_source_green_vec, device_source_blue_vec,
         pose_occluded_entry,
-        lock_entry);
+        lock_entry,
+        pose_occluded_other_entry);
 }
 __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* blue_in,
                                     uint8_t* red_ob, uint8_t* green_ob,uint8_t* blue_ob, 
@@ -731,7 +738,8 @@ device_vector_holder<int> render_cuda_multi(
                             std::vector<int32_t>& result_depth, 
                             std::vector<std::vector<uint8_t>>& result_color,
                             std::vector<int>& pose_occluded,
-                            int single_result_image) {
+                            int single_result_image,
+                            std::vector<int>& pose_occluded_other) {
 
     // Create device inputs
     int* device_single_result_image;
@@ -799,6 +807,7 @@ device_vector_holder<int> render_cuda_multi(
     
     // Create device outputs
     thrust::device_vector<int> device_pose_occluded(num_images, 0);
+    thrust::device_vector<int> device_pose_occluded_other(num_images, 0);
 
     device_vector_holder<int32_t> device_depth_int(num_images*real_width*real_height, INT_MAX);
     // thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
@@ -820,6 +829,7 @@ device_vector_holder<int> render_cuda_multi(
     // int32_t* depth_image_vec = thrust::raw_pointer_cast(device_depth_int.data());
 
     int* device_pose_occluded_vec = thrust::raw_pointer_cast(device_pose_occluded.data());
+    int* device_pose_occluded_other_vec = thrust::raw_pointer_cast(device_pose_occluded_other.data());
 
     int32_t* device_source_depth_vec = thrust::raw_pointer_cast(device_source_depth.data());
     uint8_t* device_source_red_vec = thrust::raw_pointer_cast(device_source_color_red.data());
@@ -855,7 +865,8 @@ device_vector_holder<int> render_cuda_multi(
                                                     device_source_red_vec, device_source_green_vec, device_source_blue_vec,
                                                     device_pose_occluded_vec,
                                                     device_single_result_image,
-                                                    lock_int_vec);
+                                                    lock_int_vec,
+                                                    device_pose_occluded_other_vec);
     // cudaDeviceSynchronize();
     printf("Pose Occlusions\n");
     thrust::copy(
@@ -866,6 +877,15 @@ device_vector_holder<int> render_cuda_multi(
     printf("\n");
     thrust::copy(device_pose_occluded.begin(), device_pose_occluded.end(), pose_occluded.begin());
     
+    printf("Pose Occlusions Other\n");
+    thrust::copy(
+        device_pose_occluded_other.begin(),
+        device_pose_occluded_other.end(), 
+        std::ostream_iterator<int>(std::cout, " ")
+    );
+    printf("\n");
+    thrust::copy(device_pose_occluded_other.begin(), device_pose_occluded_other.end(), pose_occluded_other.begin());
+
     result_depth.resize(num_images*real_width*real_height);
     {
         thrust::device_vector<int32_t> v3(depth_image_vec, depth_image_vec + num_images*real_width*real_height);

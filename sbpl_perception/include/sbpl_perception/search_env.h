@@ -388,7 +388,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                         vector<vector<uint8_t>>& result_color,
                         vector<int32_t>& result_depth,
                         vector<int>& pose_occluded,
-                        int single_result_image);
+                        int single_result_image,
+                        vector<int>& pose_occluded_other);
 
   void GetICPAdjustedPosesGPU(float* result_rendered_clouds,
                               int* dc_index,
