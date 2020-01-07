@@ -11,9 +11,10 @@
       symmetric (rotationally symmetric about Z-axis)]
       -->
       [004_sugar_box,
-      $(find sbpl_perception)/data/ycb_models/004_sugar_box_aligned.ply,
+      <!-- $(find sbpl_perception)/data/ycb_models/004_sugar_box_aligned.ply, -->
+      /media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models/004_sugar_box/textured.ply,
       false,
-      true,
+      false,
       1,
       0.06,
       1

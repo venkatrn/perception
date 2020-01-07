@@ -294,6 +294,10 @@ def apply_angle_symmetry(angles, symmetry_info):
     return np.array(new_angles)
 
 def get_object_pose_in_world(object_pose, camera_pose, fat_world_pose=None, type='quat'):
+    '''
+        Transform object from camera frame to world frame given the camera pose in that world frame.
+        Units of output are same as units of location in objects_pose
+    '''
     # Returns in cm
     object_pose_matrix = np.zeros((4,4))
     object_pose_matrix[:3,:3] = RT_transform.quat2mat(get_wxyz_quaternion(object_pose['quaternion_xyzw']))
@@ -304,7 +308,7 @@ def get_object_pose_in_world(object_pose, camera_pose, fat_world_pose=None, type
     # camera_pose_matrix[:, 3] = camera_pose['location_worldframe'] + [1]
 
     camera_pose_matrix = get_camera_pose_in_world(camera_pose, fat_world_pose, type='rot', cam_to_body=None)
-
+    
     object_pose_world = np.matmul(camera_pose_matrix, object_pose_matrix)
     # object_pose_world = np.matmul(np.linalg.inv(camera_pose_matrix), object_pose_matrix)
     # scale = np.array([[0.01,0,0,0],[0,0.01,0,0],[0,0,0.01,0],[0,0,0,1]])
@@ -322,6 +326,11 @@ def get_object_pose_in_world(object_pose, camera_pose, fat_world_pose=None, type
 
 
 def get_camera_pose_in_world(camera_pose, fat_world_pose=None, type='quat', cam_to_body=None):
+    '''
+        Convert camera quaternion and location to matrix and optionally multiply it with cam_to_body or fat_world_pose
+        Multiplication with cam_to_body is required for PERCH which uses z up camera frame and not optical frame
+        Units of output are same as location units in camera_pose
+    '''
     # print(camera_pose)
     # this matrix gives world to camera transform
     camera_pose_matrix = np.zeros((4,4))

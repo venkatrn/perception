@@ -25,6 +25,10 @@
 #include <tf_conversions/tf_eigen.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <image_transport/image_transport.h>
+#include <opencv2/highgui/highgui.hpp>
+#include <cv_bridge/cv_bridge.h>
+
 
 using namespace std;
 using namespace sbpl_perception;
@@ -38,9 +42,12 @@ int main(int argc, char **argv) {
   std::shared_ptr<boost::mpi::communicator> world(new
                                                   boost::mpi::communicator());
   ros::Publisher pose_pub_, pose_array_pub_, mesh_marker_pub_, mesh_marker_array_pub_;
+  image_transport::Publisher pose_rgb_pub_;
   if (IsMaster(world)) {
     ros::init(argc, argv, "perch_fat_experiments");
     ros::NodeHandle nh("~");
+    image_transport::ImageTransport it(nh);
+    pose_rgb_pub_ = it.advertise("perch_pose_rgb_image", 1);
     pose_pub_ = nh.advertise<geometry_msgs::PoseStamped>("perch_pose", 1);
     pose_array_pub_ = nh.advertise<geometry_msgs::PoseArray>("perch_pose_array", 1);
     mesh_marker_pub_ = nh.advertise<visualization_msgs::Marker>("perch_marker", 1);
@@ -72,6 +79,7 @@ int main(int argc, char **argv) {
 
   string pose_file = experiment_dir + "output_poses.txt";
   string stats_file = experiment_dir + "output_stats.txt";
+  string output_rgb_file = experiment_dir + "output_color_image.png";
 
   // Delete directories if they exist
   if (IsMaster(world) &&
@@ -280,7 +288,10 @@ int main(int argc, char **argv) {
     }
     mesh_marker_array_pub_.publish(marker_array);
     pose_array_pub_.publish(pose_msg_array);
-    
+    // cv::Mat image = cv::imread(argv[1], CV_LOAD_IMAGE_COLOR);
+    // sensor_msgs::ImagePtr pose_rgb_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", image).toImageMsg();
+    // pose_rgb_pub_.publish(pose_rgb_msg);
+
     fs_stats << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
     fs_stats << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
              << "Cost" << endl;

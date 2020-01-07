@@ -41,6 +41,9 @@ using namespace std;
 using namespace perception_utils;
 using namespace sbpl_perception;
 
+const string kDebugDir = ros::package::getPath("sbpl_perception") +
+                         "/visualization/";
+
 namespace {
 std::vector<std::vector<int>> kColorPalette = {
   {240, 163, 255}, {0, 117, 220}, {153, 63, 0}, {76, 0, 92}, {25, 25, 25}, {0, 92, 49}, {43, 206, 72},
@@ -80,9 +83,15 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
 
   model_bank_ = ModelBankFromList(model_bank_list);
 
+  image_transport::ImageTransport it(nh);
+  pose_rgb_pub_ = it.advertise("perch_pose_rgb_image", 1);
+  input_image_repub_ = it.advertise("perch_input_color_image", 1);
   pose_pub_ = nh.advertise<geometry_msgs::PoseStamped>("perch_pose", 1);
   mesh_marker_pub_ = nh.advertise<visualization_msgs::Marker>("perch_marker", 1);
+
   cloud_sub_ = nh.subscribe("input_cloud", 1, &PerceptionInterface::CloudCB,
+                            this);
+  color_image_sub_ = nh.subscribe("input_color_image", 1, &PerceptionInterface::ImageCB,
                             this);
   keyboard_sub_ = nh.subscribe("/keypress_topic", 1,
                                &PerceptionInterface::KeyboardCB,
@@ -111,9 +120,17 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   }
 }
 
+void PerceptionInterface::ImageCB(const sensor_msgs::ImageConstPtr& input_rgb_image_msg)
+{
+  recent_color_image_ = *input_rgb_image_msg;
+}
+
 void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
                                   &sensor_cloud) {
 
+  // For tracking based testing, republish input until processing starts
+  filtered_point_cloud_pub_.publish(sensor_cloud);
+  input_image_repub_.publish(recent_color_image_);
   if (capture_kinect_ == false) {
     ROS_ERROR("%s", "Capture kinect false");
     return;
@@ -251,8 +268,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   // Convert to ROS data type
   pcl_conversions::fromPCL(outputPCL, output);
 
-  for (int i = 0; i < 10; i++)
-    filtered_point_cloud_pub_.publish(output);
+  // for (int i = 0; i < 10; i++)
+  //   filtered_point_cloud_pub_.publish(output);
 
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
   // table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
@@ -452,11 +469,16 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
       }
     }
 
+    string rgb_output_file = kDebugDir + "/output_color_image.png";
+    cv::Mat image = cv::imread(rgb_output_file, CV_LOAD_IMAGE_COLOR);
+    sensor_msgs::ImagePtr pose_rgb_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", image).toImageMsg();
+    pose_rgb_pub_.publish(pose_rgb_msg);
+
     // Set action client result if still active.
-      if (perch_server_->isActive()) {
-        perch_result_.object_poses = latest_object_poses_;
-        perch_server_->setSucceeded(perch_result_);
-      }
+    if (perch_server_->isActive()) {
+      perch_result_.object_poses = latest_object_poses_;
+      perch_server_->setSucceeded(perch_result_);
+    }
   } else {
       ROS_ERROR("Object localizer service failed.");
       // Set action client result if still active.

@@ -22,6 +22,7 @@
 #include <sbpl_perception/utils/utils.h>
 #include <std_msgs/String.h>
 #include <tf/transform_listener.h>
+#include <image_transport/image_transport.h>
 
 #include <memory>
 
@@ -32,6 +33,7 @@ class PerceptionInterface
   public:
     PerceptionInterface(ros::NodeHandle nh);
     void CloudCB(const sensor_msgs::PointCloud2ConstPtr& sensor_cloud);
+    void ImageCB(const sensor_msgs::ImageConstPtr& msg);
     void CloudCBInternal(const std::string& pcd_file);
 
     // Accessors
@@ -53,11 +55,14 @@ class PerceptionInterface
     double table_height_, zmax;
     double xmin_, xmax_;
     double ymin_, ymax_;
+    image_transport::Publisher pose_rgb_pub_;
+    image_transport::Publisher input_image_repub_;
     ros::Publisher pose_pub_;
     ros::Publisher mesh_marker_pub_;
     ros::Publisher filtered_point_cloud_pub_;
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;
+    ros::Subscriber color_image_sub_;
     ros::Subscriber keyboard_sub_;
     ros::Subscriber requested_objects_sub_;
     std::string reference_frame_;
@@ -79,6 +84,7 @@ class PerceptionInterface
     std::vector<PointCloud> recent_observations_;
 
     sensor_msgs::Image recent_depth_image_;
+    sensor_msgs::Image recent_color_image_;
     PointCloudPtr recent_cloud_;
 
     // Does all the work

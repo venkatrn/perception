@@ -25,12 +25,29 @@ include(CMakeForceCompiler)
 CMAKE_FORCE_CXX_COMPILER(/usr/bin/mpicxx ${CMAKE_CXX_COMPILER_ID})
 #include_directories(${MPI_ROOT}/include)
 
+option(USE_CUDA "use cuda or not" ON)
+if(USE_CUDA)
+set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-8.0)
+add_definitions(-DCUDA_ON)
+endif()
+if(USE_CUDA)
+# cuda
+find_package(CUDA REQUIRED)
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -std=c++11 -O3 -fopenmp --default-stream per-thread")
+list(APPEND renderer_inc ${CUDA_INCLUDE_DIRS})
+list(APPEND renderer_lib ${CUDA_LIBRARIES})
+endif()
+if(USE_CUDA)
+CUDA_COMPILE(renderer_cuda_objs ${renderer_cuda})
+endif()
 
+include_directories(${CUDA_INCLUDE_DIRS})
 
 find_package(catkin
   REQUIRED
   genmsg actionlib_msgs actionlib
   COMPONENTS
+  image_transport
   roscpp sensor_msgs perception_utils
   keyboard tf tf_conversions eigen_conversions sbpl_perception
 )
@@ -79,7 +96,7 @@ generate_messages(
   )
 
 catkin_package(
-  CATKIN_DEPENDS roscpp sensor_msgs perception_utils keyboard tf tf_conversions
+  CATKIN_DEPENDS image_transport roscpp sensor_msgs perception_utils keyboard tf tf_conversions
   sbpl_perception
   DEPENDS
   #MPI Boost
@@ -90,7 +107,7 @@ catkin_package(
 add_library(${PROJECT_NAME}
   src/perception_interface.cpp)
 target_link_libraries(${PROJECT_NAME} ${MPI_LIBRARIES} ${catkin_LIBRARIES} ${PCL_LIBRARIES}
-  ${Boost_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${ZLIB_LIBRARIES})
+  ${Boost_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${ZLIB_LIBRARIES} ${CUDA_LIBRARIES})
 
 
 add_executable(obj_rec_node src/object_recognition_node.cpp)

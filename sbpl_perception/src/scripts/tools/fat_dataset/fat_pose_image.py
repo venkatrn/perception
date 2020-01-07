@@ -36,9 +36,14 @@ class FATImage:
             model_dir='/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models/',
             model_mesh_in_mm=False,
             model_mesh_scaling_factor=1,
-            models_flipped=False
+            models_flipped=False,
+            env_config="pr2_env_config.yaml",
+            planner_config="pr2_planner_config.yaml"
         ):
-
+        '''
+            env_config : env_config.yaml in sbpl_perception/config to use with PERCH
+            planner_config : planner_config.yaml in sbpl_perception/config to use with PERCH
+        '''
         self.coco_image_directory = coco_image_directory
         self.example_coco = COCO(coco_annotation_file)
         example_coco = self.example_coco
@@ -114,8 +119,11 @@ class FATImage:
             "coke_bottle" : 2,
             "sprite_bottle" : 2,
             "fanta_bottle" : 2,
-            "crate_test" : 1
+            "crate_test" : 0
         }
+
+        self.env_config = env_config
+        self.planner_config = planner_config
 
     def get_random_image(self, name=None, required_objects=None):
         # image_data = self.example_coco.loadImgs(self.image_ids[np.random.randint(0, len(self.image_ids))])[0]
@@ -477,8 +485,8 @@ class FATImage:
 
 
     def visualize_pose_ros(
-            self, image_data, annotations, frame='camera', camera_optical_frame=True, num_publish=10, write_poses=False, ros_publish=True,
-            get_table_pose=False
+            self, image_data, annotations, frame='camera', camera_optical_frame=True, num_publish=10, 
+            write_poses=False, ros_publish=True, get_table_pose=False, input_camera_pose=None
         ):
         print("ROS visualizing")
         if '/opt/ros/kinetic/lib/python2.7/dist-packages' not in sys.path:
@@ -532,10 +540,15 @@ class FATImage:
 
         cam_to_body = self.cam_to_body if camera_optical_frame == False else None
 
-        if (frame == 'camera' and get_table_pose) or frame =='table':
-            depth_img_path = self.get_depth_img_path(color_img_path)
-            print("depth_img_path : {}".format(depth_img_path))
-            table_pose_msg, scene_cloud, camera_pose_table = self.get_camera_pose_relative_table(depth_img_path)
+        if input_camera_pose is None:
+            if (frame == 'camera' and get_table_pose) or frame =='table':
+                depth_img_path = self.get_depth_img_path(color_img_path)
+                print("depth_img_path : {}".format(depth_img_path))
+                table_pose_msg, scene_cloud, camera_pose_table = self.get_camera_pose_relative_table(depth_img_path)
+            print("camera_pose_table from depth image : {}".format(camera_pose_table))
+        else:
+            # Use the camera pose input in table frame to transform ground truth
+            camera_pose_table = input_camera_pose
 
         # while not rospy.is_shutdown():
         rendered_pose_list_out = {}
@@ -579,9 +592,10 @@ class FATImage:
                 object_pose_ros = self.get_ros_pose(location, quat, units)
                 object_pose_msg.poses.append(object_pose_ros)
                 max_min_dict = self.update_coordinate_max_min(max_min_dict, location)
-                if ((frame == 'camera' and get_table_pose) or frame == 'table') and ros_publish:
-                    self.table_pose_pub.publish(table_pose_msg)
-                    self.scene_cloud_pub.publish(scene_cloud)
+                if input_camera_pose is None:
+                    if ((frame == 'camera' and get_table_pose) or frame == 'table') and ros_publish:
+                        self.table_pose_pub.publish(table_pose_msg)
+                        self.scene_cloud_pub.publish(scene_cloud)
 
                 if frame != 'camera' and ros_publish:
                     camera_pose_msg.pose = self.get_ros_pose(camera_location, camera_quat)
@@ -808,7 +822,7 @@ class FATImage:
     def visualize_perch_output(self, image_data, annotations, max_min_dict, frame='fat_world',
             use_external_render=0, required_object='004_sugar_box', camera_optical_frame=True,
             use_external_pose_list=0, model_poses_file=None, use_centroid_shifting=0, predicted_mask_path=None,
-            gt_annotations=None, input_camera_pose=None
+            gt_annotations=None, input_camera_pose=None, num_cores=6, table_height=0.004
         ):
         from perch import FATPerch
         print("camera instrinsics : {}".format(self.camera_intrinsics))
@@ -837,7 +851,8 @@ class FATImage:
                     camera_pose = np.matmul(camera_pose, np.linalg.inv(cam_to_body))
         else:
             # Using hardcoded input camera pose from somewhere
-            camera_pose = input_camera_pose
+            camera_pose = get_camera_pose_in_world(input_camera_pose, type='rot', cam_to_body=cam_to_body)
+            camera_pose[:3, 3] /= 100
 
         print("camera_pose : {}".format(camera_pose))
 
@@ -870,7 +885,7 @@ class FATImage:
             # 'y_max' : max_min_dict['ymin'] + 2 * self.search_resolution_translation,
             'required_object' : required_object,
             # 'table_height' :  max_min_dict['zmin'],
-            'table_height' :  0.004,
+            'table_height' :  table_height,
             'use_external_render' : use_external_render,
             'camera_pose': camera_pose,
             'reference_frame_': frame,
@@ -900,9 +915,11 @@ class FATImage:
             output_dir_name=self.get_clean_name(image_data['file_name']),
             models_root=self.model_dir,
             model_params=self.model_params,
-            symmetry_info=self.symmetry_info
+            symmetry_info=self.symmetry_info,
+            env_config=self.env_config,
+            planner_config=self.planner_config
         )
-        perch_annotations = fat_perch.run_perch_node(model_poses_file)
+        perch_annotations = fat_perch.run_perch_node(model_poses_file, num_cores)
         return perch_annotations
 
     def get_clean_name(self, name):
@@ -1243,7 +1260,7 @@ class FATImage:
             downsampled_cloud_path = object_name + ".npy"
 
             if not downsample or (downsample and not os.path.isfile(downsampled_cloud_path)):
-                # If no downsample of yes downsample but without file
+                # If no downsample or yes downsample but without file
                 cloud = PlyData.read(model_file_path).elements[0].data
                 cloud = np.transpose(np.vstack((cloud['x'], cloud['y'], cloud['z'])))
 
@@ -1564,29 +1581,46 @@ def run_roman_crate():
         model_mesh_in_mm=True,
         # model_mesh_scaling_factor=0.005,
         model_mesh_scaling_factor=1,
-        models_flipped=False
+        models_flipped=False,
+        env_config="roman_env_config.yaml",
+        planner_config="roman_planner_config.yaml"
     )
 
     f_runtime = open('runtime.txt', "w")
-    # f_accuracy = open('accuracy.txt', "w")
+    f_accuracy = open('accuracy.txt', "w")
     f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
 
     required_objects = ['crate_test']
-    # f_accuracy.write("name ")
-    # for object_name in required_objects:
-    #     f_accuracy.write("{} ".format(object_name))
-    # f_accuracy.write("\n")
+    f_accuracy.write("name,")
+    for object_name in required_objects:
+        f_accuracy.write("{},".format(object_name))
+    f_accuracy.write("\n")
 
 
-    for img_i in range(0,1):
+    for img_i in range(0,25):
     # for img_i in [16, 17, 19, 22]:
 
         # required_objects = ['coke']
         image_name = 'NewMap1_roman/0000{}.left.png'.format(str(img_i).zfill(2))
         image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
 
+        # In case of crate its hard to get camera pose sometimes as ground is not visible (RANSAC plane estimation will fail)
+        # So get camera pose from an image where ground is visible and use that
+        # camera_pose_m = np.array([[0.757996, -0.00567911,    0.652234,   -0.779052],
+        #                        [0.00430481,    0.999984,  0.00370417,   -0.115213],
+        #                        [-0.652245, 1.32609e-16,    0.758009,     0.66139],
+        #                        [0,           0,           0,           1]])
+        camera_pose =  {
+            'location_worldframe': np.array([-77.90518933, -11.52125029,  66.13899833]), 
+            'quaternion_xyzw_worldframe': [-0.6445207366760153, 0.6408707673682607, -0.29401548348464, 0.2956899981377745]
+        }
+
+        # Camera pose goes here to get GT in world frame for accuracy computation
         yaw_only_objects, max_min_dict, transformed_annotations = \
-            fat_image.visualize_pose_ros(image_data, annotations, frame='table', camera_optical_frame=False)
+            fat_image.visualize_pose_ros(
+                image_data, annotations, frame='table', camera_optical_frame=False,
+                input_camera_pose=camera_pose
+            )
 
         max_min_dict['ymax'] = 1
         max_min_dict['ymin'] = -1
@@ -1598,27 +1632,25 @@ def run_roman_crate():
         # max_min_dict['xmin'] -= 0.6
         fat_image.search_resolution_translation = 0.08
 
-        # In case of crate its hard to get camera pose sometimes as ground is not visible (RANSAC plane estimation will fail)
-        # So get camera pose from an image where ground is visible and use that
-        camera_pose = np.array([[0.757996, -0.00567911,    0.652234,   -0.779052],
-                               [0.00430481,    0.999984,  0.00370417,   -0.115213],
-                               [-0.652245, 1.32609e-16,    0.758009,     0.66139],
-                               [0,           0,           0,           1]])
+
 
         perch_annotations, stats = fat_image.visualize_perch_output(
             image_data, annotations, max_min_dict, frame='table',
             use_external_render=0, required_object=required_objects,
             camera_optical_frame=False, use_external_pose_list=0, gt_annotations=transformed_annotations,
-            input_camera_pose=camera_pose
+            input_camera_pose=camera_pose, table_height=0.006, num_cores=6
         )
         # print(perch_annotations)
         # print(transformed_annotations)
 
-        # f_accuracy.write("{} ".format(image_data['file_name']))
-        # accuracy_dict = fat_image.compare_clouds(transformed_annotations, perch_annotations)
-        # for object_name in required_objects:
-        #     f_accuracy.write("{} ".format(accuracy_dict[object_name]))
-        # f_accuracy.write("\n")
+        f_accuracy.write("{},".format(image_data['file_name']))
+        add_dict, add_s_dict = fat_image.compare_clouds(transformed_annotations, perch_annotations, downsample=True, use_add_s=True)
+        for object_name in required_objects:
+            if (object_name in add_dict) and (object_name in add_s_dict):
+                f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name]))
+            else:
+                f_accuracy.write(" , ,")
+        f_accuracy.write("\n")
 
         f_runtime.write("{} {} {}\n".format(image_name, stats['expands'], stats['runtime']))
 
@@ -2005,7 +2037,8 @@ def run_sameshape_gpu():
                 use_external_render=0, required_object=required_objects,
                 # use_external_render=0, required_object=['coke', 'sprite', 'pepsi'],
                 # use_external_render=0, required_object=['sprite', 'coke', 'pepsi'],
-                camera_optical_frame=False, use_external_pose_list=0, gt_annotations=transformed_annotations
+                camera_optical_frame=False, use_external_pose_list=0, gt_annotations=transformed_annotations,
+                num_cores=0
             )
         else:
             output_dir_name = os.path.join("final_comp", "color_lazy_histogram", fat_image.get_clean_name(image_data['file_name']))
@@ -2094,12 +2127,12 @@ if __name__ == '__main__':
 
     ## Run Perch with SameShape
     # Run with use_lazy and use_color_cost enabled
-    run_sameshape_gpu()
+    # run_sameshape_gpu()
     # run_sameshape_can_only()
     # run_dope_sameshape()
 
     ## Run Perch with crate
-    # run_roman_crate()
+    run_roman_crate()
 
 
     # Copying database for single object

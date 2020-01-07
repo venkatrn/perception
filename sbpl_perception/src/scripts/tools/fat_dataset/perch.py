@@ -43,13 +43,14 @@ class FATPerch():
 
     def __init__(
             self, params=None, input_image_files=None, camera_params=None, object_names_to_id=None, output_dir_name=None,
-            models_root=None, model_params=None, symmetry_info=None, read_results_only=False
+            models_root=None, model_params=None, symmetry_info=None, read_results_only=False, env_config="pr2_env_config.yaml",
+            planner_config="pr2_planner_config.yaml"
         ):
         self.PERCH_EXEC = subprocess.check_output("catkin_find sbpl_perception perch_fat".split(" ")).decode("utf-8").rstrip().lstrip()
         rospack = rospkg.RosPack()
         self.PERCH_ROOT = rospack.get_path('sbpl_perception')
-        PERCH_ENV_CONFIG = "{}/config/pr2_env_config.yaml".format(self.PERCH_ROOT)
-        PERCH_PLANNER_CONFIG = "{}/config/pr2_planner_config.yaml".format(self.PERCH_ROOT)
+        PERCH_ENV_CONFIG = "{}/config/{}".format(self.PERCH_ROOT, env_config)
+        PERCH_PLANNER_CONFIG = "{}/config/{}".format(self.PERCH_ROOT, planner_config)
         # PERCH_ENV_CONFIG = "{}/config/pr3_env_config.yaml".format(self.PERCH_ROOT)
         # PERCH_PLANNER_CONFIG = "{}/config/pr3_planner_config.yaml".format(self.PERCH_ROOT)
         self.SYMMETRY_INFO = symmetry_info
@@ -154,9 +155,11 @@ class FATPerch():
 
         return annotations, stats
 
-    def run_perch_node(self, model_poses_file):
-        # command = "{}/mpirun --mca mpi_yield_when_idle 1 --use-hwthread-cpus -n 1 {} {}".format(self.MPI_BIN_ROOT, self.PERCH_EXEC, self.output_dir_name)
-        command = "{} {}".format(self.PERCH_EXEC, self.output_dir_name)
+    def run_perch_node(self, model_poses_file, num_cores=6):
+        if num_cores > 0:
+            command = "{}/mpirun --mca mpi_yield_when_idle 1 --use-hwthread-cpus -n {} {} {}".format(self.MPI_BIN_ROOT, num_cores, self.PERCH_EXEC, self.output_dir_name)
+        else:
+            command = "{} {}".format(self.PERCH_EXEC, self.output_dir_name)
         print("Running command : {}".format(command))
         # print(subprocess.check_output(command.split(" ")))
         # output = subprocess.check_output(command, shell=True).decode("utf-8")

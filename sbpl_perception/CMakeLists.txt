@@ -48,6 +48,7 @@ include_directories(${ZLIB_INCLUDE_DIRS})
 
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
+  image_transport
   kinect_sim
   cuda_renderer
   cuda_icp
@@ -133,6 +134,7 @@ include_directories(${catkin_INCLUDE_DIRS})
 
 catkin_package(
   CATKIN_DEPENDS
+    image_transport
     cv_bridge
     kinect_sim
     cuda_renderer

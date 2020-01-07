@@ -20,7 +20,7 @@ perch_params:
   use_downsampling: true
   sensor_resolution_radius: 0.018 #m
   # sensor_resolution_radius: 0.005 #m
-  min_neighbor_points_for_valid_pose: 500 #50
+  min_neighbor_points_for_valid_pose: 300 #50
   downsampling_leaf_size: 0.02
   # downsampling_leaf_size: 0.01
 
@@ -36,5 +36,5 @@ perch_params:
   ## Visualization and Debugging
   visualize_expanded_states: false
   visualize_successors: false
-  print_expanded_states: true
+  print_expanded_states: false
   debug_verbose: false # unused
