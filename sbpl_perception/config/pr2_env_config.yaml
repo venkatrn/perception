@@ -34,7 +34,7 @@ perch_params:
   clutter_regularizer: 0.1
 
   ## Visualization and Debugging
-  visualize_expanded_states: false
+  visualize_expanded_states: true
   visualize_successors: false
-  print_expanded_states: false
+  print_expanded_states: true
   debug_verbose: false # unused

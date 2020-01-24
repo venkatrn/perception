@@ -19,12 +19,16 @@ import shutil
 LM6d_root = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/"
 
 def render_pose(rendered_dir, count, class_name, fixed_transforms_dict, camera_intrinsics, 
-                camera_pose, rotation_angles, location, rotation):
+                camera_pose, rotation_angles, location, rotation, scale):
     width = 960
     height = 540
-    K = np.array([[camera_intrinsics['fx'], 0, camera_intrinsics['cx']], 
-                  [0, camera_intrinsics['fy'], camera_intrinsics['cy']], 
-                  [0, 0, 1]])
+    if type(camera_intrinsics) is not np.ndarray:
+        K = np.array([[camera_intrinsics['fx'], 0, camera_intrinsics['cx']], 
+                    [0, camera_intrinsics['fy'], camera_intrinsics['cy']], 
+                    [0, 0, 1]])
+    else:
+        K = camera_intrinsics
+
     # Check these TODO
     ZNEAR = 0.1
     ZFAR = 20
@@ -39,18 +43,24 @@ def render_pose(rendered_dir, count, class_name, fixed_transforms_dict, camera_i
     # camera_pose_matrix[3,:3] = [0,0,0]
     # print(camera_pose_matrix)
 
-    fixed_transform = np.transpose(np.array(fixed_transforms_dict[class_name]))
-    fixed_transform[:3,3] = [i/100 for i in fixed_transform[:3,3]]
+
+    
     object_world_transform = np.zeros((4,4))
     object_world_transform[:3,:3] = RT_transform.euler2mat(rotation_angles[0],rotation_angles[1], rotation_angles[2])
     # object_world_transform[:3,:3] = RT_transform.euler2mat(0,0,0)
     # object_world_transform[:3, :3] = RT_transform.quat2mat(get_wxyz_quaternion(rotation))
-    object_world_transform[:,3] = [i/100 for i in location] + [1]
+    object_world_transform[:,3] = [i/scale for i in location] + [1]
 
     # print(fixed_transform)
     # total_transform = np.matmul(np.linalg.inv(camera_pose_matrix), object_world_transform)
     # fixed_transform = np.matmul(m, fixed_transform)
-    total_transform = np.matmul(object_world_transform, fixed_transform)
+    if fixed_transforms_dict is not None:
+        fixed_transform = np.transpose(np.array(fixed_transforms_dict[class_name]))
+        fixed_transform[:3,3] = [i/scale for i in fixed_transform[:3,3]]
+        total_transform = np.matmul(object_world_transform, fixed_transform)
+    else:
+        total_transform = object_world_transform
+
     # total_transform = object_world_transform
     pose_rendered_q = RT_transform.mat2quat(total_transform[:3,:3]).tolist() + total_transform[:3,3].flatten().tolist()
     # pose_rendered_q = RT_transform.mat2quat(object_world_transform[:3,:3]).tolist() + object_world_transform[:3,3].flatten().tolist()
@@ -76,11 +86,16 @@ def render_pose(rendered_dir, count, class_name, fixed_transforms_dict, camera_i
     # cv2.imwrite(depth_file, depth_gl)
 
 
-image_directory = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra/'
+# image_directory = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra/'
 # annotation_file = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra/instances_fat_train_pose_2018.json'
 # annotation_file = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra/instances_fat_train_pose_symmetry_2018.json'
-annotation_file = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra/instances_fat_train_pose_6_obj_2018.json'
+# annotation_file = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra/instances_fat_train_pose_6_obj_2018.json'
+# scale = 100
 
+image_directory = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset"
+# annotation_file = image_directory + '/instances_keyframe_pose.json'
+annotation_file = image_directory + '/instances_train_pose.json'
+scale = 1
 example_coco = COCO(annotation_file)
 camera_intrinsics = example_coco.dataset['camera_intrinsic_settings']
 viewpoints_xyz = np.array(example_coco.dataset['viewpoints'])
@@ -99,20 +114,20 @@ image_ids = example_coco.getImgIds(catIds=category_ids)
 print("Number of images : {}".format(len(image_ids)))
 image_data = example_coco.loadImgs(image_ids[np.random.randint(0, len(image_ids))])[0]
 # image_data = example_coco.loadImgs(image_ids[61])[0]
-# image_data = example_coco.loadImgs(image_ids[0])[0]
+# image_data = example_coco.loadImgs(image_ids[10])[0]
 
 print(image_data)
 directory = './output'
-if not os.path.exists(directory):
-    os.makedirs(directory)
-else:
-    shutil.rmtree(directory, ignore_errors=True)
-    os.makedirs(directory)
+# if not os.path.exists(directory):
+#     os.makedirs(directory)
+# else:
+#     shutil.rmtree(directory, ignore_errors=True)
+#     os.makedirs(directory)
 
 plt.figure()
 plt.axis("off")
 plt.subplot(3,3,1)
-image = io.imread(image_directory + image_data['file_name'])
+image = io.imread(image_directory + "/" + image_data['file_name'])
 # io.imsave(os.path.join(directory, 'original.png'), image)
 
 # plt.imshow(image); plt.axis('off')
@@ -139,13 +154,20 @@ for annotation in annotations:
     print("*****{}*****".format(class_name))
     print("Recovered rotation : {}".format(xyz_rotation_angles))
     quat = annotation['quaternion_xyzw']
+    # print(quat)
     print("Actual rotation : {}".format(RT_transform.quat2euler(get_wxyz_quaternion(quat))))
     # print("Actual rotation : {}".format(RT_transform.quat2euler(get_wxyz_quaternion(quat), 'rxyz')))
+
+    # FOR YCB DATASET
+    if camera_intrinsics is None:
+        camera_intrinsics = np.array(annotation['camera_intrinsics'])
     rgb, depth = render_pose(directory, count, class_name, fixed_transforms_dict, 
-                    camera_intrinsics, annotation['camera_pose'], xyz_rotation_angles, annotation['location'], annotation['quaternion_xyzw'])
-    plt.subplot(3,3,count+1)
+                    camera_intrinsics, annotation['camera_pose'], xyz_rotation_angles, annotation['location'], annotation['quaternion_xyzw'],
+                    scale)
+    plt.subplot(4,4,count+1)    
     plt.imshow(rgb)    
-    plt.subplot(3,3,count+2)
+    plt.subplot(4,4,count+2)
     plt.imshow(depth)    
     count += 2
+plt.savefig(os.path.join(directory, 'rendering.png'))
 plt.show()

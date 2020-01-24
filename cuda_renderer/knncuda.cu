@@ -496,7 +496,7 @@ __global__ void compute_render_cost(
         else
         {
             // compute color cost
-            if (false)
+            if (true)
             {
                 uint8_t red2  = rendered_cloud_color[point_index + 2*rendered_cloud_point_num];
                 uint8_t green2  = rendered_cloud_color[point_index + 1*rendered_cloud_point_num];

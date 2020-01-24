@@ -38,12 +38,19 @@ class FATImage:
             model_mesh_scaling_factor=1,
             models_flipped=False,
             env_config="pr2_env_config.yaml",
-            planner_config="pr2_planner_config.yaml"
+            planner_config="pr2_planner_config.yaml",
+            img_width=960,
+            img_height=540,
+            distance_scale=100
         ):
         '''
             env_config : env_config.yaml in sbpl_perception/config to use with PERCH
             planner_config : planner_config.yaml in sbpl_perception/config to use with PERCH
+            distance_scale : 100 if units in database are in cm
         '''
+        self.width = img_width
+        self.height = img_height
+        self.distance_scale = distance_scale
         self.coco_image_directory = coco_image_directory
         self.example_coco = COCO(coco_annotation_file)
         example_coco = self.example_coco
@@ -67,10 +74,12 @@ class FATImage:
         self.inplane_rotations = np.array(example_coco.dataset['inplane_rotations'])
         self.fixed_transforms_dict = example_coco.dataset['fixed_transforms']
         self.camera_intrinsics = example_coco.dataset['camera_intrinsic_settings']
-        self.camera_intrinsic_matrix = \
-            np.array([[self.camera_intrinsics['fx'], 0, self.camera_intrinsics['cx']],
-                     [0, self.camera_intrinsics['fy'], self.camera_intrinsics['cy']],
-                     [0, 0, 1]])
+        if self.camera_intrinsics is not None:
+            # Can be none in case of YCB
+            self.camera_intrinsic_matrix = \
+                np.array([[self.camera_intrinsics['fx'], 0, self.camera_intrinsics['cx']],
+                        [0, self.camera_intrinsics['fy'], self.camera_intrinsics['cy']],
+                        [0, 0, 1]])
         self.depth_factor = depth_factor
 
         self.world_to_fat_world = {}
@@ -266,7 +275,7 @@ class FATImage:
         from geometry_msgs.msg import Pose, PoseStamped, PoseArray, Quaternion
         p = Pose()
         if units == 'cm':
-            p.position.x, p.position.y, p.position.z = [i/100 for i in location]
+            p.position.x, p.position.y, p.position.z = [i/self.distance_scale for i in location]
         else:
             p.position.x, p.position.y, p.position.z = [i for i in location]
 
@@ -274,7 +283,7 @@ class FATImage:
         return p
 
     def update_coordinate_max_min(self, max_min_dict, location):
-        location = [i/100 for i in location]
+        location = [i/self.distance_scale for i in location]
         if location[0] > max_min_dict['xmax']:
             max_min_dict['xmax'] = location[0]
         if location[1] > max_min_dict['ymax']:
@@ -292,14 +301,14 @@ class FATImage:
         return max_min_dict
 
     def get_world_point(self, point) :
-        camera_fx_reciprocal_ = 1.0 / self.camera_intrinsics['fx']
-        camera_fy_reciprocal_ = 1.0 / self.camera_intrinsics['fy']
+        camera_fx_reciprocal_ = 1.0 / self.camera_intrinsic_matrix[0, 0]
+        camera_fy_reciprocal_ = 1.0 / self.camera_intrinsic_matrix[1, 1]
 
         world_point = np.zeros(3)
 
         world_point[2] = point[2]
-        world_point[0] = (point[0] - self.camera_intrinsics['cx']) * point[2] * (camera_fx_reciprocal_)
-        world_point[1] = (point[1] - self.camera_intrinsics['cy']) * point[2] * (camera_fy_reciprocal_)
+        world_point[0] = (point[0] - self.camera_intrinsic_matrix[0,2]) * point[2] * (camera_fx_reciprocal_)
+        world_point[1] = (point[1] - self.camera_intrinsic_matrix[1,2]) * point[2] * (camera_fy_reciprocal_)
 
         return world_point
 
@@ -662,7 +671,8 @@ class FATImage:
 
 
     def get_depth_img_path(self, color_img_path):
-        return color_img_path.replace(os.path.splitext(color_img_path)[1], '.depth.png')
+        # return color_img_path.replace(os.path.splitext(color_img_path)[1], '.depth.png')
+        return color_img_path.replace('color', 'depth')
 
 
     def get_annotation_file_path(self, color_img_path):
@@ -698,11 +708,11 @@ class FATImage:
         # Add fixed transform to given object transform so that it can be applied to a model
         object_world_transform = np.zeros((4,4))
         object_world_transform[:3,:3] = RT_transform.euler2mat(rotation_angles[0],rotation_angles[1],rotation_angles[2])
-        object_world_transform[:,3] = [i/100 for i in location] + [1]
+        object_world_transform[:,3] = [i/self.distance_scale for i in location] + [1]
 
-        if use_fixed_transform:
+        if use_fixed_transform and self.fixed_transforms_dict is not None:
             fixed_transform = np.transpose(np.array(self.fixed_transforms_dict[class_name]))
-            fixed_transform[:3,3] = [i/100 for i in fixed_transform[:3,3]]
+            fixed_transform[:3,3] = [i/self.distance_scale for i in fixed_transform[:3,3]]
             if invert_fixed_transform:
                 total_transform = np.matmul(object_world_transform, np.linalg.inv(fixed_transform))
             else:
@@ -825,7 +835,7 @@ class FATImage:
             gt_annotations=None, input_camera_pose=None, num_cores=6, table_height=0.004
         ):
         from perch import FATPerch
-        print("camera instrinsics : {}".format(self.camera_intrinsics))
+        print("camera instrinsics : {}".format(self.camera_intrinsic_matrix))
         print("max_min_ranges : {}".format(max_min_dict))
 
         cam_to_body = self.cam_to_body if camera_optical_frame == False else None
@@ -898,12 +908,12 @@ class FATImage:
             'use_icp': 1
         }
         camera_params = {
-            'camera_width' : 960,
-            'camera_height' : 540,
-            'camera_fx' : self.camera_intrinsics['fx'],
-            'camera_fy' : self.camera_intrinsics['fy'],
-            'camera_cx' : self.camera_intrinsics['cx'],
-            'camera_cy' : self.camera_intrinsics['cy'],
+            'camera_width' : self.width,
+            'camera_height' : self.height,
+            'camera_fx' : self.camera_intrinsic_matrix[0, 0],
+            'camera_fy' : self.camera_intrinsic_matrix[1, 1],
+            'camera_cx' : self.camera_intrinsic_matrix[0, 2],
+            'camera_cy' : self.camera_intrinsic_matrix[1, 2],
             'camera_znear' : 0.1,
             'camera_zfar' : 20,
         }
@@ -2002,7 +2012,8 @@ def run_sameshape_gpu():
     # required_objects = ['coke_bottle']
     # required_objects = ['010_potted_meat_can', '008_pudding_box']
     # required_objects = ['010_potted_meat_can']
-    required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
+    # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
+    required_objects = ['pepsi_can']
     # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
     # required_objects = ['coke_bottle']
     # required_objects = ['pepsi_can', 'sprite_bottle', 'coke_bottle']
@@ -2015,7 +2026,7 @@ def run_sameshape_gpu():
 
     read_results_only = False
     # 5 in can only
-    for img_i in range(25,50):
+    for img_i in range(0,1):
 
         # image_name = 'NewMap1_reduced_2/0000{}.left.png'.format(str(img_i).zfill(2))
         # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
@@ -2037,6 +2048,92 @@ def run_sameshape_gpu():
                 use_external_render=0, required_object=required_objects,
                 # use_external_render=0, required_object=['coke', 'sprite', 'pepsi'],
                 # use_external_render=0, required_object=['sprite', 'coke', 'pepsi'],
+                camera_optical_frame=False, use_external_pose_list=0, gt_annotations=transformed_annotations,
+                num_cores=0
+            )
+        else:
+            output_dir_name = os.path.join("final_comp", "color_lazy_histogram", fat_image.get_clean_name(image_data['file_name']))
+            perch_annotations, stats = fat_image.read_perch_output(output_dir_name)
+
+        # print(perch_annotations)
+        # print(transformed_annotations)
+
+        if perch_annotations is not None:
+            f_accuracy.write("{},".format(image_data['file_name']))
+            add_dict, add_s_dict = fat_image.compare_clouds(transformed_annotations, perch_annotations, downsample=True, use_add_s=True)
+
+            for object_name in required_objects:
+                if (object_name in add_dict) and (object_name in add_s_dict):
+                    f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name]))
+                else:
+                    f_accuracy.write(" , ,")
+            f_accuracy.write("\n")
+
+            f_runtime.write("{} {} {}\n".format(image_name, stats['expands'], stats['runtime']))
+
+    f_runtime.close()
+    f_accuracy.close()
+
+def run_ycb_gpu():
+    base_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset"
+    image_directory = base_dir
+    annotation_file = base_dir + '/instances_keyframe_pose.json'
+
+    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models"
+    fat_image = FATImage(
+        coco_annotation_file=annotation_file,
+        coco_image_directory=image_directory,
+        depth_factor=10000,
+        model_dir=model_dir,
+        model_mesh_in_mm=False,
+        model_mesh_scaling_factor=1,
+        models_flipped=False,
+        img_width=640,
+        img_height=480,
+        distance_scale=1
+    )
+
+    f_runtime = open('runtime.txt', "w")
+    f_accuracy = open('accuracy.txt', "w")
+    f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
+
+    required_objects = ['002_master_chef_can']
+
+    f_accuracy.write("name ")
+
+    for object_name in required_objects:
+        f_accuracy.write("{}-add {}-adds ".format(object_name, object_name))
+    f_accuracy.write("\n")
+
+    read_results_only = False
+    for img_i in range(1,2):
+
+        image_name = 'data/0048/0000{}-color.png'.format(str(img_i).zfill(2))
+        image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
+        print(annotations)
+        fat_image.camera_intrinsic_matrix = np.array(annotations[0]['camera_intrinsics'])
+        # camera_pose =  {
+        #     'location_worldframe': annotations[0]['camera_pose']['location_worldframe'], 
+        #     'quaternion_xyzw_worldframe': annotations[0]['camera_pose']['quaternion_xyzw_worldframe']
+        # }
+
+        yaw_only_objects, max_min_dict, transformed_annotations = \
+                fat_image.visualize_pose_ros(
+                    image_data, annotations, frame='table', camera_optical_frame=False
+                )
+
+        if read_results_only == False:
+
+            max_min_dict['ymax'] = 5.0
+            max_min_dict['ymin'] = -5.0
+            max_min_dict['xmax'] = 5.0
+            max_min_dict['xmin'] = -5.0
+            table_height = 0.5
+            fat_image.search_resolution_translation = 0.08
+
+            perch_annotations, stats = fat_image.visualize_perch_output(
+                image_data, annotations, max_min_dict, frame='table',
+                use_external_render=0, required_object=required_objects,
                 camera_optical_frame=False, use_external_pose_list=0, gt_annotations=transformed_annotations,
                 num_cores=0
             )
@@ -2127,12 +2224,13 @@ if __name__ == '__main__':
 
     ## Run Perch with SameShape
     # Run with use_lazy and use_color_cost enabled
-    # run_sameshape_gpu()
+    run_sameshape_gpu()
+    # run_ycb_gpu()
     # run_sameshape_can_only()
     # run_dope_sameshape()
 
     ## Run Perch with crate
-    run_roman_crate()
+    # run_roman_crate()
 
 
     # Copying database for single object

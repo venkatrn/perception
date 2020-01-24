@@ -1422,7 +1422,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         );
         // if (source_id == 136)
         // if (objects.size() == 2)
-        // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "icp_succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "icp_succ_" + std::to_string(source_id), adjusted_poses_occluded);
 
         // free(result_cloud);
         // free(dc_index);

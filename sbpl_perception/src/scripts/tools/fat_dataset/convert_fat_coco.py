@@ -29,8 +29,11 @@ from lib.pair_matching import RT_transform
 from dipy.core.geometry import cart2sphere, sphere2cart, sphere_distance
 from lib.render_glumpy.render_py import Render_Py
 from lib.utils.mkdir_if_missing import mkdir_if_missing
+import scipy.io
+import sys
 
 if False:
+    DATASET_TYPE = "fat"
     ROOT_DIR = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra'
     SCENES = [ \
             #   "kitchen_0", "kitchen_1", "kitchen_2", "kitchen_3", 
@@ -96,7 +99,8 @@ if False:
     # OUTFILE_NAME = 'instances_fat_train_pose_6_obj_2018'
     OUTFILE_NAME = 'instances_fat_val_pose_6_obj_2018'
 
-if True:
+if False:
+    DATASET_TYPE = "fat"
     ROOT_DIR = '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed/Final'
     # SCENES = [ "NewMap1_turbosquid_can_only" ]
     SCENES = [ "NewMap1_reduced_2" ]
@@ -110,7 +114,38 @@ if True:
     OUTFILE_NAME = 'instances_newmap1_reduced_2_2018'
     # OUTFILE_NAME = 'instances_newmap1_roman_2018'
 
+if True:
+    DATASET_TYPE = "ycb"
+    ROOT_DIR = '/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset'
+    SELECTED_OBJECTS = []
+    # SCENES = []
+    # IMAGE_DIR_LIST = ['data']
+    IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str).tolist()
+    # IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/train.txt', dtype=str).tolist()
+    # IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/val.txt', dtype=str).tolist()
+    # IMG_LIST = []
+    # for img_dir in keyframes:
+    #     path = img_dir.split('/')
+    #     # SCENES.append(path[0])
+    #     SCENES.append(path[0])
+    #     IMG_LIST.append(path[1])
+    object_settings_file = Path(os.path.join(ROOT_DIR, "image_sets/classes.txt"))
+    OUTFILE_NAME = 'instances_keyframe_pose'
+    # OUTFILE_NAME = 'instances_train_pose'
+    # OUTFILE_NAME = 'instances_val_pose'
+    IMG_SUBFOLDER = "data"
+    
+    # print(SCENES)
+    # print(IMAGE_DIR_LIST)
 
+if False:
+    DATASET_TYPE = "ycb"
+    ROOT_DIR = '/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset'
+    SELECTED_OBJECTS = []
+    IMG_LIST = [str(x).zfill(6) for x in range(0, 80000)]
+    object_settings_file = Path(os.path.join(ROOT_DIR, "image_sets/classes.txt"))
+    OUTFILE_NAME = 'instances_syn_pose'
+    IMG_SUBFOLDER = "data_syn"
 
 ng = 642
 print ( '' )
@@ -148,7 +183,6 @@ def filter_for_jpeg(root, files):
     file_types = r'|'.join([fnmatch.translate(x) for x in file_types])
     files = [os.path.join(root, f) for f in files]
     files = [f for f in files if re.match(file_types, f)]
-    
     return files
 
 def filter_for_annotations(root, files, image_filename):
@@ -172,36 +206,6 @@ def filter_for_labels(root, files, image_filename):
     files = [f for f in files if re.match(file_name_prefix, os.path.splitext(os.path.basename(f))[0])]
 
     return files
-
-# def render_pose(class_name, fixed_transform, camera_intrinsics, rotation_angles, location):
-#     width = 960
-#     height = 540
-#     K = np.array([[camera_intrinsics['fx'], 0, camera_intrinsics['cx']], 
-#                   [0, camera_intrinsics['fy'], camera_intrinsics['cy']], 
-#                   [0, 0, 1]])
-#     # Check these TODO
-#     ZNEAR = 0.1
-#     ZFAR = 20
-#     depth_factor = 1000
-#     model_dir = os.path.join(LM6d_root, "models", class_name)
-#     render_machine = Render_Py(model_dir, K, width, height, ZNEAR, ZFAR)
-
-#     fixed_transform = np.transpose(np.array(fixed_transform))
-#     fixed_transform[:3,3] = [i/100 for i in fixed_transform[:3,3]]
-#     object_world_transform = np.zeros((4,4))
-#     object_world_transform[:3,:3] = RT_transform.euler2mat(rotation_angles[0],rotation_angles[1],rotation_angles[2])
-#     object_world_transform[:,3] = [i/100 for i in location] + [1]
-
-#     total_transform = np.matmul(object_world_transform, fixed_transform)
-#     pose_rendered_q = RT_transform.mat2quat(total_transform[:3,:3]).tolist() + total_transform[:3,3].flatten().tolist()
-    
-#     rgb_gl, depth_gl = render_machine.render(
-#         pose_rendered_q[:4], np.array(pose_rendered_q[4:])
-#     )
-#     rgb_gl = rgb_gl.astype("uint8")
-
-#     depth_gl = (depth_gl * depth_factor).astype(np.uint16)
-#     return rgb_gl, depth_gl
 
 def cart2polar(point):
     r = math.sqrt(point[0]**2 + point[1]**2 + point[2]**2)
@@ -376,13 +380,7 @@ def get_segmentation_data_for_scene(IMG_DIR):
 
 
         
-
-
-def main():
-
-    # object_settings_file = Path(os.path.join(IMAGE_DIR_LIST[0], "_object_settings.json"))
-    # camera_settings_file = Path(os.path.join(IMAGE_DIR_LIST[0], "_camera_settings.json"))
-
+def pre_load_fat_dataset():
     if object_settings_file.is_file():
         with open(object_settings_file) as file:
             object_settings_data = json.load(file)
@@ -415,6 +413,23 @@ def main():
             CAMERA_INTRINSICS = camera_settings_data['camera_settings'][0]['intrinsic_settings']
     else:
         raise Exception("Camera settings file not found")
+    
+    return CATEGORIES, FIXED_TRANSFORMS, CAMERA_INTRINSICS
+
+def pre_load_ycb_dataset():
+    CLASSES = np.loadtxt(object_settings_file, dtype=str).tolist()
+
+    CATEGORIES = [{
+            'id': i,
+            'name': CLASSES[i],
+            'supercategory': 'shape',
+        } for i in range(0,len(CLASSES))]
+    
+    return CATEGORIES, None, None
+
+def load_fat_dataset():
+
+    CATEGORIES, FIXED_TRANSFORMS, CAMERA_INTRINSICS = pre_load_fat_dataset()
 
     VIEWPOINTS = [viewpoints_xyz[i].tolist() for i in range(0, len(viewpoints_xyz))]
 
@@ -566,6 +581,176 @@ def main():
             with open('{}/{}.json'.format(ROOT_DIR, OUTFILE_NAME), 'w') as output_json_file:
                 json.dump(coco_output, output_json_file)
 
+def load_ycb_dataset():
+    # ROS_PYTHON2_PKG_PATH = ['/opt/ros/kinetic/lib/python2.7/dist-packages',
+    #                         '/usr/local/lib/python2.7/dist-packages/',
+    #                         '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/devel/lib/python2.7/dist-packages']
+    # ROS_PYTHON3_PKG_PATH = '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/ros_python3_ws/devel/lib/python3/dist-packages'
+    # import rospy
+    # for python2_path in ROS_PYTHON2_PKG_PATH:
+    #     if python2_path in sys.path:
+    #         sys.path.remove(python2_path)
+    # if ROS_PYTHON3_PKG_PATH not in sys.path:
+    #     sys.path.append(ROS_PYTHON3_PKG_PATH)
+    # import tf.transformations
+
+    CATEGORIES, FIXED_TRANSFORMS, CAMERA_INTRINSICS = pre_load_ycb_dataset()
+
+    VIEWPOINTS = [viewpoints_xyz[i].tolist() for i in range(0, len(viewpoints_xyz))]
+
+    INPLANE_ROTATIONS = [inplane_rot_angles[i] for i in range(0, len(inplane_rot_angles))]
+
+    coco_output = {
+        "info": INFO,
+        "licenses": LICENSES,
+        "categories": CATEGORIES,
+        "viewpoints" : VIEWPOINTS,
+        "inplane_rotations" : INPLANE_ROTATIONS,
+        "camera_intrinsic_settings": CAMERA_INTRINSICS,
+        "fixed_transforms": FIXED_TRANSFORMS,
+        "images": [],
+        "annotations": []
+    }
+
+    image_global_id = 1
+    segmentation_global_id = 1
+
+    # filter for jpeg images
+    for ii in trange(len(IMG_LIST)):
+        IMG = IMG_LIST[ii]
+        image_filename = os.path.join(IMG_SUBFOLDER, IMG + '-color.png')
+        depth_image_filename = os.path.join(IMG_SUBFOLDER, IMG + '-depth.png')
+        # print(image_filename)
+        
+        img_size = (640, 480)
+        image_info = pycococreatortools.create_image_info(
+            image_global_id, image_filename, img_size
+        )
+        # plt.figure()
+        # full_image_file =  os.path.join(ROOT_DIR, image_filename)
+        # skimage.io.imshow(skimage.io.imread(full_image_file))
+        # plt.show()
+        
+        label_filename = os.path.join(ROOT_DIR, IMG_SUBFOLDER, IMG + '-meta.mat')
+        label_data = scipy.io.loadmat(label_filename)
+        # print(label_data)
+
+        boxes = []
+        labels = []
+        segmentation_ids = []
+        
+        
+        segmentation_image_file =  os.path.join(ROOT_DIR, IMG_SUBFOLDER, IMG + '-label.png')
+        segmentation_image = skimage.io.imread(segmentation_image_file)
+        # print(segmentation_image)
+        # print("File %d - %s"% (image_global_id, segmentation_image_files[0]))
+
+        class_indexes = label_data['cls_indexes'].flatten().tolist()
+        camera_pose = {}
+        if 'rotation_translation_matrix' in label_data:
+            # Not present in data_syn
+            camera_pose_matrix = label_data['rotation_translation_matrix']
+            camera_pose_matrix = np.vstack((camera_pose_matrix, np.array([0,0,0,1])))
+            camera_pose['location_worldframe'] = RT_transform.translation_from_matrix(camera_pose_matrix).tolist()
+            camera_pose['quaternion_xyzw_worldframe'] = get_xyzw_quaternion(RT_transform.quaternion_from_matrix(camera_pose_matrix).tolist())
+        camera_intrinsics = label_data['intrinsic_matrix'].tolist()
+        # print(label_data['poses'].shape)
+
+        ## Iterate over every object in annotation
+        for i in range(0, len(class_indexes)):
+            ## Label starts from 1 in the annotation, need from 0 for indexing but 1 for segmentation image label
+            class_label = int(class_indexes[i]) - 1
+            class_name = CATEGORIES[class_label]['name']
+            pose_matrix = label_data['poses'][:,:,i]
+            pose_matrix = np.vstack((pose_matrix, np.array([0,0,0,1])))
+
+            if len(SELECTED_OBJECTS) > 0:
+                if class_name not in SELECTED_OBJECTS:
+                    continue
+
+            # print(class_name)
+            # print(pose_matrix)
+            # class_bounding_box = label_data['objects'][i]['bounding_box']
+            quat = get_xyzw_quaternion(RT_transform.mat2quat(pose_matrix[:3,:3]).tolist())
+            angles = RT_transform.mat2euler(pose_matrix[:3,:3])
+            # print(quat)
+            loc = RT_transform.translation_from_matrix(pose_matrix)
+            
+            # angles = RT_transform.quat2euler(get_wxyz_quaternion(quat))
+            # angles = RT_transform.quat2euler(get_wxyz_quaternion(quat), 'syxz')
+            # angles = apply_angle_symmetry(angles, SYMMETRY_INFO[class_name])
+            # This function gives angles with this convention of euler - https://en.wikipedia.org/wiki/Euler_angles#Signs_and_ranges (geometric definition)
+
+            # if np.isclose(angles[1], 0):
+            #     print("Test")
+            theta, phi = euler2sphere(angles[1], angles[0])
+            actual_angles = np.array([1, theta, phi])
+            xyz_coord = sphere2cart(1, theta, phi)
+            
+            viewpoint_id = find_viewpoint_id(viewpoints_xyz, xyz_coord)
+            r_xyz = get_viewpoint_from_id(viewpoints_xyz, viewpoint_id)
+            recovered_angles = np.array(cart2sphere(r_xyz[0], r_xyz[1], r_xyz[2]))
+
+            inplane_rotation_id = find_inplane_rotation_id(inplane_rot_angles, angles[2])
+            # inplate_rotation_angle = get_inplane_rotation_from_id(INPLANE_ROTATIONS, inplane_rotation_id)
+
+
+            if np.all(np.isclose(actual_angles, recovered_angles, atol=0.4)) == False:
+                print("Mismatch in : {}".format(label_filename))
+                print("sphere2cart angles : {}".format(actual_angles))
+                print("cart2sphere angles : {}".format(recovered_angles))
+            # elif np.all(np.isclose(actual_angles, recovered_angles, atol=0.4)) == True:
+            #     print("Match")
+
+            # Create binary masks from segmentation image for every object
+            binary_mask = np.copy(segmentation_image)
+            binary_mask[binary_mask != class_label + 1] = 0
+            binary_mask[binary_mask == class_label + 1] = 1
+            # skimage.io.imshow(binary_mask, cmap=plt.cm.gray)
+            # plt.show()
+
+            # TODO : check if its actually a crowd in case of multiple instances of one object type
+            category_info = {'id': class_label, 'is_crowd': 0}
+
+            
+            annotation_info = pycococreatortools.create_annotation_info(
+                segmentation_global_id, image_global_id, category_info, binary_mask,
+                img_size, tolerance=2)
+            
+            # print(annotation_info)
+            if annotation_info is not None:
+                annotation_info['viewpoint_id'] = int(viewpoint_id)
+                annotation_info['inplane_rotation_id'] = int(inplane_rotation_id)
+                annotation_info['camera_pose'] = camera_pose
+                annotation_info['camera_intrinsics'] = camera_intrinsics
+                annotation_info['location'] = loc.tolist()
+                annotation_info['quaternion_xyzw'] = quat
+                annotation_info['depth_image_filename'] = depth_image_filename
+                coco_output["annotations"].append(annotation_info)
+                coco_output["images"].append(image_info)
+            else:
+                # print(label_data)
+                # full_image_file =  os.path.join(ROOT_DIR, image_filename)
+                # skimage.io.imshow(skimage.io.imread(full_image_file))
+                # skimage.io.imshow(segmentation_image)
+                # binary_mask = np.copy(segmentation_image)
+                # binary_mask[binary_mask != class_label] = 0
+                # binary_mask[binary_mask == class_label] = 1
+                # skimage.io.imshow(binary_mask, cmap=plt.cm.gray)
+                # plt.show()
+                tqdm.write("File {} doesn't have boxes or labels in json file for {}".format(image_filename, class_name))
+            segmentation_global_id = segmentation_global_id + 1
+        # else:
+        #     tqdm.write("File %s doesn't have a label file" % image_filename)
+                
+
+        image_global_id = image_global_id + 1
+
+    with open('{}/{}.json'.format(ROOT_DIR, OUTFILE_NAME), 'w') as output_json_file:
+        json.dump(coco_output, output_json_file)
 
 if __name__ == "__main__":
-    main()
+    if DATASET_TYPE == "fat":
+        load_fat_dataset()
+    elif DATASET_TYPE == "ycb":
+        load_ycb_dataset()
