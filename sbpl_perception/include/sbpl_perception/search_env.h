@@ -353,7 +353,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   vector<cuda_renderer::Model::Triangle> tris;
   float gpu_depth_factor = 100.0;
   int gpu_point_dim = 3;
-  int gpu_stride = 6;
+  // Stride should divide width exactly
+  int gpu_stride = 5;
   float* result_observed_cloud;
   uint8_t* result_observed_cloud_color;
   int observed_point_num;
@@ -409,6 +410,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   ros::Publisher downsampled_input_point_cloud_topic;
   ros::Publisher downsampled_mesh_cloud_topic;
   ros::Publisher input_point_cloud_topic;
+  ros::Publisher gpu_input_point_cloud_topic;
   cv::Mat cv_input_color_image;
   std::string input_depth_image_path;
 

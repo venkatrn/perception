@@ -141,6 +141,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
 
     // ros::NodeHandle nh_;
     input_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/input_point_cloud", 1);
+    
+    gpu_input_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/gpu_input_point_cloud", 1);
 
     downsampled_input_point_cloud_topic = private_nh.advertise<sensor_msgs::PointCloud2>("/perch/downsampled_input_point_cloud", 1);
 
@@ -208,8 +210,8 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Camera CX: %f\n", kCameraCX);
     printf("Camera CY: %f\n", kCameraCY);
     env_params_.cam_intrinsic=(cv::Mat_<float>(3,3) << kCameraFX, 0.0, kCameraCX, 0.0, kCameraFY, kCameraCY, 0.0, 0.0, 1.0);
-    env_params_.width = 960;
-    env_params_.height = 540;
+    env_params_.width = kCameraWidth;
+    env_params_.height = kCameraHeight;
     env_params_.proj_mat = cuda_renderer::compute_proj(env_params_.cam_intrinsic, env_params_.width, env_params_.height);
   }
 
@@ -321,20 +323,21 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                                                  search_resolution / 2.0);
   }
 
-  double search_rad = std::max(
-                              obj_models_[model_id].GetCircumscribedRadius(),
-                              grid_cell_circumscribing_radius);
 
-  if (env_params_.use_external_render == 1) {
-      // Axis is different
-      search_rad = 0.5 * search_rad;
-  }
+
+  // if (env_params_.use_external_render == 1) {
+  //     // Axis is different
+  //     search_rad = 0.5 * search_rad;
+  // }
 
   int min_neighbor_points_for_valid_pose = perch_params_.min_neighbor_points_for_valid_pose;
   int num_neighbors_found = 0;
 
   if (env_params_.use_external_pose_list != 1)
   {
+    double search_rad = std::max(
+                            obj_models_[model_id].GetCircumscribedRadius(),
+                            grid_cell_circumscribing_radius);
     num_neighbors_found = projected_knn_->radiusSearch(point, search_rad,
                                                         indices,
                                                         sqr_dists, min_neighbor_points_for_valid_pose); //0.2
@@ -342,6 +345,10 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
   else
   {
     // For 6D cant search in projected cloud so search in original cloud
+    double search_rad = std::max(
+                            obj_models_[model_id].GetInflationFactor() *
+                            obj_models_[model_id].GetCircumscribedRadius3D(),
+                            grid_cell_circumscribing_radius);
     num_neighbors_found = knn->radiusSearch(point, search_rad,
                                             indices,
                                             sqr_dists, min_neighbor_points_for_valid_pose); //0.2
@@ -409,21 +416,24 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
 
 
   // TODO: revisit this and accomodate for collision model
-  double rad_1, rad_2;
-  rad_1 = obj_models_[model_id].GetInscribedRadius();
+  if (env_params_.use_external_pose_list != 1) {
 
-  for (size_t ii = 0; ii < s.NumObjects(); ++ii) {
-    const auto object_state = s.object_states()[ii];
-    int obj_id = object_state.id();
-    ContPose obj_pose = object_state.cont_pose();
+    double rad_1, rad_2;
+    rad_1 = obj_models_[model_id].GetInscribedRadius();
 
-    rad_2 = obj_models_[obj_id].GetInscribedRadius();
+    for (size_t ii = 0; ii < s.NumObjects(); ++ii) {
+      const auto object_state = s.object_states()[ii];
+      int obj_id = object_state.id();
+      ContPose obj_pose = object_state.cont_pose();
 
-    if ((pose.x() - obj_pose.x()) * (pose.x() - obj_pose.x()) +
-        (pose.y() - obj_pose.y()) *
-        (pose.y() - obj_pose.y()) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
-      // std::cout << "Invalid 2" << endl;
-      return false;
+      rad_2 = obj_models_[obj_id].GetInscribedRadius();
+
+      if ((pose.x() - obj_pose.x()) * (pose.x() - obj_pose.x()) +
+          (pose.y() - obj_pose.y()) *
+          (pose.y() - obj_pose.y()) < (rad_1 + rad_2) * (rad_1 + rad_2))  {
+        // std::cout << "Invalid 2" << endl;
+        return false;
+      }
     }
   }
 
@@ -573,7 +583,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
   if (perch_params_.print_expanded_states) {
     string fname = debug_dir_ + "expansion_depth_" + to_string(source_state_id) + ".png";
     string cname = debug_dir_ + "expansion_color_" + to_string(source_state_id) + ".png";
-    // PrintState(source_state_id, fname, cname);
+    PrintState(source_state_id, fname, cname);
     // PrintState(source_state_id, fname);
   }
 
@@ -755,7 +765,7 @@ void EnvObjectRecognition::GetSuccs(int source_state_id,
       // std::stringstream ssc;
       // ssc.precision(20);
       // ssc << debug_dir_ + "succ_color_" << candidate_succ_ids[ii] << ".png";
-      // //PrintImage(ss.str(), output_unit.depth_image);
+      // // PrintImage(ss.str(), output_unit.depth_image);
       // PrintState(output_unit.adjusted_state , ss.str(), ssc.str());
 
       // uint8_t rgb[3] = {255,0,0};
@@ -980,6 +990,9 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
                                       int num_poses, string suffix, 
                                       vector<int> poses_occluded)
 {
+  //// Function to check if the GPU rendered images looks fine by converting them to point cloud on CPU
+  //// and visualizing the output
+
   // for (int j = 0; j < result_depth.size(); j++) {
   //   if (result_depth[j] > 0)
   //   {
@@ -1049,6 +1062,7 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
                                           bool print_cloud)
 { 
   // ofstream myfile;
+  //// Function to check if the GPU point cloud looks fine, and also do ICP if needed
   vector<int> parent_counted_pixels;
 
   uint8_t rgb[3] = {0,0,0};
@@ -1064,7 +1078,7 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
     ObjectState temp;
     modified_objects.resize(objects.size(), temp);
   }
-  #pragma omp parallel for
+  #pragma omp parallel for if (do_icp)
   for(int n = 0; n < num_poses; n ++)
   {
     // if(pose_occluded[n]) continue;
@@ -1110,7 +1124,7 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
       if (print_cloud)
       {
         PrintPointCloud(transformed_cloud, 1, render_point_cloud_topic);
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       }
     }
     // cout << pose_occluded[n] << endl;
@@ -1358,9 +1372,9 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       poses_occluded_other
     );
     // if (objects.size() == 3)
-    if (perch_params_.vis_expanded_states) {
-      PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
-    }
+    // if (perch_params_.vis_expanded_states) {
+    //   PrintGPUImages(result_depth, result_color, num_poses, "succ_" + std::to_string(source_id), poses_occluded);
+    // }
 
     // // Compute observed cloud
     // free(dc_index);
@@ -1409,7 +1423,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         fill(poses_occluded_other.begin(), poses_occluded_other.end(), 1);
       }
       {
-        //// Do ICP for occluded stuff
+        //// Do ICP for occluded stuff, poses which are not occluded by other would be same as original
         PrintGPUClouds(
           last_object_states, result_cloud, result_cloud_color, depth_data, dc_index, 
           num_poses, rendered_point_num, gpu_stride, poses_occluded_other.data(), "rendered",
@@ -1422,7 +1436,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         );
         // if (source_id == 136)
         // if (objects.size() == 2)
-        PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "icp_succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "icp_succ_" + std::to_string(source_id), adjusted_poses_occluded);
 
         // free(result_cloud);
         // free(dc_index);
@@ -1435,9 +1449,16 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
           num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
         );
         
-        // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
         num_valid_poses = adjusted_poses_occluded.size() - accumulate(adjusted_poses_occluded.begin(), adjusted_poses_occluded.end(), 0);
         printf("Num valid poses after icp : %d\n", num_valid_poses);
+
+        PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        // vector<ObjectState> random_modified_last_object_states;
+        // PrintGPUClouds(
+        //   modified_last_object_states, result_cloud, result_cloud_color, depth_data, dc_index, 
+        //   num_poses, rendered_point_num, gpu_stride, poses_occluded_ptr, "rendered",
+        //   random_modified_last_object_states, false, render_point_cloud_topic, true
+        // );
 
         // GetICPAdjustedPosesGPU(result_cloud,
         //                       dc_index,
@@ -2506,6 +2527,7 @@ int EnvObjectRecognition::GetCost(const GraphState &source_state,
     // succ_depth_buffer = GetDepthImage(*adjusted_child_state, &depth_image);
     // final_depth_image->clear();
     // *final_depth_image = depth_image;
+    // if (source_state.NumObjects() == 0)
     return -1;
     // Aditya uncomment later
   }
@@ -3194,20 +3216,25 @@ int EnvObjectRecognition::GetSourceCost(const PointCloudPtr
     // Check that this object state is valid, i.e, it has at least
     // perch_params_.min_neighbor_points_for_valid_pose within the circumscribed cylinder.
     // This should be true if we correctly validate successors.
-    const double validation_search_rad =
-      obj_models_[last_obj_id].GetInflationFactor() *
-      obj_models_[last_obj_id].GetCircumscribedRadius();
 
     int num_validation_neighbors;
     if (env_params_.use_external_pose_list == 1)
     {
+      const double validation_search_rad =
+        obj_models_[last_obj_id].GetInflationFactor() *
+        obj_models_[last_obj_id].GetCircumscribedRadius3D();
       num_validation_neighbors = knn->radiusSearch(obj_center,
                                                     validation_search_rad,
                                                     validation_points,
                                                     sqr_dists, kNumPixels);
+      printf("validation_search_rad : %f, num_validation_neighbors: %d\n", validation_search_rad, num_validation_neighbors);
+      
     }
     else
     {
+      const double validation_search_rad =
+        obj_models_[last_obj_id].GetInflationFactor() *
+        obj_models_[last_obj_id].GetCircumscribedRadius();
       num_validation_neighbors = projected_knn_->radiusSearch(obj_center,
                                                     validation_search_rad,
                                                     validation_points,
@@ -3465,7 +3492,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
   vector<uint8_t> r_vec(s.height * s.width, 0);
   vector<uint8_t> g_vec(s.height * s.width, 0);
   vector<uint8_t> b_vec(s.height * s.width, 0);
-// std::cout << "depth_image size " << s << endl;
+  std::cout << "depth_image size " << s << endl;
   // std::cout<<cam_to_world_.matrix()<<endl;
   Eigen::Isometry3d transform;
   if (env_params_.use_external_render == 1) {
@@ -3536,11 +3563,17 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       else
       {
         if (predicted_mask_image.at<uchar>(v, u) > 0)
+        {
           cloud->points.push_back(point);
+          filtered_depth_image.at<int32_t>(v,u) = static_cast<int32_t>(depth_image.at<unsigned short>(v,u));
+          r_vec[u + v * s.width] = static_cast<uchar>(cv_vec[2]);
+          g_vec[u + v * s.width] = static_cast<uchar>(cv_vec[1]);
+          b_vec[u + v * s.width] = static_cast<uchar>(cv_vec[0]);
+        }
       }
     }
   }
-  // cv::imwrite("test_filter_depth.png", filtered_depth_image);
+  cv::imwrite("test_filter_depth.png", filtered_depth_image);
   cv_input_filtered_depth_image = filtered_depth_image;
   cv_input_filtered_color_image = filtered_color_image;
   cv_input_filtered_color_image_vec.push_back(r_vec);
@@ -4285,7 +4318,8 @@ const float *EnvObjectRecognition::GetDepthImage(GraphState &s,
     kinect_simulator_->get_depth_image_uint(depth_buffer, depth_image);
     // kinect_simulator_->write_depth_image_uint(depth_buffer, "test_depth.png");
 
-    if (kUseColorCost) {
+    if (kUseColorCost) 
+    {
       const uint8_t *color_buffer = kinect_simulator_->rl_->getColorBuffer();
       kinect_simulator_->get_rgb_image_uchar(color_buffer, color_image);
       kinect_simulator_->get_rgb_image_cv(color_buffer, cv_color_image);
@@ -4817,11 +4851,12 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     {
       // #ifdef CUDA_ON
       //// 1D array where height is point dimension (3) and length is equal to number of points in color
-      result_observed_cloud = (float*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(float));
-      result_observed_cloud_color = (uint8_t*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(uint8_t));
-      observed_dc_index;
+      // result_observed_cloud = (float*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(float));
+      // result_observed_cloud_color = (uint8_t*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(uint8_t));
+      // observed_dc_index;
       observed_depth_data = cv_input_filtered_depth_image.ptr<int>(0);
-      observed_point_num;
+      // observed_point_num;
+      // gpu_depth_factor = input.depth_factor;
       std::vector<int> random_poses_occluded(1, 0);
       int * cloud_pose_map;
       std::vector<ObjectState> last_object_states;
@@ -4829,13 +4864,13 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
 
       cuda_renderer::depth2cloud_global(
         observed_depth_data, cv_input_filtered_color_image_vec, result_observed_cloud, result_observed_cloud_color, observed_dc_index, observed_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
-        1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
+        1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, input.depth_factor, gpu_stride, gpu_point_dim
       );
-      // PrintGPUClouds(
-      //   last_object_states, result_observed_cloud, result_observed_cloud_color, 
-      //   observed_depth_data, observed_dc_index, 1, 
-      //   observed_point_num, gpu_stride, random_poses_occluded.data(), "observed",
-      //   modified_last_object_states, false, input_point_cloud_topic, true);
+      PrintGPUClouds(
+        last_object_states, result_observed_cloud, result_observed_cloud_color, 
+        observed_depth_data, observed_dc_index, 1, 
+        observed_point_num, gpu_stride, random_poses_occluded.data(), "observed",
+        modified_last_object_states, false, gpu_input_point_cloud_topic, true);
 
       // #endif
     }
@@ -5499,7 +5534,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
     if (env_params_.use_external_render == 1 || env_params_.use_external_pose_list == 1)
     {
         printf("States for model : %s\n", obj_models_[ii].name().c_str());
-        // if (source_state.object_states().size() == 0)
+        if (source_state.object_states().size() == 0)
         {
           string render_states_dir;
           string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
@@ -5653,17 +5688,17 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           // Close the File
           file.close();
         }
-        // else
-        // {
-        //   printf("GenerateSuccessorStates() from cache\n");
-        //   for (size_t i = 0; i < valid_succ_cache[ii].size(); i++)
-        //   {
-        //     // const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
-        //     GraphState s = source_state; // Can only add objects, not remove them
-        //     s.AppendObject(valid_succ_cache[ii][i]);
-        //     succ_states->push_back(s);
-        //   }
-        // }
+        else
+        {
+          printf("GenerateSuccessorStates() from cache\n");
+          for (size_t i = 0; i < valid_succ_cache[ii].size(); i++)
+          {
+            // const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+            GraphState s = source_state; // Can only add objects, not remove them
+            s.AppendObject(valid_succ_cache[ii][i]);
+            succ_states->push_back(s);
+          }
+        }
 
     }
     else

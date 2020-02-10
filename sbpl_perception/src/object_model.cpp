@@ -372,7 +372,7 @@ void ObjectModel::SetObjectProperties() {
   // printf("\n");
   // printf("Polygon size: %d\n", static_cast<int>(polygons[0].vertices.size()));
   //
-  // printf("Inflation factor for model %s: %f\n", name_.c_str(), inflation_factor_);
+  printf("Inflation factor for model %s: %f\n", name_.c_str(), inflation_factor_);
 
   // Rasterize the footprint for fast point-within-footprint checking
   // Aditya
@@ -441,6 +441,10 @@ double ObjectModel::GetInscribedRadius() const {
 
 double ObjectModel::GetCircumscribedRadius() const {
   return std::max(fabs(max_x_ - min_x_), fabs(max_y_ - min_y_)) / 2.0;
+}
+
+double ObjectModel::GetCircumscribedRadius3D() const {
+  return std::max(fabs(max_x_ - min_x_), std::max(fabs(max_y_ - min_y_), fabs(max_z_ - min_z_))) / 2.0;
 }
 
 

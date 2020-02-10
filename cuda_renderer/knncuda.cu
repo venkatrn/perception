@@ -376,6 +376,7 @@ bool depth2cloud_global(int32_t* depth_data,
     cudaMemcpy(pose_occluded_cuda, pose_occluded, num_poses * sizeof(int), cudaMemcpyHostToDevice);
 
     dim3 threadsPerBlock(16, 16);
+    assert(width % stride == 0);
     dim3 numBlocks((width/stride * num_poses + threadsPerBlock.x - 1)/threadsPerBlock.x, (height/stride + threadsPerBlock.y - 1)/threadsPerBlock.y);
 
     thrust::device_vector<int> mask(width*height*num_poses, 0);
@@ -489,6 +490,7 @@ __global__ void compute_render_cost(
         // float camera_z = rendered_cloud[point_index + 2 * rendered_cloud_point_num];
         // float cost = 10 * camera_z;
         float cost = 1.0;
+        // printf("KKN distance : %f\n", cuda_knn_dist[point_index]);
         if (cuda_knn_dist[point_index] > sensor_resolution)
         {
             atomicAdd(&cuda_rendered_cost[pose_index], cost);
@@ -496,7 +498,7 @@ __global__ void compute_render_cost(
         else
         {
             // compute color cost
-            if (true)
+            if (false)
             {
                 uint8_t red2  = rendered_cloud_color[point_index + 2*rendered_cloud_point_num];
                 uint8_t green2  = rendered_cloud_color[point_index + 1*rendered_cloud_point_num];

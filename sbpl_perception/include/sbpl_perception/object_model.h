@@ -39,6 +39,8 @@ class ObjectModel {
 
   double GetCircumscribedRadius() const;
 
+  double GetCircumscribedRadius3D() const;
+
   pcl::PolygonMeshPtr GetTransformedMesh(const ContPose & p) const;
 
   pcl::PolygonMeshPtr GetTransformedMeshWithShift(ContPose & p) const;

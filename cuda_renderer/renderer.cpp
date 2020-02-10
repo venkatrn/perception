@@ -76,6 +76,7 @@ void cuda_renderer::Model::recursive_render(const aiScene *sc, const aiNode *nd,
         for (size_t t = 0; t < mesh->mNumFaces; ++t){
             const struct aiFace* face = &mesh->mFaces[t];
             // std::cout << face->mNumIndices << std::endl;
+            if (face->mNumIndices < 3) continue;
             assert(face->mNumIndices == 3 && "we only render triangle, use tools like meshlab to modify this models");
 
             Triangle tri_temp;
