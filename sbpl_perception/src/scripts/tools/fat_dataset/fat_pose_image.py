@@ -2245,7 +2245,7 @@ def run_ycb_6d():
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    required_objects = ['007_tuna_fish_can']
+    required_objects = ['024_bowl']
     # required_objects = ['004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects)
     f_accuracy.write("name,")
