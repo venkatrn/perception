@@ -18,8 +18,6 @@
   <build_depend>cv_bridge</build_depend>
   <build_depend>kinect_sim</build_depend>
   <build_depend>cuda_renderer</build_depend>
-  <build_depend>cuda_icp_custom</build_depend>
-  <build_depend>cuda_icp</build_depend>
   <build_depend>perception_utils</build_depend>
   <build_depend>pcl_ros</build_depend>
   <build_depend>roscpp</build_depend>
@@ -40,8 +38,6 @@
   <run_depend>cv_bridge</run_depend>
   <run_depend>kinect_sim</run_depend>
   <run_depend>cuda_renderer</run_depend>
-  <run_depend>cuda_icp</run_depend>
-  <run_depend>cuda_icp_custom</run_depend>
   <run_depend>perception_utils</run_depend>
   <run_depend>pcl_ros</run_depend>
   <run_depend>roscpp</run_depend>

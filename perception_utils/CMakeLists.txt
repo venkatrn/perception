@@ -16,7 +16,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(catkin REQUIRED COMPONENTS pcl_ros roscpp pcl_conversions
   cv_bridge)
 find_package(Boost REQUIRED COMPONENTS filesystem program_options)
-set(OpenCV_DIR /usr/local/share/OpenCV)
+#set(OpenCV_DIR /usr/local/share/OpenCV)
 find_package(OpenCV REQUIRED)
 find_package(HDF5 REQUIRED)
 
