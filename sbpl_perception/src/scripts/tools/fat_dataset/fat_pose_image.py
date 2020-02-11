@@ -74,6 +74,7 @@ class FATImage:
         self.inplane_rotations = np.array(example_coco.dataset['inplane_rotations'])
         self.fixed_transforms_dict = example_coco.dataset['fixed_transforms']
         self.camera_intrinsics = example_coco.dataset['camera_intrinsic_settings']
+        self.camera_intrinsic_matrix = None
         if self.camera_intrinsics is not None:
             # Can be none in case of YCB
             self.camera_intrinsic_matrix = \
@@ -685,12 +686,15 @@ class FATImage:
         return color_img_path.replace(os.path.basename(color_img_path), '_object_settings.json')
 
     def get_renderer(self, class_name):
-        width = 960
-        height = 540
-        # K = np.array([[self.camera_intrinsics['fx'], 0, self.camera_intrinsics['cx']],
-        #             [0, self.camera_intrinsics['fy'], self.camera_intrinsics['cy']],
-        #             [0, 0, 1]])
-        # K = self.camera_intrinsic_matrix
+        width = self.width
+        height = self.height
+        if self.camera_intrinsic_matrix is not None:
+            camera_intrinsic_matrix = self.camera_intrinsic_matrix
+        else:
+            # If using only render without dataset or when dataset has multiple camera matrices
+            camera_intrinsic_matrix = np.array([[619.274, 0, 324.285],
+                                                [0, 619.361, 238.717],
+                                                [0, 0, 1]])
         ZNEAR = 0.1
         ZFAR = 20
         # model_dir = os.path.join(self.model_dir, "models", class_name)
@@ -698,7 +702,7 @@ class FATImage:
         # Get Path to original YCB models for obj files for rendering
         model_dir = os.path.join(os.path.abspath(os.path.join(self.model_dir, os.pardir)), "models")
         model_dir = os.path.join(model_dir, class_name)
-        render_machine = Render_Py(model_dir, self.camera_intrinsic_matrix, width, height, ZNEAR, ZFAR)
+        render_machine = Render_Py(model_dir, camera_intrinsic_matrix, width, height, ZNEAR, ZFAR)
         return render_machine
 
     def get_object_pose_with_fixed_transform(
@@ -942,7 +946,9 @@ class FATImage:
         return data[s<m]
 
     def init_model(self, 
-                   cfg_file='/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/configs/fat_pose/e2e_mask_rcnn_R_50_FPN_1x_test_cocostyle.yaml'):
+                   cfg_file='/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/configs/fat_pose/e2e_mask_rcnn_R_50_FPN_1x_test_cocostyle.yaml',
+                   print_poses=False,
+                   required_objects=None):
         
         from maskrcnn_benchmark.config import cfg
         from predictor import COCODemo
@@ -956,6 +962,11 @@ class FATImage:
         }
         cfg.merge_from_file(args['config_file'])
         cfg.freeze()
+
+        if print_poses:
+            self.render_machines = {}
+            for name in required_objects:
+                self.render_machines[name] = self.get_renderer(name)
 
         self.coco_demo = COCODemo(
             cfg,
@@ -1036,19 +1047,22 @@ class FATImage:
             mask_list = []
             centroids_2d = []
             overall_binary_mask = np.zeros((self.height, self.width))
+            mask_label_i = 1
             for label in required_objects:
                 if label in rotation_list['labels']:
                     mask_i = rotation_list['labels'].index(label)
                     # print(str(mask_i) + " found")
                     filter_mask = mask_list_all[mask_i]
                     # print(filter_mask > 0)
-                    overall_binary_mask[filter_mask > 0] = 1
+                    overall_binary_mask[filter_mask > 0] = mask_label_i
                     labels.append(label)
                     top_viewpoint_ids.append(rotation_list['top_viewpoint_ids'][mask_i].tolist())
                     top_inplane_rotation_ids.append(rotation_list['top_inplane_rotation_ids'][mask_i].tolist())
                     boxes.append(boxes_all[mask_i])
                     mask_list.append(filter_mask)
                     centroids_2d.append(centroids_2d_all[mask_i])
+
+                    mask_label_i += 1
 
             top_viewpoint_ids = np.array(top_viewpoint_ids)
             top_inplane_rotation_ids = np.array(top_inplane_rotation_ids)
@@ -1123,7 +1137,7 @@ class FATImage:
                     # grid[grid_i].scatter(centroids_2d[box_id][0], centroids_2d[box_id][1], s=1)
                     grid[grid_i].axis("off")
                     grid_i += 1
-                    render_machine = self.get_renderer(label)
+                    render_machine = self.render_machines[label]
                 # rendered_dir = os.path.join(self.rendered_root_dir, label)
                 # mkdir_if_missing(rendered_dir)
                 # rendered_pose_list_out = []
@@ -2220,7 +2234,6 @@ def run_ycb_6d():
     # Running on model and PERCH
     mkdir_if_missing('model_outputs')
     cfg_file='/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/configs/ycb_pose/e2e_mask_rcnn_R_50_FPN_1x_test_cocostyle.yaml'
-    fat_image.init_model(cfg_file)
 
     ts = calendar.timegm(time.gmtime())
     f_accuracy = open('model_outputs/accuracy_6d_{}.txt'.format(ts), "w")
@@ -2232,8 +2245,9 @@ def run_ycb_6d():
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    # required_objects = ['002_master_chef_can', '025_mug']
-    required_objects = ['010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
+    # required_objects = ['007_tuna_fish_can']
+    required_objects = ['007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
+    fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects)
     f_accuracy.write("name,")
     for object_name in required_objects:
         f_accuracy.write("{}-add,{}-adds,".format(object_name, object_name))
@@ -2251,7 +2265,7 @@ def run_ycb_6d():
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str)[23:].tolist()
     # for scene_i in range(57, 60):
-    for img_i in range(337,338):
+    for img_i in range(47,48):
     # for img_i in IMG_LISTx:
         # if "0050" not in img_i:
         #     continue

@@ -12,4 +12,6 @@ max_planning_time: 1000.0 # seconds
 first_solution: false
 # If true, planner will use lazy edge evaluations. Make sure that the
 # environment supports GetLazySuccs.
-use_lazy: true
+
+# Lazy should be false for gpu
+use_lazy: false 

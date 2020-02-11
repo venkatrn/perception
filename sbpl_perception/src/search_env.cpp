@@ -1041,7 +1041,7 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
       PointCloudPtr depth_img_cloud = 
         GetGravityAlignedPointCloudCV(cv_depth, cv_color, 100.0);
       PrintPointCloud(depth_img_cloud, 1, render_point_cloud_topic);
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      // std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
   
 }
@@ -1082,6 +1082,7 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
   for(int n = 0; n < num_poses; n ++)
   {
     // if(pose_occluded[n]) continue;
+    
     PointCloudPtr cloud(new PointCloud);
     PointCloudPtr transformed_cloud(new PointCloud);
     PointCloudPtr cloud_out(new PointCloud);
@@ -1134,7 +1135,19 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
       {
         ContPose pose_in = objects[n].cont_pose();
         ContPose pose_out;
-        GetICPAdjustedPose(transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels);
+        if (env_params_.use_external_pose_list == 1)
+        {
+          string model_name = obj_models_[objects[n].id()].name();
+          int required_object_id = distance(segmented_object_names.begin(), 
+          find(segmented_object_names.begin(), segmented_object_names.end(), model_name));
+          GetICPAdjustedPose(
+            transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels, segmented_object_clouds[required_object_id]);
+        }
+        else
+        {
+          GetICPAdjustedPose(
+            transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels);
+        }
         // cout << "pose_in " << pose_in << endl;
         // cout << "pose_out " << pose_out << endl;
         if (print_cloud)
@@ -3562,9 +3575,12 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       }
       else
       {
+        // printf("%d\n", predicted_mask_image.at<uchar>(v, u));
         if (predicted_mask_image.at<uchar>(v, u) > 0)
         {
           cloud->points.push_back(point);
+          int label_mask_i = predicted_mask_image.at<uchar>(v, u);
+          segmented_object_clouds[label_mask_i-1]->points.push_back(point);
           filtered_depth_image.at<int32_t>(v,u) = static_cast<int32_t>(depth_image.at<unsigned short>(v,u));
           r_vec[u + v * s.width] = static_cast<uchar>(cv_vec[2]);
           g_vec[u + v * s.width] = static_cast<uchar>(cv_vec[1]);
@@ -4572,6 +4588,12 @@ void EnvObjectRecognition::SetObservation(int num_objects,
   printf("Use Dowsampling: %d\n", perch_params_.use_downsampling);
   if (perch_params_.use_downsampling) {
     observed_cloud_ = DownsamplePointCloud(observed_cloud_, perch_params_.downsampling_leaf_size);
+    for (int i = 0; i < segmented_object_clouds.size(); i++)
+    {
+      segmented_object_clouds[i] = DownsamplePointCloud(segmented_object_clouds[i], perch_params_.downsampling_leaf_size);
+      // PrintPointCloud(segmented_object_clouds[i], 1, render_point_cloud_topic);
+      // std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
   }
 
   // Remove outlier points - possible in 6D due to bad segmentation
@@ -4828,6 +4850,12 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
       // For FAT dataset, we have 16bit images
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
       cv_predicted_mask_image = cv::imread(input.predicted_mask_image, CV_LOAD_IMAGE_UNCHANGED);
+      segmented_object_names = input.model_names;
+      for (int i = 0; i < input.model_names.size(); i++)
+      {
+        PointCloudPtr cloud(new PointCloud);
+        segmented_object_clouds.push_back(cloud);
+      }
     }
     else {
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_UNCHANGED);
@@ -4839,6 +4867,8 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     std::string color_image_path = ss1.str();
     cv::imwrite(color_image_path, cv_input_color_image);
     depth_img_cloud = GetGravityAlignedPointCloudCV(cv_depth_image, cv_input_color_image, cv_predicted_mask_image, input.depth_factor);
+    
+    // Below used in setobservation for downsampling
     original_input_cloud_ = depth_img_cloud;
 
     if (env_params_.use_external_pose_list == 1) {
@@ -4981,7 +5011,8 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
 
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
-                                                const std::vector<int> counted_indices /*= std::vector<int>(0)*/) {
+                                                const std::vector<int> counted_indices /*= std::vector<int>(0)*/,
+                                                const PointCloudPtr target_cloud) {
   if (cost_debug_msgs)
     printf("GetICPAdjustedPose()\n");
   auto start = std::chrono::high_resolution_clock::now();
@@ -4999,25 +5030,37 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   // int num_points_original = cloud_in->points.size();
 
   // if (cloud_in->points.size() > 2000) { //TODO: Fix it
+
   if (false) {
     PointCloudPtr cloud_in_downsampled = DownsamplePointCloud(cloud_in);
     icp.setInputSource(cloud_in_downsampled);
   } else {
     icp.setInputSource(cloud_in);
   }
-  PointCloudPtr remaining_observed_cloud;
-  if (counted_indices.size() > 0)
+
+  if (target_cloud == NULL)
   {
-    remaining_observed_cloud = perception_utils::IndexFilter(
-                                                    observed_cloud_, counted_indices, true);
+    
+    PointCloudPtr remaining_observed_cloud;
+    if (counted_indices.size() > 0)
+    {
+      remaining_observed_cloud = perception_utils::IndexFilter(
+                                                      observed_cloud_, counted_indices, true);
+    }
+    else
+    {
+      remaining_observed_cloud = observed_cloud_;
+    }
+    const PointCloudPtr remaining_downsampled_observed_cloud =
+      DownsamplePointCloud(remaining_observed_cloud);
+    icp.setInputTarget(remaining_downsampled_observed_cloud);
   }
   else
   {
-    remaining_observed_cloud = observed_cloud_;
+    // printf("Target cloud size : %d\n", target_cloud->points.size());
+    icp.setInputTarget(target_cloud);
   }
-  const PointCloudPtr remaining_downsampled_observed_cloud =
-    DownsamplePointCloud(remaining_observed_cloud);
-  icp.setInputTarget(remaining_downsampled_observed_cloud);
+  
   // icp.setInputTarget(downsampled_observed_cloud_);
   // icp.setInputTarget(observed_cloud_);
 
@@ -5495,6 +5538,16 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(
 
   return object_point_clouds;
 }
+
+// void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
+//                                                       vector<ObjectState>& modified_objects)
+// {
+// GetStateImagesGPU(
+//       objects, random_color, random_depth, 
+//       source_result_color, source_result_depth, random_poses_occluded, 1,
+//       random_poses_occluded_other
+//     );
+// }
 
 void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                                                    &source_state, std::vector<GraphState> *succ_states) {

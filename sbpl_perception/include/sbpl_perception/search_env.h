@@ -239,7 +239,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   double GetICPAdjustedPose(const PointCloudPtr cloud_in,
                             const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
-                            const std::vector<int> counted_indices = std::vector<int>(0));
+                            const std::vector<int> counted_indices = std::vector<int>(0),
+                            const PointCloudPtr target_cloud = NULL);
 
   std::vector<unsigned short> GetInputDepthImage() {
     return observed_depth_image_;
@@ -343,6 +344,12 @@ class EnvObjectRecognition : public EnvironmentMHA {
 
   void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
   // void PrintPointCloud(PointCloudPtr gravity_aligned_point_cloud, int state_id, ros::Publisher point_cloud_topic);
+
+  //6D stuff
+  std::vector<PointCloudPtr> segmented_object_clouds;
+  std::vector<std::string> segmented_object_names;
+  void GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
+                                  vector<ObjectState>& modified_objects)
 
   // CUDA GPU stuff
   std::unordered_map<int, std::vector<int32_t>> gpu_depth_image_cache_;

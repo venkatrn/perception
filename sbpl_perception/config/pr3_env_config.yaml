@@ -18,7 +18,7 @@ perch_params:
   ## With Downsampling
   use_downsampling: true
   # sensor_resolution_radius: 0.015 #m
-  sensor_resolution_radius: 0.005 #m
+  sensor_resolution_radius: 0.02 #m gpu-stride : 5
   min_neighbor_points_for_valid_pose: 5 #50
   # downsampling_leaf_size: 0.02
   downsampling_leaf_size: 0.01
@@ -33,7 +33,7 @@ perch_params:
   clutter_regularizer: 0.1
 
   ## Visualization and Debugging
-  visualize_expanded_states: true
+  visualize_expanded_states: false
   visualize_successors: false
   print_expanded_states: true
   debug_verbose: false # unused
