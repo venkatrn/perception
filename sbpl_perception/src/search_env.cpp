@@ -1210,6 +1210,11 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                                           int single_result_image,
                                           vector<int>& pose_occluded_other)
 {
+  /*
+    Takes a bunch of ObjectState objects and renders them. 
+    Possible outputs - 1 image output with multiple objects in different pose each in single image
+                     - Multiple images with different object in different poses, one object per image
+  */
   printf("GetStateImagesGPU() for %d poses\n", objects.size());
   Eigen::Isometry3d cam_z_front, cam_to_body;
   cam_to_body.matrix() << 0, 0, 1, 0,
@@ -1288,6 +1293,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   std::vector<int> random_poses_occluded_other(1, 0);
 
 
+  //// Need to init source color and depth for root level, where no object is present in source state
   std::vector<std::vector<uint8_t>> source_result_color(3);
   source_result_color[0] = random_red;
   source_result_color[1] = random_green;
@@ -5539,15 +5545,109 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(
   return object_point_clouds;
 }
 
-// void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
-//                                                       vector<ObjectState>& modified_objects)
-// {
-// GetStateImagesGPU(
-//       objects, random_color, random_depth, 
-//       source_result_color, source_result_depth, random_poses_occluded, 1,
-//       random_poses_occluded_other
-//     );
-// }
+void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
+                                                      vector<ObjectState>& modified_objects)
+{
+  int num_poses = objects.size();
+  printf("GetShiftedCentroidPosesGPU() for %d poses\n", num_poses);
+  std::vector<int> random_poses_occluded(num_poses, 0);
+  std::vector<int> random_poses_occluded_other(num_poses, 0);
+
+  // ObjectState temp;
+  // modified_objects.resize(num_poses, temp);
+
+  std::vector<std::vector<uint8_t>> random_color(3);
+  std::vector<uint8_t> random_red(kCameraWidth * kCameraHeight, 255);
+  std::vector<uint8_t> random_green(kCameraWidth * kCameraHeight, 255);
+  std::vector<uint8_t> random_blue(kCameraWidth * kCameraHeight, 255);
+  random_color[0] = random_red;
+  random_color[1] = random_green;
+  random_color[2] = random_blue;
+  std::vector<int32_t> random_depth(kCameraWidth * kCameraHeight, 0);
+
+  std::vector<std::vector<uint8_t>> result_color;
+  std::vector<int32_t> result_depth;
+
+  GetStateImagesGPU(
+        objects, random_color, random_depth, 
+        result_color, result_depth, random_poses_occluded, 0,
+        random_poses_occluded_other
+      );
+  
+  // PrintGPUImages(result_depth, result_color, num_poses, "succ_pre_shift", random_poses_occluded);
+
+  float* result_cloud;
+  uint8_t* result_cloud_color;
+  int* dc_index;
+  int* cloud_pose_map;
+  int32_t* depth_data = result_depth.data();
+  int rendered_point_num;
+  int* poses_occluded_ptr = random_poses_occluded.data();
+
+  cuda_renderer::depth2cloud_global(
+        depth_data, result_color, result_cloud, result_cloud_color, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
+        num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
+      );
+  
+  vector<float> pose_centroid_x(num_poses, 0.0);
+  vector<float> pose_centroid_y(num_poses, 0.0);
+  vector<float> pose_centroid_z(num_poses, 0.0);
+  vector<float> pose_total_points(num_poses, 0.0);
+  for(int cloud_index = 0; cloud_index < rendered_point_num; cloud_index++)
+  {
+      int pose_index = cloud_pose_map[cloud_index];
+      pose_centroid_x[pose_index] += result_cloud[cloud_index + 0*rendered_point_num];
+      pose_centroid_y[pose_index] += result_cloud[cloud_index + 1*rendered_point_num];
+      pose_centroid_z[pose_index] += result_cloud[cloud_index + 2*rendered_point_num];
+      pose_total_points[pose_index] += 1.0;
+      // for(int i = 0; i < env_params_.height; i = i + stride)
+      // {
+      //   for(int j = 0; j < env_params_.width; j = j + stride)
+      //   {
+      //     int index = n*env_params_.width*env_params_.height + (i*env_params_.width + j);
+      //     int cloud_index = dc_index[index];
+      //   }
+      // }
+  }
+  // std::transform(pose_centroid_x.begin(), pose_centroid_x.end(), pose_centroid_x.begin(), pose_centroid_x.begin(), std::divides<float>()); 
+  // std::transform(pose_centroid_x.begin(), pose_centroid_y.end(), pose_total_points.begin(), pose_centroid_y.begin(), std::divides<float>()); 
+  // std::transform(pose_centroid_x.begin(), pose_centroid_z.end(), pose_total_points.begin(), pose_centroid_z.begin(), std::divides<float>()); 
+  for (int i = 0; i < num_poses; i++)
+  {
+    pose_centroid_x[i] /= pose_total_points[i];
+    pose_centroid_y[i] /= pose_total_points[i];
+    pose_centroid_z[i] /= pose_total_points[i];
+    
+    ContPose pose_in = objects[i].cont_pose();
+    printf("Centroid old : %f,%f,%f\n", pose_in.x(), pose_in.y(), pose_in.z());
+    printf("Centroid new : %f,%f,%f\n", pose_centroid_x[i], pose_centroid_y[i], pose_centroid_z[i]);
+    
+    
+    float x_diff = pose_in.x()-pose_centroid_x[i];
+    float y_diff = pose_in.y()-pose_centroid_y[i];
+    float z_diff = pose_in.z()-pose_centroid_z[i];
+    printf("Centroid diff : %f,%f,%f\n", x_diff, y_diff, z_diff);
+
+    
+    ContPose pose_out = 
+      ContPose(pose_in.x() + x_diff, pose_in.y() + y_diff, pose_in.z() + z_diff, pose_in.qx(), pose_in.qy(), pose_in.qz(), pose_in.qw());
+
+    ObjectState modified_object_state(objects[i].id(), objects[i].symmetric(), pose_out);
+
+    modified_objects.push_back(modified_object_state);
+
+  }
+
+  // result_depth.clear();
+  // result_color.clear();
+  // GetStateImagesGPU(
+  //     modified_objects, random_color, random_depth, 
+  //     result_color, result_depth, random_poses_occluded, 0,
+  //     random_poses_occluded_other
+  //   );
+  
+  // PrintGPUImages(result_depth, result_color, num_poses, "succ_post_shift", random_poses_occluded);
+}
 
 void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
                                                    &source_state, std::vector<GraphState> *succ_states) {
@@ -5586,6 +5686,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
     if (env_params_.use_external_render == 1 || env_params_.use_external_pose_list == 1)
     {
+        vector<ObjectState> unshifted_object_states, shifted_object_states;
         printf("States for model : %s\n", obj_models_[ii].name().c_str());
         if (source_state.object_states().size() == 0)
         {
@@ -5674,55 +5775,62 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
 
               GraphState s = source_state; // Can only add objects, not remove them
               const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
-              if (env_params_.shift_pose_centroid == 0)
-                s.AppendObject(new_object);
+              
+              unshifted_object_states.push_back(new_object);
+              succ_count += 1;
+              
+              if (!kUseGPU)
+              {
+                if (env_params_.shift_pose_centroid == 0)
+                  s.AppendObject(new_object);
 
-              GraphState s_render;
-              s_render.AppendObject(new_object);
-              // if object states are same and in same order id will be same
+                GraphState s_render;
+                s_render.AppendObject(new_object);
+                // if object states are same and in same order id will be same
 
-              // int succ_id = hash_manager_.GetStateIDForceful(s_render);
-              // printf("Succ id : %d\n", succ_id);
+                // int succ_id = hash_manager_.GetStateIDForceful(s_render);
+                // printf("Succ id : %d\n", succ_id);
 
+                if (env_params_.shift_pose_centroid == 1 || (perch_params_.vis_successors && s.object_states().size() == 1)) {
+                  vector<unsigned short> depth_image, last_obj_depth_image;
+                  cv::Mat last_cv_obj_depth_image;
+                  vector<vector<unsigned char>> color_image, last_obj_color_image;
+                  cv::Mat last_cv_obj_color_image;
+                  int num_occluders = 0;
+                  bool shift_pose_centroid = env_params_.shift_pose_centroid == 1 ? true : false;
+                  GetDepthImage(s_render, &last_obj_depth_image, &last_obj_color_image,
+                                                    last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, shift_pose_centroid);
 
+                  const auto shifted_object_state = s_render.object_states()[0];
+                  s.AppendObject(shifted_object_state);
+                  valid_succ_cache[ii].push_back(shifted_object_state);
 
-              if (env_params_.shift_pose_centroid == 1 || (perch_params_.vis_successors && s.object_states().size() == 1)) {
-                vector<unsigned short> depth_image, last_obj_depth_image;
-                cv::Mat last_cv_obj_depth_image;
-                vector<vector<unsigned char>> color_image, last_obj_color_image;
-                cv::Mat last_cv_obj_color_image;
-                int num_occluders = 0;
-                bool shift_pose_centroid = env_params_.shift_pose_centroid == 1 ? true : false;
-                GetDepthImage(s_render, &last_obj_depth_image, &last_obj_color_image,
-                                                  last_cv_obj_depth_image, last_cv_obj_color_image, &num_occluders, shift_pose_centroid);
+                  std::string color_image_path, depth_image_path;
+                  std::stringstream ss1;
+                  ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-color.png";
+                  color_image_path = ss1.str();
+                  ss1.clear();
+                  ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-depth.png";
+                  depth_image_path = ss1.str();
 
-                const auto shifted_object_state = s_render.object_states()[0];
-                s.AppendObject(shifted_object_state);
-                valid_succ_cache[ii].push_back(shifted_object_state);
-
-                std::string color_image_path, depth_image_path;
-                std::stringstream ss1;
-                ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-color.png";
-                color_image_path = ss1.str();
-                ss1.clear();
-                ss1 << debug_dir_ << "/successor-" << obj_models_[ii].name() << "-" << succ_count << "-depth.png";
-                depth_image_path = ss1.str();
-
-                if (s.object_states().size() == 1 && perch_params_.vis_successors)
-                {
-                  // Write successors only once even if pruning is on
-                  cv::imwrite(color_image_path, last_cv_obj_color_image);
-                  if (IsMaster(mpi_comm_)) {
-                    PointCloudPtr cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
-                    PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
-                    // cv::imshow("valid image", last_cv_obj_color_image);
+                  if (s.object_states().size() == 1 && perch_params_.vis_successors)
+                  {
+                    // Write successors only once even if pruning is on
+                    cv::imwrite(color_image_path, last_cv_obj_color_image);
+                    if (IsMaster(mpi_comm_)) {
+                      PointCloudPtr cloud_in = GetGravityAlignedPointCloud(last_obj_depth_image, last_obj_color_image);
+                      PrintPointCloud(cloud_in, 1, render_point_cloud_topic);
+                      // cv::imshow("valid image", last_cv_obj_color_image);
+                    }
                   }
                 }
+                else
+                {
+                  valid_succ_cache[ii].push_back(new_object);
+                }
+
+                succ_states->push_back(s);
               }
-
-              succ_count += 1;
-
-              succ_states->push_back(s);
 
               // const ObjectState &modified_last_obect_state = s.object_states().back();
               // valid_succ_cache[ii].push_back(modified_last_obect_state);
@@ -5740,6 +5848,22 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           }
           // Close the File
           file.close();
+          
+          if (kUseGPU)
+          {
+            GetShiftedCentroidPosesGPU(unshifted_object_states, shifted_object_states);
+            valid_succ_cache[ii].clear();
+            // std::copy(shifted_object_states.begin(), shifted_object_states.end(), valid_succ_cache[ii].begin());
+            for (size_t i = 0; i < shifted_object_states.size(); i++)
+            {
+              // cout << " shifted " << i << endl;
+              const ObjectState object_state = shifted_object_states[i];
+              GraphState s = source_state; 
+              s.AppendObject(object_state);
+              succ_states->push_back(s);
+              valid_succ_cache[ii].push_back(object_state);
+            }
+          }
         }
         else
         {

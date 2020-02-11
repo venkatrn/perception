@@ -2245,8 +2245,8 @@ def run_ycb_6d():
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    # required_objects = ['007_tuna_fish_can']
-    required_objects = ['007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
+    required_objects = ['007_tuna_fish_can']
+    # required_objects = ['004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects)
     f_accuracy.write("name,")
     for object_name in required_objects:
@@ -2265,12 +2265,12 @@ def run_ycb_6d():
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str)[23:].tolist()
     # for scene_i in range(57, 60):
-    for img_i in range(47,48):
+    for img_i in range(1,2):
     # for img_i in IMG_LISTx:
         # if "0050" not in img_i:
         #     continue
         # Get Image
-        image_name = 'data/00{}/00{}-color.png'.format(str(48), str(img_i).zfill(4))
+        image_name = 'data/00{}/00{}-color.png'.format(str(49), str(img_i).zfill(4))
         # image_name = 'data/{}-color.png'.format(img_i)
         if image_name in skip_list:
             continue
@@ -2331,8 +2331,8 @@ def run_ycb_6d():
                     # use_external_render=0, required_object=[labels[1]],
                     use_external_render=0, required_object=labels,
                     camera_optical_frame=False, use_external_pose_list=1,
-                    # model_poses_file=model_poses_file, use_centroid_shifting=0,
-                    model_poses_file=model_poses_file, use_centroid_shifting=1,
+                    model_poses_file=model_poses_file, use_centroid_shifting=0,
+                    # model_poses_file=model_poses_file, use_centroid_shifting=1,
                     predicted_mask_path=predicted_mask_path, num_cores=0
                 )
             else:

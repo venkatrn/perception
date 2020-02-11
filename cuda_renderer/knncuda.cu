@@ -357,6 +357,11 @@ bool depth2cloud_global(int32_t* depth_data,
                         int point_dim)
 {
     printf("depth2cloud_global()\n");
+    /**
+        Returns :
+            cloud_pose_map - Mapping of every point in the cloud to a pose number
+            rendered_cloud_point_num - Total number of points in the rendered pose arrays
+    */
     // int size = num_poses * width * height * sizeof(float);
     // int point_dim = 3;
     // int* depth_data = result_depth.data();

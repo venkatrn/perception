@@ -868,6 +868,7 @@ device_vector_holder<int> render_cuda_multi(
                                                     lock_int_vec,
                                                     device_pose_occluded_other_vec);
     // cudaDeviceSynchronize();
+    // Objects occluding other objects already in the scene
     printf("Pose Occlusions\n");
     thrust::copy(
         device_pose_occluded.begin(),
@@ -877,6 +878,7 @@ device_vector_holder<int> render_cuda_multi(
     printf("\n");
     thrust::copy(device_pose_occluded.begin(), device_pose_occluded.end(), pose_occluded.begin());
     
+    // Objects occluded by existing objects in the scene, need to do ICP again for these
     printf("Pose Occlusions Other\n");
     thrust::copy(
         device_pose_occluded_other.begin(),

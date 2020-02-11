@@ -1,7 +1,7 @@
 # for 6D
 # Inflation epsilon for the planner. Returned solution cost will be within
 # inflation_epsilon of the optimal solution.
-inflation_epsilon: 10
+inflation_epsilon: 5
 # Max time-limit for the planner. Used in conjunction with "first_solution"
 # param (refer below)/
 max_planning_time: 1000.0 # seconds

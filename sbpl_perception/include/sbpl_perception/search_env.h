@@ -349,7 +349,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<PointCloudPtr> segmented_object_clouds;
   std::vector<std::string> segmented_object_names;
   void GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
-                                  vector<ObjectState>& modified_objects)
+                                  vector<ObjectState>& modified_objects);
 
   // CUDA GPU stuff
   std::unordered_map<int, std::vector<int32_t>> gpu_depth_image_cache_;
