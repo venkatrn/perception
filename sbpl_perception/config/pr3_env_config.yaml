@@ -19,7 +19,7 @@ perch_params:
   use_downsampling: true
   # sensor_resolution_radius: 0.015 #m
   sensor_resolution_radius: 0.02 #m gpu-stride : 5
-  min_neighbor_points_for_valid_pose: 10 #50
+  min_neighbor_points_for_valid_pose: 30 #50
   # downsampling_leaf_size: 0.02
   downsampling_leaf_size: 0.01
 
