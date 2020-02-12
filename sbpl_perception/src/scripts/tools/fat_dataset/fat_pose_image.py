@@ -1054,6 +1054,7 @@ class FATImage:
                     # print(str(mask_i) + " found")
                     filter_mask = mask_list_all[mask_i]
                     # print(filter_mask > 0)
+                    # Use binary mask to assign label in overall mask
                     overall_binary_mask[filter_mask > 0] = mask_label_i
                     labels.append(label)
                     top_viewpoint_ids.append(rotation_list['top_viewpoint_ids'][mask_i].tolist())
@@ -1122,12 +1123,14 @@ class FATImage:
             for box_id in range(top_viewpoint_ids.shape[0]):
                 # plt.figure()
                 # plt.imshow(mask_list[box_id])
+                # print(mask_list[box_id])
                 object_depth_mask = depth_image[mask_list[box_id] > 0]/self.depth_factor
                 object_depth_mask = object_depth_mask.flatten()
                 # object_depth_mask = self.reject_outliers(object_depth_mask)
                 object_depth = np.mean(object_depth_mask)
-                min_depth = np.min(object_depth_mask)
-                max_depth = np.max(object_depth_mask)
+                min_depth = np.min(object_depth_mask[object_depth_mask > 0])
+                max_depth = np.max(object_depth_mask[object_depth_mask > 0])
+                print("Min depth :{} , Max depth : {} from mask".format(min_depth, max_depth))
                 object_rotation_list = []
                 
                 label = labels[box_id]
@@ -1206,7 +1209,7 @@ class FATImage:
                 # resolution = 0.05
                 if use_centroid == False:
                     # Add predicted rotations in depth range
-                    for _, depth in enumerate(np.arange(min_depth, max_depth+resolution, resolution)):
+                    for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                     # for depth in (np.linspace(min_depth, max_depth+0.05, 5)):
                         if use_xy:
                             ## Vary x and y in addition to depth also
@@ -2245,8 +2248,10 @@ def run_ycb_6d():
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    required_objects = ['024_bowl']
-    # required_objects = ['004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
+    # required_objects = ['003_cracker_box']
+    # TODO : bleach clenser model doesnt load on gpu
+    required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
+    # required_objects = fat_image.category_names
     fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects)
     f_accuracy.write("name,")
     for object_name in required_objects:
@@ -2264,95 +2269,95 @@ def run_ycb_6d():
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str)[23:].tolist()
-    # for scene_i in range(57, 60):
-    for img_i in range(1,2):
-    # for img_i in IMG_LISTx:
-        # if "0050" not in img_i:
-        #     continue
-        # Get Image
-        image_name = 'data/00{}/00{}-color.png'.format(str(49), str(img_i).zfill(4))
-        # image_name = 'data/{}-color.png'.format(img_i)
-        if image_name in skip_list:
-            continue
-        # image_data, annotations = fat_image.get_random_image(name='{}_16k/kitchen_4/000005.left.jpg'.format(category_name))
-        image_data, annotations = fat_image.get_random_image(
-            name=image_name, required_objects=required_objects
-        )
-        # print(annotations[0])
-        # Skip if required image or image name is not in dataset
-        if image_data is None or annotations is None:
-            continue
-        elif len(annotations) == 0:
-            continue
-
-        fat_image.camera_intrinsic_matrix = np.array(annotations[0]['camera_intrinsics'])
-
-
-        # Do an image only if it has filter object, but still do all objects in scene
-        if filter_objects is not None:
-            found_filter_object = False
-            for anno in annotations:
-                if fat_image.category_id_to_names[anno['category_id']]['name'] in filter_objects:
-                    found_filter_object = True
-            if found_filter_object == False:
+    for scene_i in range(52, 53):
+        for img_i in range(84,85):
+        # for img_i in IMG_LISTx:
+            # if "0050" not in img_i:
+            #     continue
+            # Get Image
+            image_name = 'data/00{}/00{}-color.png'.format(str(scene_i), str(img_i).zfill(4))
+            # image_name = 'data/{}-color.png'.format(img_i)
+            if image_name in skip_list:
+                continue
+            # image_data, annotations = fat_image.get_random_image(name='{}_16k/kitchen_4/000005.left.jpg'.format(category_name))
+            image_data, annotations = fat_image.get_random_image(
+                name=image_name, required_objects=required_objects
+            )
+            # print(annotations[0])
+            # Skip if required image or image name is not in dataset
+            if image_data is None or annotations is None:
+                continue
+            elif len(annotations) == 0:
                 continue
 
-        # Visualize ground truth in ros
-        yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
-            image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
-        )
+            fat_image.camera_intrinsic_matrix = np.array(annotations[0]['camera_intrinsics'])
 
-        # Run model to get multiple poses for each object
-        labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
-            fat_image.visualize_model_output(
-                image_data, use_thresh=True, use_centroid=False, print_poses=True,
-                required_objects=required_objects
+
+            # Do an image only if it has filter object, but still do all objects in scene
+            if filter_objects is not None:
+                found_filter_object = False
+                for anno in annotations:
+                    if fat_image.category_id_to_names[anno['category_id']]['name'] in filter_objects:
+                        found_filter_object = True
+                if found_filter_object == False:
+                    continue
+
+            # Visualize ground truth in ros
+            yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
+                image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
             )
 
-        if True:
-            # Convert model output poses to table frame and save them to file so that they can be read by perch
-            _, max_min_dict, _ = fat_image.visualize_pose_ros(
-                # image_data, model_annotations, frame='table', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False
-                image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False,
-            )
-
-            # for anno in model_annotations:
-            #     if fat_image.category_id_to_names[anno['category_id']] not in required_objects:
-            #         print("Removing : {}".format(fat_image.category_id_to_names[anno['category_id']]))
-            #         model_annotations.remove(anno)
-
-            # print(model_annotations)
-
-            # Run perch/ICP on written poses
-            run_perch = True
-            if run_perch:
-                perch_annotations, stats = fat_image.visualize_perch_output(
-                    image_data, model_annotations, max_min_dict, frame='camera', 
-                    # use_external_render=0, required_object=[labels[1]],
-                    use_external_render=0, required_object=labels,
-                    camera_optical_frame=False, use_external_pose_list=1,
-                    model_poses_file=model_poses_file, use_centroid_shifting=0,
-                    # model_poses_file=model_poses_file, use_centroid_shifting=1,
-                    predicted_mask_path=predicted_mask_path, num_cores=0
+            # Run model to get multiple poses for each object
+            labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
+                fat_image.visualize_model_output(
+                    image_data, use_thresh=True, use_centroid=False, print_poses=True,
+                    required_objects=required_objects
                 )
-            else:
-                perch_annotations = top_model_annotations
-                stats = None
 
-            f_accuracy.write("{},".format(image_data['file_name']))            
-            if perch_annotations is not None:
-                # # # Compare Poses by applying to model and computing distance
-                add_dict, add_s_dict = fat_image.compare_clouds(annotations, perch_annotations, use_add_s=True, convert_annotation_2=not run_perch, downsample=True)
-                if add_dict is not None and add_s_dict is not None:
-                    for object_name in required_objects:
-                        if (object_name in add_dict) and (object_name in add_s_dict):
-                            f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name])) 
-                        else:
-                            f_accuracy.write(" , ,") 
-            if stats is not None:
-                f_runtime.write("{} {} {}".format(image_data['file_name'], stats['expands'], stats['runtime']))
-            f_accuracy.write("\n")
-            f_runtime.write("\n")
+            if True:
+                # Convert model output poses to table frame and save them to file so that they can be read by perch
+                _, max_min_dict, _ = fat_image.visualize_pose_ros(
+                    # image_data, model_annotations, frame='table', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False
+                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False,
+                )
+
+                # for anno in model_annotations:
+                #     if fat_image.category_id_to_names[anno['category_id']] not in required_objects:
+                #         print("Removing : {}".format(fat_image.category_id_to_names[anno['category_id']]))
+                #         model_annotations.remove(anno)
+
+                # print(model_annotations)
+
+                # Run perch/ICP on written poses
+                run_perch = True
+                if run_perch:
+                    perch_annotations, stats = fat_image.visualize_perch_output(
+                        image_data, model_annotations, max_min_dict, frame='camera', 
+                        # use_external_render=0, required_object=[labels[1]],
+                        use_external_render=0, required_object=labels,
+                        camera_optical_frame=False, use_external_pose_list=1,
+                        # model_poses_file=model_poses_file, use_centroid_shifting=0,
+                        model_poses_file=model_poses_file, use_centroid_shifting=1,
+                        predicted_mask_path=predicted_mask_path, num_cores=0
+                    )
+                else:
+                    perch_annotations = top_model_annotations
+                    stats = None
+
+                f_accuracy.write("{},".format(image_data['file_name']))            
+                if perch_annotations is not None:
+                    # # # Compare Poses by applying to model and computing distance
+                    add_dict, add_s_dict = fat_image.compare_clouds(annotations, perch_annotations, use_add_s=True, convert_annotation_2=not run_perch, downsample=True)
+                    if add_dict is not None and add_s_dict is not None:
+                        for object_name in required_objects:
+                            if (object_name in add_dict) and (object_name in add_s_dict):
+                                f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name])) 
+                            else:
+                                f_accuracy.write(" , ,") 
+                if stats is not None:
+                    f_runtime.write("{} {} {}".format(image_data['file_name'], stats['expands'], stats['runtime']))
+                f_accuracy.write("\n")
+                f_runtime.write("\n")
                 
 
     f_runtime.close()

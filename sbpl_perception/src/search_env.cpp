@@ -83,6 +83,8 @@ namespace {
   bool cost_debug_msgs = true;
 
   bool kUseGPU = true;
+
+  bool kUseRenderGreedy = true;
 }  // namespace
 
 namespace sbpl_perception {
@@ -1300,6 +1302,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   source_result_color[2] = random_blue;
   // By default source is set to max depth so that nothing happens when we merge with rendered
   std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, 0);
+  // source_result_depth.assign(unfiltered_depth_data, unfiltered_depth_data + kCameraWidth * kCameraHeight-1);
+  
   int source_id = input[0].source_id;
   bool root_level = false;
   bool last_level = false;
@@ -1307,6 +1311,15 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   {
     cout << "Root Source State\n";
     root_level = true;
+
+    if (kUseRenderGreedy)
+    {
+      source_result_depth.assign(observed_depth_data, observed_depth_data + kCameraWidth * kCameraHeight-1);
+      for (int i = 0; i < source_result_depth.size(); i++)
+      {
+        source_result_depth[i] /= 100;
+      }
+    }
   }
   else
   {
@@ -1408,6 +1421,13 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     // if (root_level)
     // PrintGPUClouds(result_observed_cloud, observed_depth_data, observed_dc_index, 1, observed_point_num, gpu_stride, random_poses_occluded.data(), "observed");
 
+    if (kUseRenderGreedy)
+    {
+      // For greedy, we allow collisions
+      poses_occluded.clear();
+      poses_occluded.resize(num_poses, 0);
+    }
+
     int num_valid_poses = poses_occluded.size() - accumulate(poses_occluded.begin(), poses_occluded.end(), 0);
     printf("Num valid poses : %d\n", num_valid_poses);
     // if (accumulate(poses_occluded.begin(), poses_occluded().end(), 0) > 0)
@@ -1468,10 +1488,16 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
           num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim
         );
         
+        if (kUseRenderGreedy)
+        {
+          // For greedy, we allow collisions
+          adjusted_poses_occluded.clear();
+          adjusted_poses_occluded.resize(num_poses, 0);
+        }
         num_valid_poses = adjusted_poses_occluded.size() - accumulate(adjusted_poses_occluded.begin(), adjusted_poses_occluded.end(), 0);
         printf("Num valid poses after icp : %d\n", num_valid_poses);
-
-        PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        
+        // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
         // vector<ObjectState> random_modified_last_object_states;
         // PrintGPUClouds(
         //   modified_last_object_states, result_cloud, result_cloud_color, depth_data, dc_index, 
@@ -1697,6 +1723,90 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   *output = output_gpu;
   // #endif
 
+}
+
+GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
+
+  GraphState source_state;
+  vector<GraphState> candidate_succs;
+  GenerateSuccessorStates(source_state, &candidate_succs);
+  env_stats_.scenes_rendered += static_cast<int>(candidate_succs.size());
+
+  vector<int> candidate_succ_ids, candidate_costs;
+  candidate_succ_ids.resize(candidate_succs.size(), 0);
+
+
+  candidate_costs.resize(candidate_succ_ids.size());
+
+  // Prepare the cost computation input vector.
+  vector<CostComputationInput> cost_computation_input(candidate_succ_ids.size());
+
+  vector<unsigned short> source_depth_image;
+  vector<vector<unsigned char>> source_color_image;
+
+  for (size_t ii = 0; ii < cost_computation_input.size(); ++ii) {
+    auto &input_unit = cost_computation_input[ii];
+    input_unit.source_state = source_state;
+    input_unit.child_state = candidate_succs[ii];
+    input_unit.source_id = 0;
+    input_unit.child_id = candidate_succ_ids[ii];
+    input_unit.source_depth_image = source_depth_image;
+    input_unit.source_color_image = source_color_image;
+  }
+  vector<CostComputationOutput> cost_computation_output;
+
+  ComputeCostsInParallelGPU(cost_computation_input, &cost_computation_output,
+                          false);
+
+  ObjectState temp;
+  vector<int> lowest_cost_per_object(env_params_.num_models, INT_MAX);
+  vector<ObjectState> lowest_cost_state_per_object(env_params_.num_models, temp);
+  printf("State number,     target_cost    source_cost    last_level_cost    candidate_costs    g_value_map\n");
+  for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
+      const auto &output_unit = cost_computation_output[ii];
+      const auto &adjusted_state = cost_computation_output[ii].adjusted_state;
+      const auto &adjusted_object_state = adjusted_state.object_states().back();
+      const auto &input_unit = cost_computation_input[ii];
+      int model_id = adjusted_object_state.id();
+
+
+      candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
+                            input_unit.child_state);
+
+      if (output_unit.cost== -1 || output_unit.cost== -2) {
+        continue;  // Invalid successor
+      }
+
+      if (output_unit.cost < lowest_cost_per_object[model_id])
+      {
+        lowest_cost_per_object[model_id] = output_unit.cost;
+        lowest_cost_state_per_object[model_id] = adjusted_object_state;
+      }
+
+      if (image_debug_) {
+
+        printf("State %d,       %d      %d      %d      %d      %d\n",
+              candidate_succ_ids[ii],
+              output_unit.state_properties.target_cost,
+              output_unit.state_properties.source_cost,
+              output_unit.state_properties.last_level_cost,
+              output_unit.cost,
+              g_value_map_[candidate_succ_ids[ii]]);
+
+      }
+  }
+  GraphState greedy_state;
+  for (int model_id = 0; model_id < env_params_.num_models; model_id++)
+  {
+    if (lowest_cost_per_object[model_id] < INT_MAX)
+    {
+      greedy_state.AppendObject(lowest_cost_state_per_object[model_id]);
+    }
+  }
+  string fname = debug_dir_ + "depth_greedy_state.png";
+  string cname = debug_dir_ + "color_greedy_state.png";
+  PrintState(greedy_state, fname, cname);
+  return greedy_state;
 }
 
 void EnvObjectRecognition::GetLazySuccs(int source_state_id,
@@ -4855,6 +4965,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     if (env_params_.use_external_pose_list == 1) {
       // For FAT dataset, we have 16bit images
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
+      unfiltered_depth_data = cv_depth_image.ptr<int>(0);
       cv_predicted_mask_image = cv::imread(input.predicted_mask_image, CV_LOAD_IMAGE_UNCHANGED);
       segmented_object_names = input.model_names;
       for (int i = 0; i < input.model_names.size(); i++)
@@ -5173,6 +5284,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
 
   return score;
 }
+
 
 // Feature-based and ICP Planners
 GraphState EnvObjectRecognition::ComputeGreedyICPPoses() {
@@ -5851,8 +5963,15 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           
           if (kUseGPU)
           {
-            GetShiftedCentroidPosesGPU(unshifted_object_states, shifted_object_states);
-            valid_succ_cache[ii].clear();
+            if (env_params_.shift_pose_centroid == 1)
+            {
+              GetShiftedCentroidPosesGPU(unshifted_object_states, shifted_object_states);
+              valid_succ_cache[ii].clear();
+            }
+            else
+            {
+              shifted_object_states = unshifted_object_states;
+            }
             // std::copy(shifted_object_states.begin(), shifted_object_states.end(), valid_succ_cache[ii].begin());
             for (size_t i = 0; i < shifted_object_states.size(); i++)
             {

@@ -367,7 +367,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   int observed_point_num;
   int* observed_dc_index;
   int32_t* observed_depth_data;
-
+  int *unfiltered_depth_data;
   cv::Mat cv_input_filtered_depth_image, cv_input_filtered_color_image;
   vector<vector<uint8_t>> cv_input_filtered_color_image_vec;
   void PrintGPUImages(vector<int32_t>& result_depth, 
@@ -407,6 +407,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                               int* observed_dc_index,
                               int total_rendered_points,
                               int* poses_occluded);
+
+  GraphState ComputeGreedyRenderPoses();
 
   // We should get rid of this eventually.
   friend class ObjectRecognizer;

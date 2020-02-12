@@ -172,13 +172,19 @@ int main(int argc, char **argv) {
   // vector<ContPose> detected_poses;
   // object_recognizer.LocalizeObjects(input, &detected_poses);
 
-  if (false) {
+  int type = 1;
+  if (type == 0) {
     object_recognizer.LocalizeObjectsGreedyICP(
       input_global, &object_transforms, &preprocessing_object_transforms
     );
   }
-  else {
+  else if (type == 2) {
     object_recognizer.LocalizeObjects(
+      input_global, &object_transforms, &preprocessing_object_transforms
+    );
+  }
+  else if (type == 1) {
+    object_recognizer.LocalizeObjectsGreedyRender(
       input_global, &object_transforms, &preprocessing_object_transforms
     );
   }

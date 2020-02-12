@@ -280,6 +280,53 @@ bool ObjectRecognizer::LocalizeObjectsGreedyICP(const RecognitionInput &input,
   return plan_success;
 }
 
+bool ObjectRecognizer::LocalizeObjectsGreedyRender(const RecognitionInput &input,
+                                       std::vector<Eigen::Affine3f> *object_transforms,
+                                       std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const {
+  object_transforms->clear();
+  preprocessing_object_transforms->clear();
+
+  bool plan_success = true;
+  env_obj_->SetInput(input);
+  chrono::time_point<chrono::system_clock> start, end;
+  start = chrono::system_clock::now();
+
+  auto greedy_state = env_obj_->ComputeGreedyRenderPoses();
+	end = chrono::system_clock::now();
+  chrono::duration<double> elapsed_seconds = end-start;
+  // if (IsMaster(mpi_world_)) {
+
+  const auto &models = env_obj_->obj_models_;
+  object_transforms->resize(input.model_names.size());
+  preprocessing_object_transforms->resize(input.model_names.size());
+
+  last_env_stats_ = env_obj_->GetEnvStats();
+  last_env_stats_.scenes_rendered = 0;
+  last_env_stats_.scenes_valid = 0;
+
+  PlannerStats icp_stats;
+  icp_stats.eps = 0;
+  icp_stats.cost = 0;
+  icp_stats.time = elapsed_seconds.count();
+  icp_stats.expands = 0;
+  last_planning_stats_.push_back(icp_stats);
+
+  int ii = 0;
+  for (const auto &object_state : greedy_state.object_states()) {
+    auto pose = object_state.cont_pose();
+    // cout << pose.x() << " " << pose.y() << " " << env_obj_->GetTableHeight() << " "
+    //       << pose.yaw() << endl;
+    const auto &obj_model = models[ii];
+    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
+                                  pose);
+    preprocessing_object_transforms->at(ii) = obj_model.preprocessing_transform();
+    ii++;
+  }
+  // }
+
+  return plan_success;
+}
+
 bool ObjectRecognizer::LocalizeObjects(const RecognitionInput &input,
                                        std::vector<ContPose> *detected_poses) const {
   printf("Object recognizer received request to localize %zu objects: \n",
