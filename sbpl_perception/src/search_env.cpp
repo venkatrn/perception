@@ -1176,30 +1176,30 @@ void EnvObjectRecognition::GetICPAdjustedPosesGPU(float* result_rendered_clouds,
                                                   int total_rendered_point_num,
                                                   int* poses_occluded)
 {
-  int num_points_observed = observed_dc_index[env_params_.width * env_params_.height-1];  
-  // #pragma omp parallel for
-  for (int i = 0; i < num_poses-1; i++)
-  {
-    int n = i;
-    int begin_points_curr_pose = dc_index[n*env_params_.width * env_params_.height];
-    int end_points_curr_pose = dc_index[(n+1)*env_params_.width * env_params_.height];
-    int num_points_curr_pose = end_points_curr_pose - begin_points_curr_pose;
-    printf("Number of target points (c++): %d\n", num_points_curr_pose);
+  // int num_points_observed = observed_dc_index[env_params_.width * env_params_.height-1];  
+  // // #pragma omp parallel for
+  // for (int i = 0; i < num_poses-1; i++)
+  // {
+  //   int n = i;
+  //   int begin_points_curr_pose = dc_index[n*env_params_.width * env_params_.height];
+  //   int end_points_curr_pose = dc_index[(n+1)*env_params_.width * env_params_.height];
+  //   int num_points_curr_pose = end_points_curr_pose - begin_points_curr_pose;
+  //   printf("Number of target points (c++): %d\n", num_points_curr_pose);
 
-    ICP* icp_gpu = new ICP(result_observed_cloud, 
-                          num_points_observed,
-                          result_rendered_clouds,
-                          begin_points_curr_pose,
-                          end_points_curr_pose,
-                          total_rendered_point_num);
+  //   ICP* icp_gpu = new ICP(result_observed_cloud, 
+  //                         num_points_observed,
+  //                         result_rendered_clouds,
+  //                         begin_points_curr_pose,
+  //                         end_points_curr_pose,
+  //                         total_rendered_point_num);
 
-    float* rendered_icp_adjusted_cloud = (float*) malloc(3 * num_points_curr_pose * sizeof(float));
-    icp_gpu->iterateGPU(rendered_icp_adjusted_cloud);
-    // icp_gpu->endSimulation();
-    // PrintGPUClouds(rendered_icp_adjusted_cloud, depth_data, dc_index, 1, num_points_curr_pose, 1, poses_occluded, "icp");
-    free(rendered_icp_adjusted_cloud);
-    free(icp_gpu);
-  }
+  //   float* rendered_icp_adjusted_cloud = (float*) malloc(3 * num_points_curr_pose * sizeof(float));
+  //   icp_gpu->iterateGPU(rendered_icp_adjusted_cloud);
+  //   // icp_gpu->endSimulation();
+  //   // PrintGPUClouds(rendered_icp_adjusted_cloud, depth_data, dc_index, 1, num_points_curr_pose, 1, poses_occluded, "icp");
+  //   free(rendered_icp_adjusted_cloud);
+  //   free(icp_gpu);
+  // }
 }
 void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                                           const vector<vector<uint8_t>>& source_result_color,
