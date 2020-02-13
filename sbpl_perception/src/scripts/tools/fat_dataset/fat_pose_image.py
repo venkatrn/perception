@@ -672,9 +672,14 @@ class FATImage:
 
 
     def get_depth_img_path(self, color_img_path):
+        # For FAT/NDDS
         # return color_img_path.replace(os.path.splitext(color_img_path)[1], '.depth.png')
+        # For YCB
         return color_img_path.replace('color', 'depth')
 
+    def get_mask_img_path(self, color_img_path):
+        # For YCB
+        return color_img_path.replace('color', 'label')
 
     def get_annotation_file_path(self, color_img_path):
         return color_img_path.replace(os.path.splitext(color_img_path)[1], '.json')
@@ -980,6 +985,83 @@ class FATImage:
             topk_inplane_rotations=3
         )
 
+    def visualize_sphere_sampling(self, image_data, print_poses=True, required_objects=None):
+        
+        from maskrcnn_benchmark.config import cfg
+        from dipy.core.geometry import cart2sphere, sphere2cart
+
+        if '/opt/ros/kinetic/lib/python2.7/dist-packages' in sys.path:
+            sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+        import cv2
+
+        # Load GT mask
+        color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
+        color_img = cv2.imread(color_img_path)
+        composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
+                = self.coco_demo.run_on_opencv_image(color_img, use_thresh=True)
+        composite_image_path = 'model_outputs/mask_{}.png'.format(self.get_clean_name(image_data['file_name']))
+        cv2.imwrite(composite_image_path, composite)
+
+        # depth_img_path = color_img_path.replace('.jpg', '.depth.png')
+        depth_img_path = self.get_depth_img_path(color_img_path)
+        depth_image = cv2.imread(depth_img_path, cv2.IMREAD_ANYDEPTH)
+        predicted_mask_path = os.path.join(os.path.dirname(depth_img_path), os.path.splitext(os.path.basename(color_img_path))[0] + '.predicted_mask.png')
+
+        labels = rotation_list['labels']
+        mask_list = mask_list_all
+        boxes = boxes_all
+        centroids_2d = centroids_2d_all
+
+        print(rotation_list['top_viewpoint_ids'])
+        # Select only those labels from network output that are required objects
+        if required_objects is not None:
+            labels = []
+            boxes = []
+            mask_list = []
+            centroids_2d = []
+            overall_binary_mask = np.zeros((self.height, self.width))
+            mask_label_i = 1
+            for label in required_objects:
+                if label in rotation_list['labels']:
+                    mask_i = rotation_list['labels'].index(label)
+                    # print(str(mask_i) + " found")
+                    filter_mask = mask_list_all[mask_i]
+                    # print(filter_mask > 0)
+                    # Use binary mask to assign label in overall mask
+                    overall_binary_mask[filter_mask > 0] = mask_label_i
+                    labels.append(label)
+                    boxes.append(boxes_all[mask_i])
+                    mask_list.append(filter_mask)
+                    centroids_2d.append(centroids_2d_all[mask_i])
+
+                    mask_label_i += 1
+
+        cv2.imwrite(predicted_mask_path, overall_binary_mask)
+
+        # Sample rotations
+        viewpoints_xyz = sphere_fibonacci_grid_points(80)
+
+        for i in range(len(labels)):
+            label = labels[i]
+            if print_poses:
+                render_machine = self.render_machines[label]
+
+            cnt = 0
+            for viewpoint in viewpoints_xyz:
+                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+                theta, phi = sphere2euler(theta, phi)
+                xyz_rotation_angles = [phi, theta, 0]
+                print("Recovered rotation : {}".format(xyz_rotation_angles))
+                if print_poses:
+                    rgb_gl, depth_gl = self.render_pose(
+                                        label, render_machine, xyz_rotation_angles, [0, 0, 1*self.distance_scale]
+                                    )
+                    cv2.imwrite("./temp/label_{}.png".format(cnt), rgb_gl)
+                    cnt += 1
+                    
+
+        # Sample translations
+
     def visualize_model_output(self, image_data, use_thresh=False, use_centroid=True, print_poses=True, required_objects=None):
 
         from maskrcnn_benchmark.config import cfg
@@ -996,27 +1078,7 @@ class FATImage:
             sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
         import cv2
 
-        # cfg_file = '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/configs/fat_pose/e2e_mask_rcnn_R_50_FPN_1x_test_cocostyle.yaml'
-        # args = {
-        #     'config_file' : cfg_file,
-        #     'confidence_threshold' : 0.85,
-        #     'min_image_size' : 750,
-        #     'masks_per_dim' : 10,
-        #     'show_mask_heatmaps' : False
-        # }
-        # cfg.merge_from_file(args['config_file'])
-        # cfg.freeze()
 
-        # coco_demo = COCODemo(
-        #     cfg,
-        #     confidence_threshold=args['confidence_threshold'],
-        #     show_mask_heatmaps=args['show_mask_heatmaps'],
-        #     masks_per_dim=args['masks_per_dim'],
-        #     min_image_size=args['min_image_size'],
-        #     categories = self.category_names,
-        #     # topk_rotations=9
-        #     topk_rotations=3
-        # )
         color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
         color_img = cv2.imread(color_img_path)
         composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
@@ -1121,15 +1183,18 @@ class FATImage:
         else:
             grid_i = 0
             for box_id in range(top_viewpoint_ids.shape[0]):
-                # plt.figure()
-                # plt.imshow(mask_list[box_id])
+                plt.figure()
                 # print(mask_list[box_id])
-                object_depth_mask = depth_image[mask_list[box_id] > 0]/self.depth_factor
-                object_depth_mask = object_depth_mask.flatten()
+                object_depth_mask = np.copy(depth_image)
+                object_depth_mask[mask_list[box_id] == 0] = 0
+                # plt.imshow(object_depth_mask)
+                # plt.show()
+                # object_depth_mask /= self.depth_factor
+                # object_depth_mask = object_depth_mask.flatten()
                 # object_depth_mask = self.reject_outliers(object_depth_mask)
                 object_depth = np.mean(object_depth_mask)
-                min_depth = np.min(object_depth_mask[object_depth_mask > 0])
-                max_depth = np.max(object_depth_mask[object_depth_mask > 0])
+                min_depth = np.min(object_depth_mask[object_depth_mask > 0])/self.depth_factor
+                max_depth = np.max(object_depth_mask[object_depth_mask > 0])/self.depth_factor
                 print("Min depth :{} , Max depth : {} from mask".format(min_depth, max_depth))
                 object_rotation_list = []
                 
@@ -1202,7 +1267,7 @@ class FATImage:
                     resolution = 0.02
                     print("Using lower z resolution for smaller objects : {}".format(resolution))
                 else:
-                    resolution = 0.04
+                    resolution = 0.02
                     print("Using higher z resolution for larger objects : {}".format(resolution))
 
                 ## Create translation hypothesis for every rotation, if not using centroid
@@ -2248,8 +2313,7 @@ def run_ycb_6d():
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    # required_objects = ['003_cracker_box']
-    # TODO : bleach clenser model doesnt load on gpu
+    # required_objects = ['025_mug', '002_master_chef_can', '007_tuna_fish_can']
     required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
     fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects)
@@ -2270,7 +2334,7 @@ def run_ycb_6d():
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str)[23:].tolist()
     for scene_i in range(48, 60):
-        for img_i in range(0,120):
+        for img_i in range(1,2):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
             #     continue
@@ -2306,7 +2370,9 @@ def run_ycb_6d():
             yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
                 image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
             )
-
+            # fat_image.visualize_sphere_sampling(
+            #         image_data, print_poses=True, required_objects=required_objects
+            #     )
             # Run model to get multiple poses for each object
             labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
                 fat_image.visualize_model_output(

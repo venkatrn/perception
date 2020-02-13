@@ -67,7 +67,8 @@ namespace cuda_renderer {
         int observed_cloud_point_num,
         int num_poses,
         float* &rendered_cost,
-        uint8_t* &result_observed_explained);
+        std::vector<float> pose_observed_points_total,
+        float* &observed_cost);
 
     bool knn_cuda_global(const float * ref,
                         int           ref_nb,

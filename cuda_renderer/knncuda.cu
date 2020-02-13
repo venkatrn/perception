@@ -559,7 +559,7 @@ __global__ void compute_render_cost(
         else
         {
             // compute color cost
-            if (true)
+            if (false)
             {
                 uint8_t red2  = rendered_cloud_color[point_index + 2*rendered_cloud_point_num];
                 uint8_t green2  = rendered_cloud_color[point_index + 1*rendered_cloud_point_num];
@@ -582,16 +582,29 @@ __global__ void compute_render_cost(
                 else {
                     // the point is explained, so mark corresponding observed point explained
                     // atomicOr(cuda_observed_explained[o_point_index], 1);
-                    cuda_observed_explained[o_point_index] = 1;
+                    cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
                 }
             }
             else {
                 // the point is explained, so mark corresponding observed point explained
                 // atomicOr(cuda_observed_explained[o_point_index], 1);
-                cuda_observed_explained[o_point_index] = 1;
+                cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
             }
         }
     }
+}
+__global__ void compute_observed_cost(
+    int num_poses,
+    int observed_cloud_point_num,
+    uint8_t* cuda_observed_explained,
+    float* observed_total_explained)
+{
+    size_t point_index = blockIdx.x*blockDim.x + threadIdx.x;
+    if(point_index >= num_poses * observed_cloud_point_num) return;
+
+    size_t pose_index = point_index/observed_cloud_point_num;
+    atomicAdd(&observed_total_explained[pose_index], (float) cuda_observed_explained[point_index]);
+    // printf("%d\n", cuda_observed_explained[point_index]);
 }
 bool compute_rgbd_cost(
     float &sensor_resolution,
@@ -607,7 +620,8 @@ bool compute_rgbd_cost(
     int observed_cloud_point_num,
     int num_poses,
     float* &rendered_cost,
-    uint8_t* &result_observed_explained
+    std::vector<float> pose_observed_points_total,
+    float* &observed_cost
 )
 {
     // for (int i = 0; i < num_poses; i++)
@@ -640,12 +654,15 @@ bool compute_rgbd_cost(
     cudaMalloc(&cuda_rendered_cloud, 3 * rendered_cloud_point_num * size_of_float);
     cudaMalloc(&cuda_rendered_cloud_color, 3 * rendered_cloud_point_num * size_of_uint);
     cudaMalloc(&cuda_poses_occluded, num_poses * size_of_int);
-    cudaMalloc(&cuda_observed_explained, observed_cloud_point_num * size_of_uint);
+    // cudaMalloc(&cuda_observed_explained, num_poses * observed_cloud_point_num * size_of_uint);
 
     thrust::device_vector<float> cuda_rendered_cost_vec(num_poses, 0);
     cuda_rendered_cost = thrust::raw_pointer_cast(cuda_rendered_cost_vec.data());
     thrust::device_vector<float> cuda_pose_point_num_vec(num_poses, 0);
     cuda_pose_point_num = thrust::raw_pointer_cast(cuda_pose_point_num_vec.data());
+
+    thrust::device_vector<uint8_t> cuda_observed_explained_vec(num_poses * observed_cloud_point_num, 0);
+    cuda_observed_explained = thrust::raw_pointer_cast(cuda_observed_explained_vec.data());
 
     cudaMemcpy(cuda_knn_dist, knn_dist, rendered_cloud_point_num * size_of_float, cudaMemcpyHostToDevice);
     cudaMemcpy(cuda_knn_index, knn_index, rendered_cloud_point_num * size_of_int, cudaMemcpyHostToDevice);
@@ -658,8 +675,8 @@ bool compute_rgbd_cost(
     // cudaMemset(cuda_rendered_cost, 0, num_poses * size_of_int);
 
     const size_t threadsPerBlock = 256;
-    dim3 numBlocks((rendered_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
-    compute_render_cost<<<numBlocks, threadsPerBlock>>>(
+    dim3 numBlocksR((rendered_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
+    compute_render_cost<<<numBlocksR, threadsPerBlock>>>(
         cuda_knn_dist,
         cuda_knn_index,
         cuda_cloud_pose_map,
@@ -673,6 +690,9 @@ bool compute_rgbd_cost(
         cuda_observed_cloud_color,
         cuda_rendered_cloud,
         cuda_observed_explained);
+    
+
+    
 
     if (cudaGetLastError() != cudaSuccess) {
         printf("ERROR: Unable to execute kernel\n");
@@ -684,10 +704,11 @@ bool compute_rgbd_cost(
         cudaFree(cuda_rendered_cloud_color); 
         cudaFree(cuda_poses_occluded); 
         // cudaFree(cuda_rendered_cost); 
-        cudaFree(cuda_observed_explained); 
+        // cudaFree(cuda_observed_explained); 
         return false;
     }
 
+    thrust::device_vector<float> rendered_multiplier_val(num_poses, 100);
     if (true)
     {
         thrust::transform(
@@ -695,7 +716,6 @@ bool compute_rgbd_cost(
             cuda_pose_point_num_vec.begin(), cuda_rendered_cost_vec.begin(), 
             thrust::divides<float>()
         );
-        thrust::device_vector<float> rendered_multiplier_val(num_poses, 100);
         thrust::transform(
             cuda_rendered_cost_vec.begin(), cuda_rendered_cost_vec.end(), 
             rendered_multiplier_val.begin(), cuda_rendered_cost_vec.begin(), 
@@ -703,9 +723,67 @@ bool compute_rgbd_cost(
         );
     }
     rendered_cost = (float*) malloc(num_poses * size_of_float);
-    result_observed_explained = (uint8_t*) malloc(observed_cloud_point_num * size_of_uint);
     cudaMemcpy(rendered_cost, cuda_rendered_cost, num_poses * size_of_float, cudaMemcpyDeviceToHost);
-    cudaMemcpy(result_observed_explained, cuda_observed_explained, observed_cloud_point_num * size_of_uint, cudaMemcpyDeviceToHost);
+
+
+    // Compute observe cost using points marked in render cost kernel
+    if (true)
+    {
+        thrust::device_vector<float> cuda_pose_observed_explained_vec(num_poses, 0);
+        float* cuda_pose_observed_explained = thrust::raw_pointer_cast(cuda_pose_observed_explained_vec.data());
+
+        dim3 numBlocksO((num_poses * observed_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
+        compute_observed_cost<<<numBlocksO, threadsPerBlock>>>(
+            num_poses,
+            observed_cloud_point_num,
+            cuda_observed_explained,
+            cuda_pose_observed_explained
+        );
+        
+        // Subtract total observed points for each pose with explained points for each pose
+        thrust::device_vector<float> cuda_pose_observed_points_total_vec = pose_observed_points_total;
+        thrust::device_vector<float> cuda_observed_cost_vec(num_poses, 0);
+        thrust::transform(
+            cuda_pose_observed_points_total_vec.begin(), cuda_pose_observed_points_total_vec.end(), 
+            cuda_pose_observed_explained_vec.begin(), cuda_observed_cost_vec.begin(), 
+            thrust::minus<float>()
+        );
+
+        // printf("Observed explained\n");
+        // thrust::copy(
+        //     cuda_pose_observed_points_total_vec.begin(),
+        //     cuda_pose_observed_points_total_vec.end(), 
+        //     std::ostream_iterator<int>(std::cout, " ")
+        // );
+        // Divide by total points
+        thrust::transform(
+            cuda_observed_cost_vec.begin(), cuda_observed_cost_vec.end(), 
+            cuda_pose_observed_points_total_vec.begin(), cuda_observed_cost_vec.begin(), 
+            thrust::divides<float>()
+        );
+
+        // Multiply by 100
+        thrust::transform(
+            cuda_observed_cost_vec.begin(), cuda_observed_cost_vec.end(), 
+            rendered_multiplier_val.begin(), cuda_observed_cost_vec.begin(), 
+            thrust::multiplies<float>()
+        );
+
+        // printf("Observed cost\n");
+        // thrust::copy(
+        //     cuda_observed_cost_vec.begin(),
+        //     cuda_observed_cost_vec.end(), 
+        //     std::ostream_iterator<int>(std::cout, " ")
+        // );
+
+        observed_cost = (float*) malloc(num_poses * size_of_float);
+        float* cuda_observed_cost = thrust::raw_pointer_cast(cuda_observed_cost_vec.data());
+        cudaMemcpy(observed_cost, cuda_observed_cost, num_poses * size_of_float, cudaMemcpyDeviceToHost);
+    
+    }
+
+    // result_observed_explained = (uint8_t*) malloc(num_poses * observed_cloud_point_num * size_of_uint);
+    // cudaMemcpy(result_observed_explained, cuda_observed_explained, num_poses * observed_cloud_point_num * size_of_uint, cudaMemcpyDeviceToHost);
 
     // for (int i = 0; i < num_poses; i++)
     // {
@@ -722,7 +800,7 @@ bool compute_rgbd_cost(
     cudaFree(cuda_rendered_cloud_color); 
     cudaFree(cuda_poses_occluded); 
     // cudaFree(cuda_rendered_cost); 
-    cudaFree(cuda_observed_explained); 
+    // cudaFree(cuda_observed_explained); 
     return true;
 }
 bool knn_cuda_global(const float * ref,

@@ -370,7 +370,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   int *unfiltered_depth_data;
   int* result_observed_cloud_label;
 
-  cv::Mat cv_input_filtered_depth_image, cv_input_filtered_color_image;
+  cv::Mat cv_input_filtered_depth_image, cv_input_filtered_color_image, cv_input_unfiltered_depth_image;
   vector<vector<uint8_t>> cv_input_filtered_color_image_vec;
   void PrintGPUImages(vector<int32_t>& result_depth, 
                       vector<vector<uint8_t>>& result_color, 
