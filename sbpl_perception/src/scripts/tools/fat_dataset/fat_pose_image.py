@@ -2333,7 +2333,7 @@ def run_ycb_6d():
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str)[23:].tolist()
-    for scene_i in range(48, 60):
+    for scene_i in range(54, 60):
         for img_i in range(1,2):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
