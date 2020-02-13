@@ -350,7 +350,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<std::string> segmented_object_names;
   void GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
                                   vector<ObjectState>& modified_objects);
-
+  vector<float> segmented_observed_point_count;
   // CUDA GPU stuff
   std::unordered_map<int, std::vector<int32_t>> gpu_depth_image_cache_;
   std::unordered_map<int, std::vector<std::vector<uint8_t>>> gpu_color_image_cache_;
@@ -368,6 +368,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   int* observed_dc_index;
   int32_t* observed_depth_data;
   int *unfiltered_depth_data;
+  int* result_observed_cloud_label;
+
   cv::Mat cv_input_filtered_depth_image, cv_input_filtered_color_image;
   vector<vector<uint8_t>> cv_input_filtered_color_image_vec;
   void PrintGPUImages(vector<int32_t>& result_depth, 

@@ -49,7 +49,9 @@ namespace cuda_renderer {
                             float kCameraFY,
                             float depth_factor,
                             int stride,
-                            int point_dim);
+                            int point_dim,
+                            int* &result_observed_cloud_label,
+                            uint8_t* label_mask_data = NULL);
 
     bool compute_rgbd_cost(
         float &sensor_resolution,
@@ -64,7 +66,8 @@ namespace cuda_renderer {
         int rendered_cloud_point_num,
         int observed_cloud_point_num,
         int num_poses,
-        float* &rendered_cost);
+        float* &rendered_cost,
+        uint8_t* &result_observed_explained);
 
     bool knn_cuda_global(const float * ref,
                         int           ref_nb,

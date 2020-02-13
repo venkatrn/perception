@@ -2252,7 +2252,7 @@ def run_ycb_6d():
     # TODO : bleach clenser model doesnt load on gpu
     required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
-    fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects)
+    fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects)
     f_accuracy.write("name,")
     for object_name in required_objects:
         f_accuracy.write("{}-add,{}-adds,".format(object_name, object_name))
@@ -2269,8 +2269,8 @@ def run_ycb_6d():
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str)[23:].tolist()
-    for scene_i in range(52, 53):
-        for img_i in range(84,85):
+    for scene_i in range(48, 60):
+        for img_i in range(0,120):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
             #     continue
@@ -2310,7 +2310,7 @@ def run_ycb_6d():
             # Run model to get multiple poses for each object
             labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
                 fat_image.visualize_model_output(
-                    image_data, use_thresh=True, use_centroid=False, print_poses=True,
+                    image_data, use_thresh=True, use_centroid=False, print_poses=False,
                     required_objects=required_objects
                 )
 

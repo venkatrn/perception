@@ -275,6 +275,10 @@ __global__ void add_query_points_norm_and_sqrt(float * array, int width, int pit
 __global__ void depth_to_mask(
     int32_t* depth, int* mask, int width, int height, int stride, int* pose_occluded)
 {
+    /**
+     * Creates a mask corresponding to valid depth points by using the depth data
+     *
+    */
     int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/(width/stride));
     int x = (blockIdx.x * blockDim.x + threadIdx.x)%(width/stride);
     int y = blockIdx.y*blockDim.y + threadIdx.y;
@@ -295,8 +299,12 @@ __global__ void depth_to_mask(
 __global__ void depth_to_cloud(
     int32_t* depth, uint8_t* r_in, uint8_t* g_in, uint8_t* b_in, float* cloud, uint8_t* cloud_color, int cloud_rendered_cloud_point_num, int* mask, int width, int height, 
     float kCameraCX, float kCameraCY, float kCameraFX, float kCameraFY, float depth_factor,
-    int stride, int* cloud_pose_map)
+    int stride, int* cloud_pose_map, uint8_t* label_mask_data,  int* cloud_mask_label)
 {
+    /**
+     * Creates a point cloud by combining a mask corresponding to valid depth pixels and depth data using the camera params
+     * Optionally also records the correct color of the points and their mask label
+    */
     int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/(width/stride));
     int x = (blockIdx.x * blockDim.x + threadIdx.x)%(width/stride);
     int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -330,7 +338,11 @@ __global__ void depth_to_cloud(
     cloud_color[cloud_idx + 2*cloud_rendered_cloud_point_num] = b_in[idx_depth];
 
     cloud_pose_map[cloud_idx] = n;
-    // printf("cloud_idx:%d\n", cloud_pose_map[cloud_idx]);
+    if (label_mask_data != NULL)
+    {
+        cloud_mask_label[cloud_idx] = label_mask_data[idx_depth];
+    }
+    // printf("cloud_idx:%d\n", label_mask_data[idx_depth]);
 
     // cloud[3*cloud_idx + 0] = x_pcd;
     // cloud[3*cloud_idx + 1] = y_pcd;
@@ -354,7 +366,9 @@ bool depth2cloud_global(int32_t* depth_data,
                         float kCameraFY,
                         float depth_factor,
                         int stride,
-                        int point_dim)
+                        int point_dim,
+                        int* &result_observed_cloud_label,
+                        uint8_t* label_mask_data)
 {
     printf("depth2cloud_global()\n");
     /**
@@ -373,9 +387,16 @@ bool depth2cloud_global(int32_t* depth_data,
 
     int32_t* depth_data_cuda;
     int* pose_occluded_cuda;
+    uint8_t* label_mask_data_cuda = NULL;
     // int stride = 5;
     cudaMalloc(&depth_data_cuda, num_poses * width * height * sizeof(int32_t));
     cudaMemcpy(depth_data_cuda, depth_data, num_poses * width * height * sizeof(int32_t), cudaMemcpyHostToDevice);
+    
+    if (label_mask_data != NULL)
+    {
+        cudaMalloc(&label_mask_data_cuda, num_poses * width * height * sizeof(uint8_t));
+        cudaMemcpy(label_mask_data_cuda, label_mask_data, num_poses * width * height * sizeof(uint8_t), cudaMemcpyHostToDevice);
+    }
     
     cudaMalloc(&pose_occluded_cuda, num_poses * sizeof(int));
     cudaMemcpy(pose_occluded_cuda, pose_occluded, num_poses * sizeof(int), cudaMemcpyHostToDevice);
@@ -404,14 +425,21 @@ bool depth2cloud_global(int32_t* depth_data,
     float* cuda_cloud;
     uint8_t* cuda_cloud_color;
     int* cuda_cloud_pose_map;
+    int* cuda_cloud_mask_label;
+
     cudaMalloc(&cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float));
     cudaMalloc(&cuda_cloud_color, point_dim * rendered_cloud_point_num * sizeof(uint8_t));
     cudaMalloc(&cuda_cloud_pose_map, rendered_cloud_point_num * sizeof(int));
+    if (label_mask_data != NULL)
+    {
+        cudaMalloc(&cuda_cloud_mask_label, rendered_cloud_point_num * sizeof(int));
+    }
 
     result_cloud = (float*) malloc(point_dim * rendered_cloud_point_num * sizeof(float));
     result_cloud_color = (uint8_t*) malloc(point_dim * rendered_cloud_point_num * sizeof(uint8_t));
     dc_index = (int*) malloc(num_poses * width * height * sizeof(int));
     cloud_pose_map = (int*) malloc(rendered_cloud_point_num * sizeof(int));
+    result_observed_cloud_label = (int*) malloc(rendered_cloud_point_num * sizeof(int));
 
     thrust::device_vector<uint8_t> d_red_in = color_data[0];
     thrust::device_vector<uint8_t> d_green_in = color_data[1];
@@ -424,13 +452,18 @@ bool depth2cloud_global(int32_t* depth_data,
     depth_to_cloud<<<numBlocks, threadsPerBlock>>>(
                         depth_data_cuda, red_in, green_in, blue_in,
                         cuda_cloud, cuda_cloud_color, rendered_cloud_point_num, mask_ptr, width, height, 
-                        kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map);
+                        kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map,
+                        label_mask_data_cuda, cuda_cloud_mask_label);
         
     // cudaDeviceSynchronize();
     cudaMemcpy(result_cloud, cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(result_cloud_color, cuda_cloud_color, point_dim * rendered_cloud_point_num * sizeof(uint8_t), cudaMemcpyDeviceToHost);
     cudaMemcpy(dc_index, mask_ptr, num_poses * width * height * sizeof(int), cudaMemcpyDeviceToHost);
     cudaMemcpy(cloud_pose_map, cuda_cloud_pose_map, rendered_cloud_point_num * sizeof(int), cudaMemcpyDeviceToHost);
+    if (label_mask_data != NULL)
+    {
+        cudaMemcpy(result_observed_cloud_label, cuda_cloud_mask_label, rendered_cloud_point_num * sizeof(int), cudaMemcpyDeviceToHost);
+    }
     // for (int i = 0; i < rendered_cloud_point_num; i++)
     // {
     //     printf("%d ", cloud_pose_map[i]);
@@ -456,13 +489,27 @@ bool depth2cloud_global(int32_t* depth_data,
     if (cudaGetLastError() != cudaSuccess) 
     {
         printf("ERROR: Unable to execute kernel depth_to_cloud\n");
+        cudaFree(depth_data_cuda);
+        cudaFree(pose_occluded_cuda);
+        cudaFree(cuda_cloud);
+        cudaFree(cuda_cloud_color);
+        cudaFree(cuda_cloud_pose_map);
+        if (label_mask_data != NULL)
+        {
+            cudaFree(cuda_cloud_mask_label);
+        }
         return false;
     }
     printf("depth2cloud_global() Done\n");
     cudaFree(depth_data_cuda);
+    cudaFree(pose_occluded_cuda);
     cudaFree(cuda_cloud);
     cudaFree(cuda_cloud_color);
-    cudaFree(pose_occluded_cuda);
+    cudaFree(cuda_cloud_pose_map);
+    if (label_mask_data != NULL)
+    {
+        cudaFree(cuda_cloud_mask_label);
+    }
     return true;
 }
 __global__ void compute_render_cost(
@@ -477,8 +524,17 @@ __global__ void compute_render_cost(
         float* cuda_pose_point_num,
         uint8_t* rendered_cloud_color,
         uint8_t* observed_cloud_color,
-        float* rendered_cloud)
+        float* rendered_cloud,
+        uint8_t* cuda_observed_explained)
 {
+    /**
+     * Params -
+     * @cuda_knn_dist : distance to nn from knn library
+     * @cuda_knn_index : index of nn in observed cloud from knn library
+     * @cuda_cloud_pose_map : the pose corresponding to every point in cloud
+     * @*_cloud_color : color values of clouds, to compare rgb cost of NNs
+     * @rendered_cloud : rendered point cloud of all poses, all objects
+     */
     size_t point_index = blockIdx.x*blockDim.x + threadIdx.x;
     if(point_index >= rendered_cloud_point_num) return;
 
@@ -520,8 +576,19 @@ __global__ void compute_render_cost(
                 double cur_dist = color_distance(lab1[0],lab1[1],lab1[2],lab2[0],lab2[1],lab2[2]);
                 // printf("color distance :%f\n", cur_dist);
                 if(cur_dist > 20){
+                    // add to render cost if color doesnt match
                     atomicAdd(&cuda_rendered_cost[pose_index], 1);
                 }
+                else {
+                    // the point is explained, so mark corresponding observed point explained
+                    // atomicOr(cuda_observed_explained[o_point_index], 1);
+                    cuda_observed_explained[o_point_index] = 1;
+                }
+            }
+            else {
+                // the point is explained, so mark corresponding observed point explained
+                // atomicOr(cuda_observed_explained[o_point_index], 1);
+                cuda_observed_explained[o_point_index] = 1;
             }
         }
     }
@@ -539,7 +606,8 @@ bool compute_rgbd_cost(
     int rendered_cloud_point_num,
     int observed_cloud_point_num,
     int num_poses,
-    float* &rendered_cost
+    float* &rendered_cost,
+    uint8_t* &result_observed_explained
 )
 {
     // for (int i = 0; i < num_poses; i++)
@@ -559,6 +627,7 @@ bool compute_rgbd_cost(
     uint8_t* cuda_observed_cloud_color;
     uint8_t* cuda_rendered_cloud_color;
     float* cuda_rendered_cloud;
+    uint8_t* cuda_observed_explained;
 
     const unsigned int size_of_float = sizeof(float);
     const unsigned int size_of_int   = sizeof(int);
@@ -571,6 +640,8 @@ bool compute_rgbd_cost(
     cudaMalloc(&cuda_rendered_cloud, 3 * rendered_cloud_point_num * size_of_float);
     cudaMalloc(&cuda_rendered_cloud_color, 3 * rendered_cloud_point_num * size_of_uint);
     cudaMalloc(&cuda_poses_occluded, num_poses * size_of_int);
+    cudaMalloc(&cuda_observed_explained, observed_cloud_point_num * size_of_uint);
+
     thrust::device_vector<float> cuda_rendered_cost_vec(num_poses, 0);
     cuda_rendered_cost = thrust::raw_pointer_cast(cuda_rendered_cost_vec.data());
     thrust::device_vector<float> cuda_pose_point_num_vec(num_poses, 0);
@@ -600,14 +671,20 @@ bool compute_rgbd_cost(
         cuda_pose_point_num,
         cuda_rendered_cloud_color,
         cuda_observed_cloud_color,
-        cuda_rendered_cloud);
+        cuda_rendered_cloud,
+        cuda_observed_explained);
 
     if (cudaGetLastError() != cudaSuccess) {
         printf("ERROR: Unable to execute kernel\n");
         cudaFree(cuda_knn_dist);
+        cudaFree(cuda_knn_index);
         cudaFree(cuda_cloud_pose_map); 
+        cudaFree(cuda_observed_cloud_color); 
+        cudaFree(cuda_rendered_cloud); 
+        cudaFree(cuda_rendered_cloud_color); 
         cudaFree(cuda_poses_occluded); 
-        cudaFree(cuda_rendered_cost); 
+        // cudaFree(cuda_rendered_cost); 
+        cudaFree(cuda_observed_explained); 
         return false;
     }
 
@@ -626,7 +703,9 @@ bool compute_rgbd_cost(
         );
     }
     rendered_cost = (float*) malloc(num_poses * size_of_float);
+    result_observed_explained = (uint8_t*) malloc(observed_cloud_point_num * size_of_uint);
     cudaMemcpy(rendered_cost, cuda_rendered_cost, num_poses * size_of_float, cudaMemcpyDeviceToHost);
+    cudaMemcpy(result_observed_explained, cuda_observed_explained, observed_cloud_point_num * size_of_uint, cudaMemcpyDeviceToHost);
 
     // for (int i = 0; i < num_poses; i++)
     // {
@@ -636,9 +715,14 @@ bool compute_rgbd_cost(
 
     printf("compute_cost() done\n");
     cudaFree(cuda_knn_dist);
+    cudaFree(cuda_knn_index);
     cudaFree(cuda_cloud_pose_map); 
+    cudaFree(cuda_observed_cloud_color); 
+    cudaFree(cuda_rendered_cloud); 
+    cudaFree(cuda_rendered_cloud_color); 
     cudaFree(cuda_poses_occluded); 
     // cudaFree(cuda_rendered_cost); 
+    cudaFree(cuda_observed_explained); 
     return true;
 }
 bool knn_cuda_global(const float * ref,
