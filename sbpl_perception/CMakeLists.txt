@@ -36,7 +36,7 @@ SET(SPECIAL_OS_LIBS "pthread" "X11" "z")
 find_package(CUDA REQUIRED)
 set(OpenCV_DIR /usr/local/share/OpenCV)
 
-set(CUSTOM_BOOST_MPI ON)
+set(CUSTOM_BOOST_MPI OFF)
 message(WARNING CUSTOM_BOOST_MPI)
 message(WARNING ${CUSTOM_BOOST_MPI})
 
@@ -51,8 +51,6 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   kinect_sim
   cuda_renderer
-  cuda_icp
-  cuda_icp_custom
   perception_utils
   pcl_ros
   roscpp
@@ -138,8 +136,6 @@ catkin_package(
     cv_bridge
     kinect_sim
     cuda_renderer
-    cuda_icp
-    cuda_icp_custom
     perception_utils
     pcl_ros
     roscpp

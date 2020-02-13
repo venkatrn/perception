@@ -12,7 +12,7 @@ SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g2 -ggdb")
 SET(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 if(USE_CUDA)
-set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-8.0)
+set(CUDA_TOOLKIT_ROOT_DIR /usr/local/cuda-9.0)
 add_definitions(-DCUDA_ON)
 endif()
 # opencv

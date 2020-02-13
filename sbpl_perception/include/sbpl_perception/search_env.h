@@ -8,7 +8,7 @@
  */
 
 #include <cuda_renderer/renderer.h>
-#include <cuda_icp/icp.h>
+// #include <cuda_icp/icp.h>
 // #include <cuda_icp/helper.h>
 #include <cuda_renderer/knncuda.h>
 
@@ -60,8 +60,8 @@
 #include <chrono>
 #include <thread>
 #include <fstream>
-#include <cuda_icp_custom/kernel.h>
-#include <cuda_icp_custom/kdtree.hpp>
+// #include <cuda_icp_custom/kernel.h>
+// #include <cuda_icp_custom/kdtree.hpp>
 // #include <cuda_icp_custom/pointcloud.h>
 #include <numeric>
 
