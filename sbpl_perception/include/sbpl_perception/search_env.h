@@ -92,6 +92,7 @@ struct EnvParams {
   int use_external_pose_list;
   int use_icp;
   int shift_pose_centroid;
+  std::string rendered_root_dir;
 };
 
 struct PERCHParams {
@@ -351,6 +352,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
                                   vector<ObjectState>& modified_objects);
   vector<float> segmented_observed_point_count;
+
   // CUDA GPU stuff
   std::unordered_map<int, std::vector<int32_t>> gpu_depth_image_cache_;
   std::unordered_map<int, std::vector<std::vector<uint8_t>>> gpu_color_image_cache_;

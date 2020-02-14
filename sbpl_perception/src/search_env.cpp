@@ -4991,6 +4991,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   env_params_.use_external_pose_list = input.use_external_pose_list;
   env_params_.use_icp = input.use_icp;
   env_params_.shift_pose_centroid = input.shift_pose_centroid;
+  env_params_.rendered_root_dir = input.rendered_root_dir; 
 
 
   printf("External Render : %d\n", env_params_.use_external_render);
@@ -4998,6 +4999,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   printf("Depth Factor : %f\n", input.depth_factor);
   printf("ICP : %d\n", env_params_.use_icp);
   printf("Shift Pose Centroid : %d\n", env_params_.shift_pose_centroid);
+  printf("Rendered Root Dir : %s\n", env_params_.rendered_root_dir.c_str());
   // If #repetitions is not set, we will assume every unique model appears
   // exactly once in the scene.
   // if (input.model_repetitions.empty()) {
@@ -5868,7 +5870,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
         if (source_state.object_states().size() == 0)
         {
           string render_states_dir;
-          string render_states_path = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/data/YCB_Video_Dataset/rendered";
+          string render_states_path = env_params_.rendered_root_dir;
           string render_states_path_parent = render_states_path;
           std::stringstream ss;
           ss << render_states_path << "/" << obj_models_[ii].name();

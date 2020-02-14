@@ -73,6 +73,8 @@ struct RecognitionInput {
 
   std::string predicted_mask_image;
 
+  std::string rendered_root_dir;
+
   int use_input_images;
 
   int use_external_pose_list;
@@ -202,6 +204,7 @@ void serialize(Archive &ar, sbpl_perception::RecognitionInput &input,
   ar &input.input_color_image;
   ar &input.input_depth_image;
   ar &input.predicted_mask_image;
+  ar &input.rendered_root_dir;
   ar &input.use_input_images;
   ar &input.use_external_pose_list;
   ar &input.depth_factor;

@@ -916,7 +916,8 @@ class FATImage:
             'use_external_pose_list': use_external_pose_list,
             'depth_factor': self.depth_factor,
             'shift_pose_centroid': use_centroid_shifting,
-            'use_icp': 1
+            'use_icp': 1,
+            'rendered_root_dir' : self.rendered_root_dir
         }
         camera_params = {
             'camera_width' : self.width,
