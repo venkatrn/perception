@@ -21,6 +21,8 @@ import pcl
 from pprint import pprint
 import calendar
 import time
+import yaml
+import argparse
 
 ROS_PYTHON2_PKG_PATH = ['/opt/ros/kinetic/lib/python2.7/dist-packages',
                             '/usr/local/lib/python2.7/dist-packages/',
@@ -2305,10 +2307,11 @@ def run_ycb_gpu():
     f_accuracy.close()
 
 
-def run_ycb_6d():
-    image_directory = '/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/'
+def run_ycb_6d(dataset_cfg=None):
+    
+    image_directory = dataset_cfg['image_dir']
     annotation_file = image_directory + 'instances_keyframe_pose.json'
-    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models"
+    model_dir = dataset_cfg['model_dir']
 
     fat_image = FATImage(
         coco_annotation_file=annotation_file,
@@ -2327,7 +2330,7 @@ def run_ycb_6d():
 
     # Running on model and PERCH
     mkdir_if_missing('model_outputs')
-    cfg_file='/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/configs/ycb_pose/e2e_mask_rcnn_R_50_FPN_1x_test_cocostyle.yaml'
+    cfg_file = dataset_cfg['maskrcnn_config']
 
     ts = calendar.timegm(time.gmtime())
     f_accuracy = open('model_outputs/accuracy_6d_{}.txt'.format(ts), "w")
@@ -2339,7 +2342,7 @@ def run_ycb_6d():
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    required_objects = ['024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
+    required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
     # required_objects = ['002_master_chef_can']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
@@ -2359,8 +2362,8 @@ def run_ycb_6d():
     #for img_i in list(range(0,100)) + list(range(100,120)) + list(range(155,177)):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
-    IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str)[23:].tolist()
-    for scene_i in range(48, 50):
+    IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
+    for scene_i in range(53, 54):
         for img_i in range(1,2500):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
@@ -2461,6 +2464,18 @@ def run_ycb_6d():
 
 if __name__ == '__main__':
 
+    parser = argparse.ArgumentParser(description="Video stream from the command line")
+    parser.add_argument("--config", "-c", dest='config', type=str)
+    args = parser.parse_args()
+
+    with open(args.config, 'r') as cfg:
+        config = yaml.load(cfg)
+    
+    ROS_PYTHON2_PKG_PATH = config['python2_paths']
+    ROS_PYTHON3_PKG_PATH = config['python3_paths'][0]
+
+    run_ycb_6d(dataset_cfg=config['dataset'])
+
     # coco_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/coco_results.pth')
     # all_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/predictions.pth')
 
@@ -2532,7 +2547,6 @@ if __name__ == '__main__':
 
     ## Run on YCB
     # run_ycb_gpu()
-    run_ycb_6d()
 
     # Copying database for single object
     # image_directory = '/media/aditya/A69AFABA9AFA85D9/Datasets/fat/mixed/extra'
