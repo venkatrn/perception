@@ -158,6 +158,7 @@ RUN git clone https://github.com/NVIDIA/apex.git \
 #  && python setup.py install --cuda_ext --cpp_ext
 
 # Install PERCH
+ARG CACHEBUST=1
 RUN cd /ros_python3_ws/src \
     && git clone https://github.com/SBPL-Cruz/perception -b gpu_icp_ycb \
     && git clone https://github.com/SBPL-Cruz/improved-mha-planner -b renamed \
@@ -175,6 +176,6 @@ RUN apt-get update && apt-get install -y --allow-unauthenticated\
 # WORKDIR /data/perception/sbpl_perception/src/scripts/tools/fat_dataset
 ENTRYPOINT /bin/bash -c '. /opt/ros/kinetic/setup.bash; \
                          . /ros_python3_ws/devel/setup.bash; \
-                         cd /data/perception/sbpl_perception/src/scripts/tools/fat_dataset; \
+                         cd /ros_python3_ws/src/perception/sbpl_perception/src/scripts/tools/fat_dataset; \
                          Xvfb :5 -screen 0 800x600x24 & export DISPLAY=:5; \
                          python fat_pose_image.py --config config_docker.yaml'

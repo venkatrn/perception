@@ -63,6 +63,8 @@ class FATPerch():
         self.object_names_to_id = object_names_to_id
         self.output_dir_name = output_dir_name
 
+        self.perch_debug_dir = params['perch_debug_dir']
+
         if read_results_only == False:
             self.load_ros_param_from_file(PERCH_ENV_CONFIG)
             self.load_ros_param_from_file(PERCH_PLANNER_CONFIG)
@@ -124,7 +126,7 @@ class FATPerch():
 
     def read_pose_results(self):
         annotations = []
-        f = open(os.path.join(self.PERCH_ROOT, 'visualization', self.output_dir_name, 'output_poses.txt'), "r")
+        f = open(os.path.join(self.perch_debug_dir, self.output_dir_name, 'output_poses.txt'), "r")
         lines = f.readlines()
         for i in np.arange(0, len(lines), 13):
             location = list(map(float, lines[i+1].rstrip().split()[1:]))
@@ -145,7 +147,7 @@ class FATPerch():
                         })
         f.close()
 
-        f = open(os.path.join(self.PERCH_ROOT, 'visualization', self.output_dir_name, 'output_stats.txt'), "r")
+        f = open(os.path.join(self.perch_debug_dir, self.output_dir_name, 'output_stats.txt'), "r")
         stats = {}
         lines = f.readlines()
         stats_from_file = list(map(float, lines[2].rstrip().split()))
@@ -167,14 +169,14 @@ class FATPerch():
         out, _ = p.communicate()
         out = out.decode("utf-8")
         # print(out)
-        f = open(os.path.join(self.PERCH_ROOT, 'visualization', self.output_dir_name, 'log.txt'), "w")
+        f = open(os.path.join(self.perch_debug_dir, self.output_dir_name, 'log.txt'), "w")
         f.write(out)
         f.close()
 
         # Get annotations from output of PERCH to get accuracy
         ## TODO use new function
         annotations = []
-        f = open(os.path.join(self.PERCH_ROOT, 'visualization', self.output_dir_name, 'output_poses.txt'), "r")
+        f = open(os.path.join(self.perch_debug_dir, self.output_dir_name, 'output_poses.txt'), "r")
         lines = f.readlines()
         if len(lines) == 0:
             print("Invalid PERCH run : {}".format(len(lines)))
@@ -198,7 +200,7 @@ class FATPerch():
                         })
         f.close()
 
-        f = open(os.path.join(self.PERCH_ROOT, 'visualization', self.output_dir_name, 'output_stats.txt'), "r")
+        f = open(os.path.join(self.perch_debug_dir, self.output_dir_name, 'output_stats.txt'), "r")
         stats = {}
         lines = f.readlines()
         stats_from_file = list(map(float, lines[2].rstrip().split()))
@@ -207,5 +209,5 @@ class FATPerch():
         f.close()
 
         if model_poses_file is not None:
-            copy(model_poses_file, os.path.join(self.PERCH_ROOT, 'visualization', self.output_dir_name))
+            copy(model_poses_file, os.path.join(self.perch_debug_dir, self.output_dir_name))
         return annotations, stats
