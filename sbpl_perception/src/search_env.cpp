@@ -1383,7 +1383,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       // TODO : store this mapping in a map
       int required_object_id = distance(segmented_object_names.begin(), 
       find(segmented_object_names.begin(), segmented_object_names.end(), model_name)); 
-      pose_segmentation_label[i] = required_object_id;
+      pose_segmentation_label[i] = required_object_id + 1;
       pose_observed_points_total[i] = segmented_observed_point_count[required_object_id];
     }
 
@@ -1521,7 +1521,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         num_valid_poses = adjusted_poses_occluded.size() - accumulate(adjusted_poses_occluded.begin(), adjusted_poses_occluded.end(), 0);
         printf("Num valid poses after icp : %d\n", num_valid_poses);
         
-        PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
         // vector<ObjectState> random_modified_last_object_states;
         // PrintGPUClouds(
         //   modified_last_object_states, result_cloud, result_cloud_color, depth_data, dc_index, 
@@ -1561,7 +1561,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         result_cloud, result_cloud_color,
         rendered_point_num, observed_point_num,
         num_poses, rendered_cost_gpu, pose_observed_points_total,
-        observed_cost_gpu
+        observed_cost_gpu, pose_segmentation_label.data(),
+        result_observed_cloud_label
       );
       
       // vector<float> observed_cost(num_poses, 0.0); 

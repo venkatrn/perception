@@ -525,7 +525,9 @@ __global__ void compute_render_cost(
         uint8_t* rendered_cloud_color,
         uint8_t* observed_cloud_color,
         float* rendered_cloud,
-        uint8_t* cuda_observed_explained)
+        uint8_t* cuda_observed_explained,
+        int* pose_segmentation_label,
+        int* result_observed_cloud_label)
 {
     /**
      * Params -
@@ -534,6 +536,8 @@ __global__ void compute_render_cost(
      * @cuda_cloud_pose_map : the pose corresponding to every point in cloud
      * @*_cloud_color : color values of clouds, to compare rgb cost of NNs
      * @rendered_cloud : rendered point cloud of all poses, all objects
+     * Returns :
+     * @cuda_pose_point_num : Number of points in each rendered pose
      */
     size_t point_index = blockIdx.x*blockDim.x + threadIdx.x;
     if(point_index >= rendered_cloud_point_num) return;
@@ -559,7 +563,10 @@ __global__ void compute_render_cost(
         else
         {
             // compute color cost
-            if (false)
+            // printf("%d, %d\n", pose_segmentation_label[pose_index], result_observed_cloud_label[o_point_index]);
+            int type = 2;
+
+            if (type == 1)
             {
                 uint8_t red2  = rendered_cloud_color[point_index + 2*rendered_cloud_point_num];
                 uint8_t green2  = rendered_cloud_color[point_index + 1*rendered_cloud_point_num];
@@ -577,7 +584,7 @@ __global__ void compute_render_cost(
                 // printf("color distance :%f\n", cur_dist);
                 if(cur_dist > 20){
                     // add to render cost if color doesnt match
-                    atomicAdd(&cuda_rendered_cost[pose_index], 1);
+                    atomicAdd(&cuda_rendered_cost[pose_index], cost);
                 }
                 else {
                     // the point is explained, so mark corresponding observed point explained
@@ -585,10 +592,23 @@ __global__ void compute_render_cost(
                     cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
                 }
             }
-            else {
+            else if (type == 0) {
                 // the point is explained, so mark corresponding observed point explained
                 // atomicOr(cuda_observed_explained[o_point_index], 1);
                 cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
+            }
+            else if (type == 2) {
+                if (pose_segmentation_label[pose_index] != result_observed_cloud_label[o_point_index])
+                {
+                    // the euclidean distance is fine, but segmentation labels dont match
+                    atomicAdd(&cuda_rendered_cost[pose_index], cost);
+                }
+                else
+                {
+                    // the point is explained, so mark corresponding observed point explained
+                    // atomicOr(cuda_observed_explained[o_point_index], 1);
+                    cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
+                }
             }
         }
     }
@@ -621,7 +641,9 @@ bool compute_rgbd_cost(
     int num_poses,
     float* &rendered_cost,
     std::vector<float> pose_observed_points_total,
-    float* &observed_cost
+    float* &observed_cost,
+    int* pose_segmentation_label,
+    int* result_observed_cloud_label
 )
 {
     // for (int i = 0; i < num_poses; i++)
@@ -643,6 +665,9 @@ bool compute_rgbd_cost(
     float* cuda_rendered_cloud;
     uint8_t* cuda_observed_explained;
 
+    int* cuda_pose_segmentation_label;
+    int* cuda_observed_cloud_label;
+
     const unsigned int size_of_float = sizeof(float);
     const unsigned int size_of_int   = sizeof(int);
     const unsigned int size_of_uint   = sizeof(uint8_t);
@@ -654,7 +679,8 @@ bool compute_rgbd_cost(
     cudaMalloc(&cuda_rendered_cloud, 3 * rendered_cloud_point_num * size_of_float);
     cudaMalloc(&cuda_rendered_cloud_color, 3 * rendered_cloud_point_num * size_of_uint);
     cudaMalloc(&cuda_poses_occluded, num_poses * size_of_int);
-    // cudaMalloc(&cuda_observed_explained, num_poses * observed_cloud_point_num * size_of_uint);
+    cudaMalloc(&cuda_pose_segmentation_label, num_poses * size_of_int);
+    cudaMalloc(&cuda_observed_cloud_label, observed_cloud_point_num * size_of_int);
 
     thrust::device_vector<float> cuda_rendered_cost_vec(num_poses, 0);
     cuda_rendered_cost = thrust::raw_pointer_cast(cuda_rendered_cost_vec.data());
@@ -671,8 +697,9 @@ bool compute_rgbd_cost(
     cudaMemcpy(cuda_rendered_cloud, rendered_cloud, 3 * rendered_cloud_point_num * size_of_float, cudaMemcpyHostToDevice);
     cudaMemcpy(cuda_rendered_cloud_color, rendered_cloud_color, 3 * rendered_cloud_point_num * size_of_uint, cudaMemcpyHostToDevice);
     cudaMemcpy(cuda_poses_occluded, poses_occluded, num_poses * size_of_int, cudaMemcpyHostToDevice);
-    // cudaMemcpy(cuda_sensor_resolution, &sensor_resolution, size_of_float, cudaMemcpyHostToDevice);
-    // cudaMemset(cuda_rendered_cost, 0, num_poses * size_of_int);
+    
+    cudaMemcpy(cuda_pose_segmentation_label, pose_segmentation_label, num_poses * size_of_int, cudaMemcpyHostToDevice);
+    cudaMemcpy(cuda_observed_cloud_label, result_observed_cloud_label, observed_cloud_point_num * size_of_int, cudaMemcpyHostToDevice);
 
     const size_t threadsPerBlock = 256;
     dim3 numBlocksR((rendered_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
@@ -689,7 +716,9 @@ bool compute_rgbd_cost(
         cuda_rendered_cloud_color,
         cuda_observed_cloud_color,
         cuda_rendered_cloud,
-        cuda_observed_explained);
+        cuda_observed_explained,
+        cuda_pose_segmentation_label,
+        cuda_observed_cloud_label);
     
 
     
@@ -705,6 +734,8 @@ bool compute_rgbd_cost(
         cudaFree(cuda_poses_occluded); 
         // cudaFree(cuda_rendered_cost); 
         // cudaFree(cuda_observed_explained); 
+        cudaFree(cuda_pose_segmentation_label);
+        cudaFree(cuda_observed_cloud_label);
         return false;
     }
 
@@ -801,6 +832,8 @@ bool compute_rgbd_cost(
     cudaFree(cuda_poses_occluded); 
     // cudaFree(cuda_rendered_cost); 
     // cudaFree(cuda_observed_explained); 
+    cudaFree(cuda_pose_segmentation_label);
+    cudaFree(cuda_observed_cloud_label);
     return true;
 }
 bool knn_cuda_global(const float * ref,

@@ -985,7 +985,7 @@ class FATImage:
             topk_inplane_rotations=3
         )
 
-    def visualize_sphere_sampling(self, image_data, print_poses=True, required_objects=None):
+    def visualize_sphere_sampling(self, image_data, print_poses=True, required_objects=None, num_samples=80):
         
         from maskrcnn_benchmark.config import cfg
         from dipy.core.geometry import cart2sphere, sphere2cart
@@ -1039,28 +1039,54 @@ class FATImage:
         cv2.imwrite(predicted_mask_path, overall_binary_mask)
 
         # Sample rotations
-        viewpoints_xyz = sphere_fibonacci_grid_points(80)
+        viewpoints_xyz = sphere_fibonacci_grid_points(num_samples)
+        annotations = []
+        grid_i = 0
+        for box_id in range(len(labels)):
+            label = labels[box_id]
+            object_depth_mask = np.copy(depth_image)
+            object_depth_mask[mask_list[box_id] == 0] = 0
+            object_depth = np.mean(object_depth_mask)
+            min_depth = np.min(object_depth_mask[object_depth_mask > 0])/self.depth_factor
+            max_depth = np.max(object_depth_mask[object_depth_mask > 0])/self.depth_factor
+            print("Min depth :{} , Max depth : {} from mask".format(min_depth, max_depth))
 
-        for i in range(len(labels)):
-            label = labels[i]
             if print_poses:
                 render_machine = self.render_machines[label]
 
             cnt = 0
+            object_rotation_list = []
+            # Sample sphere and collect rotations
             for viewpoint in viewpoints_xyz:
                 r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
                 theta, phi = sphere2euler(theta, phi)
                 xyz_rotation_angles = [phi, theta, 0]
                 print("Recovered rotation : {}".format(xyz_rotation_angles))
+                quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(phi, theta, 0).tolist())
+                object_rotation_list.append(quaternion)
                 if print_poses:
                     rgb_gl, depth_gl = self.render_pose(
                                         label, render_machine, xyz_rotation_angles, [0, 0, 1*self.distance_scale]
                                     )
-                    cv2.imwrite("./temp/label_{}.png".format(cnt), rgb_gl)
+                    cv2.imwrite("./temp/label_{}_{}.png".format(label, cnt), rgb_gl)
                     cnt += 1
-                    
+                
+            resolution = 0.02
+            # Sample rotation across depth
+            for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
+                ## Vary depth only
+                centre_world_point = self.get_world_point(np.array(centroids_2d[box_id].tolist() + [depth]))
+                for quaternion in object_rotation_list:
+                    annotations.append({
+                        'location' : (centre_world_point*100).tolist(),
+                        'quaternion_xyzw' : quaternion,
+                        'category_id' : self.category_names_to_id[label],
+                        'id' : grid_i
+                    })
+                    grid_i += 1
 
-        # Sample translations
+        return labels, annotations, predicted_mask_path
+
 
     def visualize_model_output(self, image_data, use_thresh=False, use_centroid=True, print_poses=True, required_objects=None):
 
@@ -1183,7 +1209,7 @@ class FATImage:
         else:
             grid_i = 0
             for box_id in range(top_viewpoint_ids.shape[0]):
-                plt.figure()
+                # plt.figure()
                 # print(mask_list[box_id])
                 object_depth_mask = np.copy(depth_image)
                 object_depth_mask[mask_list[box_id] == 0] = 0
@@ -2313,8 +2339,9 @@ def run_ycb_6d():
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    # required_objects = ['025_mug', '002_master_chef_can', '007_tuna_fish_can']
-    required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
+    required_objects = ['024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
+    # required_objects = ['002_master_chef_can']
+    # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
     fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects)
     f_accuracy.write("name,")
@@ -2333,8 +2360,8 @@ def run_ycb_6d():
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt('/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/image_sets/keyframe.txt', dtype=str)[23:].tolist()
-    for scene_i in range(54, 60):
-        for img_i in range(1,2):
+    for scene_i in range(48, 50):
+        for img_i in range(1,2500):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
             #     continue
@@ -2370,15 +2397,18 @@ def run_ycb_6d():
             yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
                 image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
             )
-            # fat_image.visualize_sphere_sampling(
-            #         image_data, print_poses=True, required_objects=required_objects
-            #     )
-            # Run model to get multiple poses for each object
-            labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
-                fat_image.visualize_model_output(
-                    image_data, use_thresh=True, use_centroid=False, print_poses=False,
-                    required_objects=required_objects
+            model_poses_file = None
+            labels, model_annotations, predicted_mask_path = \
+                fat_image.visualize_sphere_sampling(
+                    image_data, print_poses=False, required_objects=required_objects, num_samples=60
                 )
+            
+            # # Run model to get multiple poses for each object
+            # labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
+            #     fat_image.visualize_model_output(
+            #         image_data, use_thresh=True, use_centroid=False, print_poses=False,
+            #         required_objects=required_objects
+            #     )
 
             if True:
                 # Convert model output poses to table frame and save them to file so that they can be read by perch
