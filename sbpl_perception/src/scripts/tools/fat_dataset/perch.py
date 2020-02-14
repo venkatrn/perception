@@ -1,9 +1,9 @@
 import sys
 if '/opt/ros/kinetic/lib/python2.7/dist-packages' not in sys.path:
     sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
-import rospy
+# import rospy
 import rospkg
-import rosparam
+# import rosparam
 import subprocess
 import roslaunch
 import os

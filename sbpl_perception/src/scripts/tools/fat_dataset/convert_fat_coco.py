@@ -114,7 +114,7 @@ if False:
     OUTFILE_NAME = 'instances_newmap1_reduced_2_2018'
     # OUTFILE_NAME = 'instances_newmap1_roman_2018'
 
-if True:
+if False:
     DATASET_TYPE = "ycb"
     ROOT_DIR = '/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset'
     SELECTED_OBJECTS = []

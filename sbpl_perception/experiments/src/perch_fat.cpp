@@ -33,7 +33,7 @@
 using namespace std;
 using namespace sbpl_perception;
 
-const string kDebugDir = ros::package::getPath("sbpl_perception") +
+string kDebugDir = ros::package::getPath("sbpl_perception") +
                          "/visualization/";
 
 int main(int argc, char **argv) {
@@ -73,9 +73,12 @@ int main(int argc, char **argv) {
   // cout << config_file << endl;
 
   bool image_debug = true;
-
-  string experiment_dir = kDebugDir + output_dir_name.stem().string() + "/";
-  string debug_dir = kDebugDir + output_dir_name.stem().string() + "/";
+  if (IsMaster(world)) {
+    ros::NodeHandle nh("~");
+    nh.getParam("/perch_debug_dir", kDebugDir);
+  }
+  string experiment_dir = kDebugDir + "/" + output_dir_name.stem().string() + "/";
+  string debug_dir = kDebugDir + "/" + output_dir_name.stem().string() + "/";
 
   string pose_file = experiment_dir + "output_poses.txt";
   string stats_file = experiment_dir + "output_stats.txt";

@@ -43,7 +43,8 @@ class FATImage:
             planner_config="pr2_planner_config.yaml",
             img_width=960,
             img_height=540,
-            distance_scale=100
+            distance_scale=100,
+            perch_debug_dir=None
         ):
         '''
             env_config : env_config.yaml in sbpl_perception/config to use with PERCH
@@ -71,6 +72,7 @@ class FATImage:
 
 
         self.image_ids = example_coco.getImgIds(catIds=self.category_ids)
+        self.perch_debug_dir = perch_debug_dir
 
         self.viewpoints_xyz = np.array(example_coco.dataset['viewpoints'])
         self.inplane_rotations = np.array(example_coco.dataset['inplane_rotations'])
@@ -501,45 +503,46 @@ class FATImage:
             write_poses=False, ros_publish=True, get_table_pose=False, input_camera_pose=None
         ):
         print("ROS visualizing")
-        if '/opt/ros/kinetic/lib/python2.7/dist-packages' not in sys.path:
-            sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
-        import rospy
-        import rospkg
-        import rosparam
-        from geometry_msgs.msg import Pose, PoseStamped, PoseArray, Quaternion
-        from sensor_msgs.msg import Image, PointCloud2
-        for python2_path in ROS_PYTHON2_PKG_PATH:
-            if python2_path in sys.path:
-                sys.path.remove(python2_path)
-        if ROS_PYTHON3_PKG_PATH not in sys.path:
-            sys.path.append(ROS_PYTHON3_PKG_PATH)
-        # These packages need to be python3 specific, cv2 is imported from environment, cv_bridge is built using python3
-        import cv2
-        from cv_bridge import CvBridge, CvBridgeError
+        if ros_publish:
+            if '/opt/ros/kinetic/lib/python2.7/dist-packages' not in sys.path:
+                sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
+            import rospy
+            import rospkg
+            import rosparam
+            from geometry_msgs.msg import Pose, PoseStamped, PoseArray, Quaternion
+            from sensor_msgs.msg import Image, PointCloud2
+            for python2_path in ROS_PYTHON2_PKG_PATH:
+                if python2_path in sys.path:
+                    sys.path.remove(python2_path)
+            if ROS_PYTHON3_PKG_PATH not in sys.path:
+                sys.path.append(ROS_PYTHON3_PKG_PATH)
+            # These packages need to be python3 specific, cv2 is imported from environment, cv_bridge is built using python3
+            import cv2
+            from cv_bridge import CvBridge, CvBridgeError
 
-        rospy.init_node('fat_pose')
-        self.ros_rate = rospy.Rate(5)
-        self.objects_pose_pub = rospy.Publisher('fat_image/objects_pose', PoseArray, queue_size=1, latch=True)
-        self.camera_pose_pub = rospy.Publisher('fat_image/camera_pose', PoseStamped, queue_size=1, latch=True)
-        self.scene_color_image_pub = rospy.Publisher("fat_image/scene_color_image", Image)
-        self.table_pose_pub = rospy.Publisher("fat_image/table_pose", PoseStamped, queue_size=1, latch=True)
-        self.scene_cloud_pub = rospy.Publisher("fat_image/scene_cloud", PointCloud2, queue_size=1, latch=True)
-        self.bridge = CvBridge()
+            rospy.init_node('fat_pose')
+            self.ros_rate = rospy.Rate(5)
+            self.objects_pose_pub = rospy.Publisher('fat_image/objects_pose', PoseArray, queue_size=1, latch=True)
+            self.camera_pose_pub = rospy.Publisher('fat_image/camera_pose', PoseStamped, queue_size=1, latch=True)
+            self.scene_color_image_pub = rospy.Publisher("fat_image/scene_color_image", Image)
+            self.table_pose_pub = rospy.Publisher("fat_image/table_pose", PoseStamped, queue_size=1, latch=True)
+            self.scene_cloud_pub = rospy.Publisher("fat_image/scene_cloud", PointCloud2, queue_size=1, latch=True)
+            self.bridge = CvBridge()
 
-        color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
-        cv_scene_color_image = cv2.imread(color_img_path)
-        # cv2.imshow("cv_scene_color_image", cv_scene_color_image)
-        # image = io.imread(img_path)
-        # plt.imshow(image); plt.axis('off')
-        # plt.show()
+            color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
+            cv_scene_color_image = cv2.imread(color_img_path)
+            # cv2.imshow("cv_scene_color_image", cv_scene_color_image)
+            # image = io.imread(img_path)
+            # plt.imshow(image); plt.axis('off')
+            # plt.show()
 
-        object_pose_msg = PoseArray()
-        object_pose_msg.header.frame_id = frame
-        object_pose_msg.header.stamp = rospy.Time.now()
+            object_pose_msg = PoseArray()
+            object_pose_msg.header.frame_id = frame
+            object_pose_msg.header.stamp = rospy.Time.now()
 
-        camera_pose_msg = PoseStamped()
-        camera_pose_msg.header.frame_id = frame
-        camera_pose_msg.header.stamp = rospy.Time.now()
+            camera_pose_msg = PoseStamped()
+            camera_pose_msg.header.frame_id = frame
+            camera_pose_msg.header.stamp = rospy.Time.now()
 
         max_min_dict = {
             'xmin' : np.inf,
@@ -601,8 +604,11 @@ class FATImage:
                     camera_location, camera_quat = get_camera_pose_in_world(
                                                         annotation['camera_pose'], self.world_to_fat_world, type='quat', cam_to_body=cam_to_body
                                                     )
-                object_pose_ros = self.get_ros_pose(location, quat, units)
-                object_pose_msg.poses.append(object_pose_ros)
+                
+                if ros_publish:
+                    object_pose_ros = self.get_ros_pose(location, quat, units)
+                    object_pose_msg.poses.append(object_pose_ros)
+                
                 max_min_dict = self.update_coordinate_max_min(max_min_dict, location)
                 if input_camera_pose is None:
                     if ((frame == 'camera' and get_table_pose) or frame == 'table') and ros_publish:
@@ -619,6 +625,10 @@ class FATImage:
                     print("Rotation Eulers for {} : {}".format(class_name, rotation_angles))
                     print("ROS Pose for {} : {}".format(class_name, object_pose_ros))
                     print("Rotation Quaternion for {} : {}\n".format(class_name, quat))
+                    try:
+                        self.scene_color_image_pub.publish(self.bridge.cv2_to_imgmsg(cv_scene_color_image, "bgr8"))
+                    except CvBridgeError as e:
+                        print(e)
                 if np.all(np.isclose(np.array(rotation_angles[:2]), np.array([-np.pi/2, 0]), atol=0.1)):
                     yaw_only_objects.append({'annotation_id' : annotation['id'],'class_name' : class_name})
 
@@ -630,10 +640,7 @@ class FATImage:
                         'id' : count
                     })
                     count += 1
-                try:
-                    self.scene_color_image_pub.publish(self.bridge.cv2_to_imgmsg(cv_scene_color_image, "bgr8"))
-                except CvBridgeError as e:
-                    print(e)
+                
 
                 if class_name not in rendered_pose_list_out:
                     rendered_pose_list_out[class_name] = []
@@ -643,7 +650,7 @@ class FATImage:
 
             if ros_publish:
                 self.objects_pose_pub.publish(object_pose_msg)
-            self.ros_rate.sleep()
+                self.ros_rate.sleep()
         # pprint(rendered_pose_list_out)
         if write_poses:
             for label, poses in rendered_pose_list_out.items():
@@ -895,6 +902,8 @@ class FATImage:
         #     models_root = os.path.join(self.model_dir, 'models')
 
         camera_pose = camera_pose.flatten().tolist()
+        if  self.perch_debug_dir is None:
+            self.perch_debug_dir = os.path.join(rospack.get_path('sbpl_perception'), "visualization")
         params = {
             'x_min' : max_min_dict['xmin'],
             'x_max' : max_min_dict['xmax'],
@@ -917,7 +926,8 @@ class FATImage:
             'depth_factor': self.depth_factor,
             'shift_pose_centroid': use_centroid_shifting,
             'use_icp': 1,
-            'rendered_root_dir' : self.rendered_root_dir
+            'rendered_root_dir' : self.rendered_root_dir,
+            'perch_debug_dir' : self.perch_debug_dir
         }
         camera_params = {
             'camera_width' : self.width,
@@ -2329,7 +2339,8 @@ def run_ycb_6d(dataset_cfg=None):
         img_height=480,
         distance_scale=1,
         env_config="pr3_env_config.yaml",
-        planner_config="pr3_planner_config.yaml"
+        planner_config="pr3_planner_config.yaml",
+        perch_debug_dir=dataset_cfg["perch_debug_dir"]
     )
 
     # Running on model and PERCH
@@ -2346,8 +2357,8 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
-    # required_objects = ['002_master_chef_can']
+    # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
+    required_objects = ['002_master_chef_can']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
     fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
@@ -2367,8 +2378,8 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
-    for scene_i in range(53, 54):
-        for img_i in range(1,2500):
+    for scene_i in range(48, 49):
+        for img_i in range(1,2):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
             #     continue
@@ -2401,9 +2412,9 @@ def run_ycb_6d(dataset_cfg=None):
                     continue
 
             # Visualize ground truth in ros
-            yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
-                image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
-            )
+            # yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
+            #     image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
+            # )
             model_poses_file = None
             labels, model_annotations, predicted_mask_path = \
                 fat_image.visualize_sphere_sampling(
