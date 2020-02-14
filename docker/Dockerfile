@@ -152,13 +152,13 @@ RUN git clone https://github.com/sbpl-cruz/maskrcnn-benchmark.git -b fat_pose_da
  && python setup.py build develop
 
 # Install apex (Doesnt cpp ext with Cuda 8.0)
+ARG CACHEBUST=1
 RUN git clone https://github.com/NVIDIA/apex.git \
  && cd apex \
  && pip install -v --no-cache-dir ./
 #  && python setup.py install --cuda_ext --cpp_ext
 
 # Install PERCH
-ARG CACHEBUST=1
 RUN cd /ros_python3_ws/src \
     && git clone https://github.com/SBPL-Cruz/perception -b gpu_icp_ycb \
     && git clone https://github.com/SBPL-Cruz/improved-mha-planner -b renamed \
