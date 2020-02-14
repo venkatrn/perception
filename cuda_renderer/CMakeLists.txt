@@ -17,6 +17,7 @@ add_definitions(-DCUDA_ON)
 endif()
 # opencv
 find_package(OpenCV 3 REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
 list(APPEND renderer_inc ${OpenCV_INCLUDE_DIRS})
 list(APPEND renderer_lib ${OpenCV_LIBS})
 
