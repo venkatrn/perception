@@ -44,7 +44,8 @@ class FATImage:
             img_width=960,
             img_height=540,
             distance_scale=100,
-            perch_debug_dir=None
+            perch_debug_dir=None,
+            python_debug_dir="./model_outputs"
         ):
         '''
             env_config : env_config.yaml in sbpl_perception/config to use with PERCH
@@ -73,6 +74,9 @@ class FATImage:
 
         self.image_ids = example_coco.getImgIds(catIds=self.category_ids)
         self.perch_debug_dir = perch_debug_dir
+        self.python_debug_dir = python_debug_dir
+        mkdir_if_missing(self.python_debug_dir)
+
 
         self.viewpoints_xyz = np.array(example_coco.dataset['viewpoints'])
         self.inplane_rotations = np.array(example_coco.dataset['inplane_rotations'])
@@ -1015,7 +1019,7 @@ class FATImage:
         color_img = cv2.imread(color_img_path)
         composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
                 = self.coco_demo.run_on_opencv_image(color_img, use_thresh=True)
-        composite_image_path = 'model_outputs/mask_{}.png'.format(self.get_clean_name(image_data['file_name']))
+        composite_image_path = '{}/mask_{}.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
         cv2.imwrite(composite_image_path, composite)
 
         # depth_img_path = color_img_path.replace('.jpg', '.depth.png')
@@ -1125,7 +1129,7 @@ class FATImage:
         color_img = cv2.imread(color_img_path)
         composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
                 = self.coco_demo.run_on_opencv_image(color_img, use_thresh=use_thresh)
-        composite_image_path = 'model_outputs/mask_{}.png'.format(self.get_clean_name(image_data['file_name']))
+        composite_image_path = '{}/mask_{}.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
         cv2.imwrite(composite_image_path, composite)
 
         # depth_img_path = color_img_path.replace('.jpg', '.depth.png')
@@ -1344,10 +1348,9 @@ class FATImage:
                                     'id' : grid_i
                                 })
 
-        mkdir_if_missing('model_outputs')
         model_poses_file = None
         if print_poses:
-            model_poses_file = 'model_outputs/model_output_{}.png'.format(self.get_clean_name(image_data['file_name']))
+            model_poses_file = '{}/model_output_{}.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
             plt.savefig(
                 model_poses_file,
                 dpi=1000, bbox_inches = 'tight', pad_inches = 0
@@ -2340,16 +2343,16 @@ def run_ycb_6d(dataset_cfg=None):
         distance_scale=1,
         env_config="pr3_env_config.yaml",
         planner_config="pr3_planner_config.yaml",
-        perch_debug_dir=dataset_cfg["perch_debug_dir"]
+        perch_debug_dir=dataset_cfg["perch_debug_dir"],
+        python_debug_dir=dataset_cfg["python_debug_dir"]
     )
 
     # Running on model and PERCH
-    mkdir_if_missing('model_outputs')
     cfg_file = dataset_cfg['maskrcnn_config']
 
     ts = calendar.timegm(time.gmtime())
-    f_accuracy = open('model_outputs/accuracy_6d_{}.txt'.format(ts), "w")
-    f_runtime = open('model_outputs/runtime_6d_{}.txt'.format(ts), "w")
+    f_accuracy = open('{}/accuracy_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w")
+    f_runtime = open('{}/runtime_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w")
     f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
 
     #filter_objects = ['010_potted_meat_can']

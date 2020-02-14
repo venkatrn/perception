@@ -5,6 +5,7 @@ dataset :
     maskrcnn_config : "/maskrcnn-benchmark/configs/ycb_pose/e2e_mask_rcnn_R_50_FPN_1x_test_cocostyle.yaml"
     maskrcnn_model_path : "/data/models/model_0025000.pth"
     perch_debug_dir : "/data/perch_output"
+    python_debug_dir : "/data/model_outputs"
 python2_paths :
   - '/opt/ros/kinetic/lib/python2.7/dist-packages'
   - '/usr/local/lib/python2.7/dist-packages/'
