@@ -282,7 +282,9 @@ bool ObjectRecognizer::LocalizeObjectsGreedyICP(const RecognitionInput &input,
 
 bool ObjectRecognizer::LocalizeObjectsGreedyRender(const RecognitionInput &input,
                                        std::vector<Eigen::Affine3f> *object_transforms,
-                                       std::vector<Eigen::Affine3f> *preprocessing_object_transforms) const {
+                                       std::vector<Eigen::Affine3f> *preprocessing_object_transforms,
+                                       std::vector<ContPose> *detected_poses,
+                                       std::vector<std::string> *detected_model_names) const {
   object_transforms->clear();
   preprocessing_object_transforms->clear();
 
@@ -297,8 +299,9 @@ bool ObjectRecognizer::LocalizeObjectsGreedyRender(const RecognitionInput &input
   // if (IsMaster(mpi_world_)) {
 
   const auto &models = env_obj_->obj_models_;
-  object_transforms->resize(input.model_names.size());
-  preprocessing_object_transforms->resize(input.model_names.size());
+  // object_transforms->resize(input.model_names.size());
+  // preprocessing_object_transforms->resize(input.model_names.size());
+  // detected_poses->resize(input.model_names.size());
 
   last_env_stats_ = env_obj_->GetEnvStats();
   last_env_stats_.scenes_rendered = 0;
@@ -316,10 +319,15 @@ bool ObjectRecognizer::LocalizeObjectsGreedyRender(const RecognitionInput &input
     auto pose = object_state.cont_pose();
     // cout << pose.x() << " " << pose.y() << " " << env_obj_->GetTableHeight() << " "
     //       << pose.yaw() << endl;
-    const auto &obj_model = models[ii];
-    object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
-                                  pose);
-    preprocessing_object_transforms->at(ii) = obj_model.preprocessing_transform();
+    const auto &obj_model = models[object_state.id()];
+    // object_transforms->at(ii) = obj_model.GetRawModelToSceneTransform(
+    //                               pose);
+    // preprocessing_object_transforms->at(ii) = obj_model.preprocessing_transform();
+    // ii++;
+    object_transforms->push_back(obj_model.GetRawModelToSceneTransform(pose));
+    preprocessing_object_transforms->push_back(obj_model.preprocessing_transform());
+    detected_poses->push_back(pose);
+    detected_model_names->push_back(obj_model.name());
     ii++;
   }
   // }

@@ -352,6 +352,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
                                   vector<ObjectState>& modified_objects);
   vector<float> segmented_observed_point_count;
+  std::vector<pcl::search::KdTree<PointT>::Ptr> segmented_object_knn;
+
 
   // CUDA GPU stuff
   std::unordered_map<int, std::vector<int32_t>> gpu_depth_image_cache_;
@@ -401,7 +403,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                         vector<int32_t>& result_depth,
                         vector<int>& pose_occluded,
                         int single_result_image,
-                        vector<int>& pose_occluded_other);
+                        vector<int>& pose_occluded_other,
+                        vector<float>& pose_clutter_cost);
 
   void GetICPAdjustedPosesGPU(float* result_rendered_clouds,
                               int* dc_index,

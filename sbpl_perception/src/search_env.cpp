@@ -1211,7 +1211,8 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                                           vector<int32_t>& result_depth,
                                           vector<int>& pose_occluded,
                                           int single_result_image,
-                                          vector<int>& pose_occluded_other)
+                                          vector<int>& pose_occluded_other,
+                                          vector<float>& pose_clutter_cost)
 {
   /*
     Takes a bunch of ObjectState objects and renders them. 
@@ -1268,7 +1269,8 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                           result_color,
                           pose_occluded,
                           single_result_image,
-                          pose_occluded_other);
+                          pose_occluded_other,
+                          pose_clutter_cost);
 }
 void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
                                                   std::vector<CostComputationOutput> *output,
@@ -1294,6 +1296,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   std::vector<int32_t> random_depth(kCameraWidth * kCameraHeight, 0);
   std::vector<int> random_poses_occluded(1, 0);
   std::vector<int> random_poses_occluded_other(1, 0);
+  std::vector<float> random_poses_clutter_cost(1, 0);
   int* cloud_label;
 
 
@@ -1338,7 +1341,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     GetStateImagesGPU(
       source_last_object_states, random_color, random_depth, 
       source_result_color, source_result_depth, random_poses_occluded, 1,
-      random_poses_occluded_other
+      random_poses_occluded_other, random_poses_clutter_cost
     );
     if (perch_params_.vis_expanded_states) {
       PrintGPUImages(source_result_depth, source_result_color, 1, "expansion_" + std::to_string(source_id), random_poses_occluded);
@@ -1370,6 +1373,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
   std::vector<int> adjusted_poses_occluded_other(num_poses, 0);
   std::vector<int> pose_segmentation_label(num_poses, 0);
   std::vector<float> pose_observed_points_total(num_poses, 0.0);
+  std::vector<float> pose_clutter_cost(num_poses, 0.0);
 
   for(int i = 0; i < num_poses; i ++) {
     // For non-root level, this should be adjusted state
@@ -1426,7 +1430,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     GetStateImagesGPU(
       last_object_states, source_result_color, source_result_depth, 
       result_color, result_depth, poses_occluded, 0,
-      poses_occluded_other
+      poses_occluded_other, pose_clutter_cost
     );
     // if (objects.size() == 3)
     // if (perch_params_.vis_expanded_states) {
@@ -1496,7 +1500,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         GetStateImagesGPU(
           modified_last_object_states, source_result_color, source_result_depth, 
           adjusted_result_color, adjusted_result_depth, adjusted_poses_occluded, 0,
-          adjusted_poses_occluded_other
+          adjusted_poses_occluded_other, pose_clutter_cost
         );
         // if (source_id == 136)
         // if (objects.size() == 2)
@@ -1751,7 +1755,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     // cur_unit.state_properties.target_cost =  rendered_cost[i];
     cur_unit.state_properties.target_cost =  (int) rendered_cost_gpu[i];
     cur_unit.state_properties.source_cost = (int) observed_cost_gpu[i];
-    cur_unit.state_properties.last_level_cost = last_level_cost[i];
+    // cur_unit.state_properties.last_level_cost = last_level_cost[i];
+    cur_unit.state_properties.last_level_cost = (int) pose_clutter_cost[i];
     cur_unit.depth_image = source_depth_image;
     // std::vector<int32_t>::const_iterator start = result_depth.begin() + i*env_params_.width*env_params_.height;
     // std::vector<int32_t>::const_iterator finish = start + env_params_.width*env_params_.height;
@@ -1800,7 +1805,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
   ComputeCostsInParallelGPU(cost_computation_input, &cost_computation_output,
                           false);
 
-  ObjectState temp;
+  ObjectState temp(-1, false, DiscPose(0, 0, 0, 0, 0, 0));
   vector<int> lowest_cost_per_object(env_params_.num_models, INT_MAX);
   vector<ObjectState> lowest_cost_state_per_object(env_params_.num_models, temp);
   printf("State number,     target_cost    source_cost    last_level_cost    candidate_costs    g_value_map\n");
@@ -1810,7 +1815,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
       const auto &adjusted_object_state = adjusted_state.object_states().back();
       const auto &input_unit = cost_computation_input[ii];
       int model_id = adjusted_object_state.id();
-
+      string model_name = obj_models_[model_id].name();
 
       candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
                             input_unit.child_state);
@@ -1827,8 +1832,9 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
 
       if (image_debug_) {
 
-        printf("State %d,       %d      %d      %d      %d      %d\n",
+        printf("State %d,           %s       %d      %d      %d      %d      %d\n",
               candidate_succ_ids[ii],
+              model_name.c_str(),
               output_unit.state_properties.target_cost,
               output_unit.state_properties.source_cost,
               output_unit.state_properties.last_level_cost,
@@ -4758,6 +4764,10 @@ void EnvObjectRecognition::SetObservation(int num_objects,
       segmented_object_clouds[i] = DownsamplePointCloud(segmented_object_clouds[i], perch_params_.downsampling_leaf_size);
       // PrintPointCloud(segmented_object_clouds[i], 1, render_point_cloud_topic);
       // std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      pcl::search::KdTree<PointT>::Ptr object_knn;
+      object_knn.reset(new pcl::search::KdTree<PointT>(true));
+      object_knn->setInputCloud(segmented_object_clouds[i]);
+      segmented_object_knn.push_back(object_knn);
     }
   }
 
@@ -5730,6 +5740,7 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   printf("GetShiftedCentroidPosesGPU() for %d poses\n", num_poses);
   std::vector<int> random_poses_occluded(num_poses, 0);
   std::vector<int> random_poses_occluded_other(num_poses, 0);
+  std::vector<float> random_pose_clutter_cost(num_poses, 0);
 
   // ObjectState temp;
   // modified_objects.resize(num_poses, temp);
@@ -5749,7 +5760,7 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   GetStateImagesGPU(
         objects, random_color, random_depth, 
         result_color, result_depth, random_poses_occluded, 0,
-        random_poses_occluded_other
+        random_poses_occluded_other, random_pose_clutter_cost
       );
   
   // PrintGPUImages(result_depth, result_color, num_poses, "succ_pre_shift", random_poses_occluded);
@@ -5798,14 +5809,14 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
     pose_centroid_z[i] /= pose_total_points[i];
     
     ContPose pose_in = objects[i].cont_pose();
-    printf("Centroid old : %f,%f,%f\n", pose_in.x(), pose_in.y(), pose_in.z());
-    printf("Centroid new : %f,%f,%f\n", pose_centroid_x[i], pose_centroid_y[i], pose_centroid_z[i]);
+    // printf("Centroid old : %f,%f,%f\n", pose_in.x(), pose_in.y(), pose_in.z());
+    // printf("Centroid new : %f,%f,%f\n", pose_centroid_x[i], pose_centroid_y[i], pose_centroid_z[i]);
     
     
     float x_diff = pose_in.x()-pose_centroid_x[i];
     float y_diff = pose_in.y()-pose_centroid_y[i];
     float z_diff = pose_in.z()-pose_centroid_z[i];
-    printf("Centroid diff : %f,%f,%f\n", x_diff, y_diff, z_diff);
+    // printf("Centroid diff : %f,%f,%f\n", x_diff, y_diff, z_diff);
 
     
     ContPose pose_out = 
@@ -5919,11 +5930,11 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               // std::cout << "File Pose : " << doubleVector[0] << " " <<
               //   doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[3] <<  " " << doubleVector[4] << " " << doubleVector[5] << " " << endl;
 
-              std::cout << "Cont Pose : " << p << endl;
+              // std::cout << "Cont Pose : " << p << endl;
 
               // cout << doubleVector[0];
               if (!IsValidPose(source_state, ii, p)) {
-                std::cout << "Invalid pose " << p << endl;
+                // std::cout << "Invalid pose " << p << endl;
                 // std::cout << "Not a valid pose for theta : " << doubleVector[0] << " " <<
                 // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;
 
@@ -6030,24 +6041,31 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           
           if (kUseGPU)
           {
-            if (env_params_.shift_pose_centroid == 1)
+            if (unshifted_object_states.size() > 0)
             {
-              GetShiftedCentroidPosesGPU(unshifted_object_states, shifted_object_states);
-              valid_succ_cache[ii].clear();
+              if (env_params_.shift_pose_centroid == 1)
+              {
+                GetShiftedCentroidPosesGPU(unshifted_object_states, shifted_object_states);
+                valid_succ_cache[ii].clear();
+              }
+              else
+              {
+                shifted_object_states = unshifted_object_states;
+              }
+              // std::copy(shifted_object_states.begin(), shifted_object_states.end(), valid_succ_cache[ii].begin());
+              for (size_t i = 0; i < shifted_object_states.size(); i++)
+              {
+                // cout << " shifted " << i << endl;
+                const ObjectState object_state = shifted_object_states[i];
+                GraphState s = source_state; 
+                s.AppendObject(object_state);
+                succ_states->push_back(s);
+                valid_succ_cache[ii].push_back(object_state);
+              }
             }
             else
             {
-              shifted_object_states = unshifted_object_states;
-            }
-            // std::copy(shifted_object_states.begin(), shifted_object_states.end(), valid_succ_cache[ii].begin());
-            for (size_t i = 0; i < shifted_object_states.size(); i++)
-            {
-              // cout << " shifted " << i << endl;
-              const ObjectState object_state = shifted_object_states[i];
-              GraphState s = source_state; 
-              s.AppendObject(object_state);
-              succ_states->push_back(s);
-              valid_succ_cache[ii].push_back(object_state);
+              printf("No valid states found for this model\n");
             }
           }
         }

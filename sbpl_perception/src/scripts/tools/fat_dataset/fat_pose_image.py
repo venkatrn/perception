@@ -978,7 +978,7 @@ class FATImage:
 
         args = {
             'config_file' : cfg_file,
-            'confidence_threshold' : 0.80,
+            'confidence_threshold' : 0.9,
             'min_image_size' : 750,
             'masks_per_dim' : 10,
             'show_mask_heatmaps' : False
@@ -1001,8 +1001,8 @@ class FATImage:
             min_image_size=args['min_image_size'],
             categories = self.category_names,
             # topk_rotations=9
-            topk_viewpoints=3,
-            topk_inplane_rotations=3
+            topk_viewpoints=4,
+            topk_inplane_rotations=4
         )
 
     def get_rotation_samples(self, label, num_samples):
@@ -1032,7 +1032,7 @@ class FATImage:
             "037_scissors": [1,2], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
             "051_large_clamp": [1,1], #whole_0-pi
-            "052_extra_large_clamp": [1,1], #whole_0-pi
+            "052_extra_large_clamp": [1,2], #whole_0-pi
             "061_foam_brick": [0,1] #half_0-pi
         }
         
@@ -1048,7 +1048,7 @@ class FATImage:
             for viewpoint in viewpoints_xyz:
                 r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
                 theta, phi = sphere2euler(theta, phi)
-                step_size = math.pi/10
+                step_size = math.pi/5
                 for yaw_temp in np.arange(0,math.pi, step_size):
                     xyz_rotation_angles = [phi, theta, yaw_temp]
                     # cn+=1
@@ -1057,8 +1057,8 @@ class FATImage:
             for viewpoint in viewpoints_xyz:
                 r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
                 theta, phi = sphere2euler(theta, phi)
-                step_size = math.pi/10
-                for yaw_temp in np.arange(0,2*math.pi, step_size):
+                step_size = math.pi/5
+                for yaw_temp in np.arange(-math.pi,math.pi, step_size):
                     xyz_rotation_angles = [phi, theta, yaw_temp]
                     # cn+=1
                     all_rots.append(xyz_rotation_angles)
@@ -1230,6 +1230,9 @@ class FATImage:
                     mask_i = rotation_list['labels'].index(label)
                     # print(str(mask_i) + " found")
                     filter_mask = mask_list_all[mask_i]
+
+                    # if np.count_nonzero(filter_mask) < 4000:
+                    #     continue
                     # print(filter_mask > 0)
                     # Use binary mask to assign label in overall mask
                     overall_binary_mask[filter_mask > 0] = mask_label_i
@@ -2428,12 +2431,12 @@ def run_ycb_6d(dataset_cfg=None):
     filter_objects = None
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
-    required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
+    # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
-    # required_objects = ['002_master_chef_can']
+    # required_objects = ['024_bowl']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
-    # required_objects = fat_image.category_names
-    fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
+    required_objects = fat_image.category_names
+    fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
     for object_name in required_objects:
         f_accuracy.write("{}-add,{}-adds,".format(object_name, object_name))
@@ -2450,8 +2453,8 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
-    for scene_i in range(48, 49):
-        for img_i in range(1,2):
+    for scene_i in range(49, 50):
+        for img_i in range(1,2500):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
             #     continue
@@ -2484,21 +2487,21 @@ def run_ycb_6d(dataset_cfg=None):
                     continue
 
             # Visualize ground truth in ros
-            yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
-                image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
-            )
+            # yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
+            #     image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
+            # )
             model_poses_file = None
-            labels, model_annotations, predicted_mask_path = \
-                fat_image.visualize_sphere_sampling(
-                    image_data, print_poses=True, required_objects=required_objects, num_samples=40
-                )
+            # labels, model_annotations, predicted_mask_path = \
+            #     fat_image.visualize_sphere_sampling(
+            #         image_data, print_poses=True, required_objects=required_objects, num_samples=16
+            #     )
             
             # # Run model to get multiple poses for each object
-            # labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
-            #     fat_image.visualize_model_output(
-            #         image_data, use_thresh=True, use_centroid=False, print_poses=False,
-            #         required_objects=required_objects
-            #     )
+            labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
+                fat_image.visualize_model_output(
+                    image_data, use_thresh=True, use_centroid=False, print_poses=False,
+                    required_objects=required_objects
+                )
 
             if True:
                 # Convert model output poses to table frame and save them to file so that they can be read by perch
