@@ -150,32 +150,48 @@ ENV FORCE_CUDA=${FORCE_CUDA}
 RUN git clone https://github.com/sbpl-cruz/maskrcnn-benchmark.git -b fat_pose_dataset_new \
  && cd maskrcnn-benchmark \
  && python setup.py build develop
+ARG CACHEBUST=1
+
 
 # Install apex (Doesnt cpp ext with Cuda 8.0)
-ARG CACHEBUST=1
 RUN git clone https://github.com/NVIDIA/apex.git \
  && cd apex \
  && pip install -v --no-cache-dir ./
 #  && python setup.py install --cuda_ext --cpp_ext
 
 # Install PERCH
-RUN cd /ros_python3_ws/src \
-    && git clone https://github.com/SBPL-Cruz/perception -b gpu_icp_ycb \
-    && git clone https://github.com/SBPL-Cruz/improved-mha-planner -b renamed \
-    && git clone https://github.com/SBPL-Cruz/sbpl_utils.git -b renamed \
-    && git clone https://github.com/SBPL-Cruz/ros-keyboard
-
-RUN /bin/bash -c '. /opt/ros/kinetic/setup.bash; cd /ros_python3_ws/; catkin build sbpl_perception'
-
 RUN pip install catkin_pkg
 # For PERCH
 RUN apt-get update && apt-get install -y --allow-unauthenticated\
     xvfb \
     && rm -rf /var/lib/apt/lists/*
-# WORKDIR /ros_python3_ws/src/perception/sbpl_perception/src/scripts/tools/fat_dataset
-# WORKDIR /data/perception/sbpl_perception/src/scripts/tools/fat_dataset
+
+### Release Version below, code cloned inside docker ###
+RUN cd /ros_python3_ws/src \
+    && git clone https://github.com/SBPL-Cruz/improved-mha-planner -b renamed \
+    && git clone https://github.com/SBPL-Cruz/sbpl_utils.git -b renamed \
+    && git clone https://github.com/SBPL-Cruz/perception -b gpu_icp_ycb
+
+# If release then clone the main code, else it will be mounted by user during runtime
+# RUN echo "$TYPE"
+# RUN if [[ "$TYPE" = "RELEASE" ]; then "cd /ros_python3_ws/src \
+#     && git clone https://github.com/SBPL-Cruz/perception -b gpu_icp_ycb"; else echo "Not cloning code"; fi
+
+RUN /bin/bash -c '. /opt/ros/kinetic/setup.bash; cd /ros_python3_ws/; catkin build sbpl_perception'
 ENTRYPOINT /bin/bash -c '. /opt/ros/kinetic/setup.bash; \
                          . /ros_python3_ws/devel/setup.bash; \
                          cd /ros_python3_ws/src/perception/sbpl_perception/src/scripts/tools/fat_dataset; \
                          Xvfb :5 -screen 0 800x600x24 & export DISPLAY=:5; \
                          python fat_pose_image.py --config config_docker.yaml'
+
+
+
+
+### Debug Version below, code not cloned inside docker ###
+# RUN cd /ros_python3_ws/src \
+#     && git clone https://github.com/SBPL-Cruz/improved-mha-planner -b renamed \
+#     && git clone https://github.com/SBPL-Cruz/sbpl_utils.git -b renamed 
+
+# RUN /bin/bash -c 'Xvfb :5 -screen 0 800x600x24 & export DISPLAY=:5; \
+#                         . /opt/ros/kinetic/setup.bash; \
+#                         cd /ros_python3_ws/;'
