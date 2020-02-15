@@ -506,8 +506,8 @@ class FATImage:
             self, image_data, annotations, frame='camera', camera_optical_frame=True, num_publish=10, 
             write_poses=False, ros_publish=True, get_table_pose=False, input_camera_pose=None
         ):
-        print("ROS visualizing")
         if ros_publish:
+            print("ROS visualizing")
             if '/opt/ros/kinetic/lib/python2.7/dist-packages' not in sys.path:
                 sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages')
             import rospy
@@ -978,7 +978,7 @@ class FATImage:
 
         args = {
             'config_file' : cfg_file,
-            'confidence_threshold' : 0.85,
+            'confidence_threshold' : 0.80,
             'min_image_size' : 750,
             'masks_per_dim' : 10,
             'show_mask_heatmaps' : False
@@ -1004,6 +1004,66 @@ class FATImage:
             topk_viewpoints=3,
             topk_inplane_rotations=3
         )
+
+    def get_rotation_samples(self, label, num_samples):
+        from sphere_fibonacci_grid_points import sphere_fibonacci_grid_points_with_sym_metric
+        all_rots = []
+        name_sym_dict = {
+            # Discribe the symmetric feature of the object: 
+            # First Item is for the sphere symmetric. the second is for the yaw
+            # Second for changing raw. Here may need to rewrite the render or transition matrix!!!!!!!
+            # First (half: 0, whole: 1) Second (0:0, 1:0-pi, 2:0-2pi)
+            "002_master_chef_can": [0,0], #half_0
+            "003_cracker_box": [0,1], #half_0-pi
+            "004_sugar_box": [0,1], #half_0-pi
+            "005_tomato_soup_can": [0,0], #half_0
+            "006_mustard_bottle": [1,1], #whole_0-pi
+            "007_tuna_fish_can": [0,0], #half_0
+            "008_pudding_box": [0,1], #half_0-pi
+            "009_gelatin_box": [0,1], #half_0-pi
+            "010_potted_meat_can": [0,1], #half_0-pi
+            "011_banana": [1,2], #whole_0-2pi
+            "019_pitcher_base": [1,2], #whole_0-2pi
+            "021_bleach_cleanser": [1,2], #whole_0-2pi
+            "024_bowl": [1,0], #whole_0
+            "025_mug": [1,0], #whole_0-2pi
+            "035_power_drill" : [1,2], #whole_0-2pi
+            "036_wood_block": [0,1], #half_0-pi
+            "037_scissors": [1,2], #whole_0-2pi
+            "040_large_marker" : [1,0], #whole_0
+            "051_large_clamp": [1,1], #whole_0-pi
+            "052_extra_large_clamp": [1,1], #whole_0-pi
+            "061_foam_brick": [0,1] #half_0-pi
+        }
+        
+        viewpoints_xyz = sphere_fibonacci_grid_points_with_sym_metric(num_samples,name_sym_dict[label][0])
+        if name_sym_dict[label][1] == 0:
+            for viewpoint in viewpoints_xyz:
+                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+                theta, phi = sphere2euler(theta, phi)
+                xyz_rotation_angles = [phi, theta, 0]
+                # cn+=1
+                all_rots.append(xyz_rotation_angles)
+        if name_sym_dict[label][1] == 1:
+            for viewpoint in viewpoints_xyz:
+                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+                theta, phi = sphere2euler(theta, phi)
+                step_size = math.pi/10
+                for yaw_temp in np.arange(0,math.pi, step_size):
+                    xyz_rotation_angles = [phi, theta, yaw_temp]
+                    # cn+=1
+                    all_rots.append(xyz_rotation_angles)
+        if name_sym_dict[label][1] == 2:
+            for viewpoint in viewpoints_xyz:
+                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+                theta, phi = sphere2euler(theta, phi)
+                step_size = math.pi/10
+                for yaw_temp in np.arange(0,2*math.pi, step_size):
+                    xyz_rotation_angles = [phi, theta, yaw_temp]
+                    # cn+=1
+                    all_rots.append(xyz_rotation_angles)
+        # print("cn: {}".format(cn))
+        return all_rots
 
     def visualize_sphere_sampling(self, image_data, print_poses=True, required_objects=None, num_samples=80):
         
@@ -1062,6 +1122,8 @@ class FATImage:
         viewpoints_xyz = sphere_fibonacci_grid_points(num_samples)
         annotations = []
         grid_i = 0
+        rotation_output_dir = os.path.join(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
+        mkdir_if_missing(rotation_output_dir)
         for box_id in range(len(labels)):
             label = labels[box_id]
             object_depth_mask = np.copy(depth_image)
@@ -1076,19 +1138,24 @@ class FATImage:
 
             cnt = 0
             object_rotation_list = []
+            rotation_samples = self.get_rotation_samples(label, num_samples)
             # Sample sphere and collect rotations
-            for viewpoint in viewpoints_xyz:
-                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
-                theta, phi = sphere2euler(theta, phi)
-                xyz_rotation_angles = [phi, theta, 0]
+            # for viewpoint in viewpoints_xyz:
+            #     r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+            #     theta, phi = sphere2euler(theta, phi)
+            #     xyz_rotation_angles = [phi, theta, 0]
+            #     print("Recovered rotation : {}".format(xyz_rotation_angles))
+            #     quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(phi, theta, 0).tolist())
+            #     object_rotation_list.append(quaternion)
+            for xyz_rotation_angles in rotation_samples:
                 print("Recovered rotation : {}".format(xyz_rotation_angles))
-                quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(phi, theta, 0).tolist())
+                quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(xyz_rotation_angles[0], xyz_rotation_angles[1], xyz_rotation_angles[2]).tolist())
                 object_rotation_list.append(quaternion)
                 if print_poses:
                     rgb_gl, depth_gl = self.render_pose(
                                         label, render_machine, xyz_rotation_angles, [0, 0, 1*self.distance_scale]
                                     )
-                    cv2.imwrite("./temp/label_{}_{}.png".format(label, cnt), rgb_gl)
+                    cv2.imwrite("{}/label_{}_{}.png".format(rotation_output_dir, label, cnt), rgb_gl)
                     cnt += 1
                 
             resolution = 0.02
@@ -1129,7 +1196,9 @@ class FATImage:
         color_img = cv2.imread(color_img_path)
         composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
                 = self.coco_demo.run_on_opencv_image(color_img, use_thresh=use_thresh)
-        composite_image_path = '{}/mask_{}.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
+        
+        model_output_dir = os.path.join(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
+        composite_image_path = '{}/mask_{}.png'.format(model_output_dir, self.get_clean_name(image_data['file_name']))
         cv2.imwrite(composite_image_path, composite)
 
         # depth_img_path = color_img_path.replace('.jpg', '.depth.png')
@@ -1350,7 +1419,7 @@ class FATImage:
 
         model_poses_file = None
         if print_poses:
-            model_poses_file = '{}/model_output_{}.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
+            model_poses_file = '{}/model_output_{}.png'.format(model_output_dir, self.get_clean_name(image_data['file_name']))
             plt.savefig(
                 model_poses_file,
                 dpi=1000, bbox_inches = 'tight', pad_inches = 0
@@ -2359,12 +2428,12 @@ def run_ycb_6d(dataset_cfg=None):
     filter_objects = None
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
-    # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
+    # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can', '052_extra_large_clamp']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
     required_objects = ['002_master_chef_can']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
-    fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
+    fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
     for object_name in required_objects:
         f_accuracy.write("{}-add,{}-adds,".format(object_name, object_name))
@@ -2415,13 +2484,13 @@ def run_ycb_6d(dataset_cfg=None):
                     continue
 
             # Visualize ground truth in ros
-            # yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
-            #     image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
-            # )
+            yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
+                image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
+            )
             model_poses_file = None
             labels, model_annotations, predicted_mask_path = \
                 fat_image.visualize_sphere_sampling(
-                    image_data, print_poses=False, required_objects=required_objects, num_samples=60
+                    image_data, print_poses=True, required_objects=required_objects, num_samples=16
                 )
             
             # # Run model to get multiple poses for each object
@@ -2435,7 +2504,7 @@ def run_ycb_6d(dataset_cfg=None):
                 # Convert model output poses to table frame and save them to file so that they can be read by perch
                 _, max_min_dict, _ = fat_image.visualize_pose_ros(
                     # image_data, model_annotations, frame='table', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False
-                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False,
+                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=True,
                 )
 
                 # for anno in model_annotations:
