@@ -2428,9 +2428,9 @@ def run_ycb_6d(dataset_cfg=None):
     filter_objects = None
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
-    # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can', '052_extra_large_clamp']
+    required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
-    required_objects = ['002_master_chef_can']
+    # required_objects = ['002_master_chef_can']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
     fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
@@ -2490,7 +2490,7 @@ def run_ycb_6d(dataset_cfg=None):
             model_poses_file = None
             labels, model_annotations, predicted_mask_path = \
                 fat_image.visualize_sphere_sampling(
-                    image_data, print_poses=True, required_objects=required_objects, num_samples=16
+                    image_data, print_poses=True, required_objects=required_objects, num_samples=40
                 )
             
             # # Run model to get multiple poses for each object
@@ -2504,7 +2504,7 @@ def run_ycb_6d(dataset_cfg=None):
                 # Convert model output poses to table frame and save them to file so that they can be read by perch
                 _, max_min_dict, _ = fat_image.visualize_pose_ros(
                     # image_data, model_annotations, frame='table', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False
-                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=True,
+                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False,
                 )
 
                 # for anno in model_annotations:
