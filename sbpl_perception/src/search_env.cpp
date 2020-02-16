@@ -286,7 +286,8 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
 }
 
 bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
-                                       ContPose pose, bool after_refinement = false) const {
+                                       ContPose pose, bool after_refinement = false,
+                                       int required_object_id = -1) const {
 
 
 
@@ -352,9 +353,19 @@ bool EnvObjectRecognition::IsValidPose(GraphState s, int model_id,
                             obj_models_[model_id].GetInflationFactor() *
                             obj_models_[model_id].GetCircumscribedRadius3D(),
                             grid_cell_circumscribing_radius);
-    num_neighbors_found = knn->radiusSearch(point, search_rad,
-                                            indices,
-                                            sqr_dists, min_neighbor_points_for_valid_pose); //0.2
+    if (required_object_id == -1)
+    {
+      num_neighbors_found = knn->radiusSearch(point, search_rad,
+                                              indices,
+                                              sqr_dists, min_neighbor_points_for_valid_pose); //0.2
+    }
+    else
+    {
+      // search only in segmented cloud for this object
+      num_neighbors_found = segmented_object_knn[required_object_id]->radiusSearch(point, search_rad,
+                                        indices,
+                                        sqr_dists, min_neighbor_points_for_valid_pose); //0.2
+    }
   }
 
 
@@ -5933,7 +5944,10 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               // std::cout << "Cont Pose : " << p << endl;
 
               // cout << doubleVector[0];
-              if (!IsValidPose(source_state, ii, p)) {
+              int required_object_id = distance(segmented_object_names.begin(), 
+                  find(segmented_object_names.begin(), segmented_object_names.end(), obj_models_[ii].name()));
+
+              if (!IsValidPose(source_state, ii, p, false, required_object_id)) {
                 // std::cout << "Invalid pose " << p << endl;
                 // std::cout << "Not a valid pose for theta : " << doubleVector[0] << " " <<
                 // doubleVector[1] <<  " " << doubleVector[2] <<  " " << doubleVector[4] <<  " " << doubleVector[5] << " " << doubleVector[6] << " " << endl;

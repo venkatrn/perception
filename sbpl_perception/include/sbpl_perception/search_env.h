@@ -603,7 +603,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                          unsigned short *max_succ_depth);
 
   bool IsValidPose(GraphState s, int model_id, ContPose p,
-                   bool after_refinement) const;
+                   bool after_refinement, int required_object_id) const;
 
   int rejected_histogram_count = 0;
   bool IsValidHistogram(int object_model_id, cv::Mat last_cv_obj_color_image, double threshold, double &base_distance);
