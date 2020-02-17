@@ -44,7 +44,7 @@ class FATPerch():
     def __init__(
             self, params=None, input_image_files=None, camera_params=None, object_names_to_id=None, output_dir_name=None,
             models_root=None, model_params=None, symmetry_info=None, read_results_only=False, env_config="pr2_env_config.yaml",
-            planner_config="pr2_planner_config.yaml"
+            planner_config="pr2_planner_config.yaml", perch_debug_dir=None
         ):
         self.PERCH_EXEC = subprocess.check_output("catkin_find sbpl_perception perch_fat".split(" ")).decode("utf-8").rstrip().lstrip()
         rospack = rospkg.RosPack()
@@ -63,7 +63,7 @@ class FATPerch():
         self.object_names_to_id = object_names_to_id
         self.output_dir_name = output_dir_name
 
-        self.perch_debug_dir = params['perch_debug_dir']
+        self.perch_debug_dir = perch_debug_dir
 
         if read_results_only == False:
             self.load_ros_param_from_file(PERCH_ENV_CONFIG)
@@ -150,9 +150,14 @@ class FATPerch():
         f = open(os.path.join(self.perch_debug_dir, self.output_dir_name, 'output_stats.txt'), "r")
         stats = {}
         lines = f.readlines()
-        stats_from_file = list(map(float, lines[2].rstrip().split()))
-        stats['expands'] = stats_from_file[2]
-        stats['runtime'] = stats_from_file[3]
+        if len(lines) > 0:
+            stats_from_file = list(map(float, lines[2].rstrip().split()))
+            stats['expands'] = stats_from_file[2]
+            stats['runtime'] = stats_from_file[3]
+        else:
+            stats['expands'] = -1
+            stats['runtime'] = -1
+
         f.close()
 
         return annotations, stats

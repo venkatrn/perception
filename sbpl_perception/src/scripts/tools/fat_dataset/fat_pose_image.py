@@ -845,7 +845,8 @@ class FATImage:
             models_root=self.model_dir,
             model_params=self.model_params,
             symmetry_info=self.symmetry_info,
-            read_results_only=True
+            read_results_only=True,
+            perch_debug_dir=self.perch_debug_dir
         )
         perch_annotations = fat_perch.read_pose_results()
         return perch_annotations
@@ -953,7 +954,8 @@ class FATImage:
             model_params=self.model_params,
             symmetry_info=self.symmetry_info,
             env_config=self.env_config,
-            planner_config=self.planner_config
+            planner_config=self.planner_config,
+            perch_debug_dir=self.perch_debug_dir
         )
         perch_annotations = fat_perch.run_perch_node(model_poses_file, num_cores)
         return perch_annotations
@@ -1160,9 +1162,12 @@ class FATImage:
                 
             resolution = 0.02
             # Sample rotation across depth
+            centroid = np.flip(np.mean(np.argwhere(mask_list[box_id] > 0), axis=0))
+            print("Centroid from mask : {}".format(centroid))
+            print("Centroid from box : {}".format(centroids_2d[box_id]))
             for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                 ## Vary depth only
-                centre_world_point = self.get_world_point(np.array(centroids_2d[box_id].tolist() + [depth]))
+                centre_world_point = self.get_world_point(centroid.tolist() + [depth])
                 for quaternion in object_rotation_list:
                     annotations.append({
                         'location' : (centre_world_point*100).tolist(),
@@ -1472,7 +1477,7 @@ class FATImage:
 
         return annotations
 
-    def compare_clouds(self, annotations_1, annotations_2, downsample=False, use_add_s=True, convert_annotation_2=False):
+    def compare_clouds(self, annotations_1, annotations_2, downsample=False, use_add_s=True, convert_annotation_2=False, use_points_file=False):
         from plyfile import PlyData, PlyElement
         import scipy
         from sklearn.metrics import pairwise_distances_chunked, pairwise_distances_argmin_min
@@ -1506,8 +1511,13 @@ class FATImage:
 
             if not downsample or (downsample and not os.path.isfile(downsampled_cloud_path)):
                 # If no downsample or yes downsample but without file
-                cloud = PlyData.read(model_file_path).elements[0].data
-                cloud = np.transpose(np.vstack((cloud['x'], cloud['y'], cloud['z'])))
+                if not use_points_file:
+                    cloud = PlyData.read(model_file_path).elements[0].data
+                    cloud = np.transpose(np.vstack((cloud['x'], cloud['y'], cloud['z'])))
+                else:
+                    model_points_file_path = os.path.join(self.model_dir, object_name, "points.xyz")
+                    cloud = np.loadtxt(model_points_file_path)
+
 
                 if downsample:
                     # Do downsample and save file
@@ -2433,9 +2443,9 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
-    # required_objects = ['024_bowl']
+    required_objects = ['002_master_chef_can']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
-    required_objects = fat_image.category_names
+    # required_objects = fat_image.category_names
     fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
     for object_name in required_objects:
@@ -2453,8 +2463,8 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
-    for scene_i in range(49, 50):
-        for img_i in range(1,2500):
+    for scene_i in range(48, 49):
+        for img_i in range(905,1134):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
             #     continue
@@ -2490,20 +2500,20 @@ def run_ycb_6d(dataset_cfg=None):
             # yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
             #     image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
             # )
-            model_poses_file = None
-            # labels, model_annotations, predicted_mask_path = \
-            #     fat_image.visualize_sphere_sampling(
-            #         image_data, print_poses=True, required_objects=required_objects, num_samples=16
-            #     )
-            
-            # # Run model to get multiple poses for each object
-            labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
-                fat_image.visualize_model_output(
-                    image_data, use_thresh=True, use_centroid=False, print_poses=False,
-                    required_objects=required_objects
-                )
-
             if True:
+                model_poses_file = None
+                labels, model_annotations, predicted_mask_path = \
+                    fat_image.visualize_sphere_sampling(
+                        image_data, print_poses=False, required_objects=required_objects, num_samples=60
+                    )
+                
+                # # Run model to get multiple poses for each object
+                # labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
+                #     fat_image.visualize_model_output(
+                #         image_data, use_thresh=True, use_centroid=False, print_poses=False,
+                #         required_objects=required_objects
+                #     )
+
                 # Convert model output poses to table frame and save them to file so that they can be read by perch
                 _, max_min_dict, _ = fat_image.visualize_pose_ros(
                     # image_data, model_annotations, frame='table', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False
@@ -2531,22 +2541,28 @@ def run_ycb_6d(dataset_cfg=None):
                     )
                 else:
                     perch_annotations = top_model_annotations
-                    stats = None
+                    stats = None                        
+            else:
+                run_perch = True
+                output_dir_name = os.path.join("greedy_6d_symmetry", fat_image.get_clean_name(image_data['file_name']))
+                perch_annotations, stats = fat_image.read_perch_output(output_dir_name)
+            
+            f_accuracy.write("{},".format(image_data['file_name']))            
+            if perch_annotations is not None:
+                # # # Compare Poses by applying to model and computing distance
+                add_dict, add_s_dict = fat_image.compare_clouds(
+                    annotations, perch_annotations, use_add_s=True, convert_annotation_2=not run_perch, use_points_file=True)
+                if add_dict is not None and add_s_dict is not None:
+                    for object_name in required_objects:
+                        if (object_name in add_dict) and (object_name in add_s_dict):
+                            f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name])) 
+                        else:
+                            f_accuracy.write(" , ,") 
+            if stats is not None:
+                f_runtime.write("{} {} {}".format(image_data['file_name'], stats['expands'], stats['runtime']))
+            f_accuracy.write("\n")
+            f_runtime.write("\n")
 
-                f_accuracy.write("{},".format(image_data['file_name']))            
-                if perch_annotations is not None:
-                    # # # Compare Poses by applying to model and computing distance
-                    add_dict, add_s_dict = fat_image.compare_clouds(annotations, perch_annotations, use_add_s=True, convert_annotation_2=not run_perch, downsample=True)
-                    if add_dict is not None and add_s_dict is not None:
-                        for object_name in required_objects:
-                            if (object_name in add_dict) and (object_name in add_s_dict):
-                                f_accuracy.write("{},{},".format(add_dict[object_name], add_s_dict[object_name])) 
-                            else:
-                                f_accuracy.write(" , ,") 
-                if stats is not None:
-                    f_runtime.write("{} {} {}".format(image_data['file_name'], stats['expands'], stats['runtime']))
-                f_accuracy.write("\n")
-                f_runtime.write("\n")
                 
 
     f_runtime.close()

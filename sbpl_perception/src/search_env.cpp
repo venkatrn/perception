@@ -1537,7 +1537,9 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         num_valid_poses = adjusted_poses_occluded.size() - accumulate(adjusted_poses_occluded.begin(), adjusted_poses_occluded.end(), 0);
         printf("Num valid poses after icp : %d\n", num_valid_poses);
         
-        // PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        if (perch_params_.vis_expanded_states) {
+          PrintGPUImages(adjusted_result_depth, adjusted_result_color, num_poses, "succ_" + std::to_string(source_id), adjusted_poses_occluded);
+        }
         // vector<ObjectState> random_modified_last_object_states;
         // PrintGPUClouds(
         //   modified_last_object_states, result_cloud, result_cloud_color, depth_data, dc_index, 
@@ -1744,7 +1746,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       else
       {
         // cur_unit.cost = rendered_cost[i] + observed_cost[i];
-        cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i]);
+        // cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i]);
+        cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i] + pose_clutter_cost[i]);
       }
     }
     // if (root_level)
@@ -5295,7 +5298,8 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   // Set the transformation epsilon (criterion 2)
   icp.setTransformationEpsilon(1e-8); //1e-8
   // Set the euclidean distance difference epsilon (criterion 3)
-  icp.setEuclideanFitnessEpsilon(perch_params_.sensor_resolution);  // 1e-5
+  // icp.setEuclideanFitnessEpsilon(perch_params_.sensor_resolution);  // 1e-5
+  icp.setEuclideanFitnessEpsilon(1e-5);  // 1e-5
 
   icp.align(*cloud_out);
   double score = 100.0;
@@ -5359,6 +5363,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     // writer.writeBinary (ss2.str()  , *cloud_out);
     // i++;
   } else {
+    std::cout << "GetICPAdjustedPose() didnt converge\n";
     cloud_out = cloud_in;
     *pose_out = pose_in;
   }
