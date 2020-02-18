@@ -951,11 +951,11 @@ device_vector_holder<int> render_cuda_multi(
     thrust::copy(device_pose_occluded_other.begin(), device_pose_occluded_other.end(), pose_occluded_other.begin());
 
     // printf("Pose Clutter Ratio\n");
-    // thrust::transform(
-    //     device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
-    //     device_pose_total_points.begin(), device_pose_clutter_points.begin(), 
-    //     thrust::divides<float>()
-    // );
+    thrust::transform(
+        device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
+        device_pose_total_points.begin(), device_pose_clutter_points.begin(), 
+        thrust::divides<float>()
+    );
     thrust::device_vector<float> rendered_multiplier_val(num_images, 100);
     thrust::transform(
         device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 

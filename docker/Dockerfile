@@ -150,7 +150,6 @@ ENV FORCE_CUDA=${FORCE_CUDA}
 RUN git clone https://github.com/sbpl-cruz/maskrcnn-benchmark.git -b fat_pose_dataset_new \
  && cd maskrcnn-benchmark \
  && python setup.py build develop
-ARG CACHEBUST=1
 
 
 # Install apex (Doesnt cpp ext with Cuda 8.0)
@@ -159,6 +158,7 @@ RUN git clone https://github.com/NVIDIA/apex.git \
  && pip install -v --no-cache-dir ./
 #  && python setup.py install --cuda_ext --cpp_ext
 
+ARG CACHEBUST=1
 # Install PERCH
 RUN pip install catkin_pkg
 # For PERCH
