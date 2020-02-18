@@ -1223,7 +1223,8 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                                           vector<int>& pose_occluded,
                                           int single_result_image,
                                           vector<int>& pose_occluded_other,
-                                          vector<float>& pose_clutter_cost)
+                                          vector<float>& pose_clutter_cost,
+                                          const vector<int>& pose_segmentation_label)
 {
   /*
     Takes a bunch of ObjectState objects and renders them. 
@@ -1281,7 +1282,9 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                           pose_occluded,
                           single_result_image,
                           pose_occluded_other,
-                          pose_clutter_cost);
+                          pose_clutter_cost,
+                          predicted_mask_image,
+                          pose_segmentation_label);
 }
 void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
                                                   std::vector<CostComputationOutput> *output,
@@ -1441,7 +1444,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     GetStateImagesGPU(
       last_object_states, source_result_color, source_result_depth, 
       result_color, result_depth, poses_occluded, 0,
-      poses_occluded_other, pose_clutter_cost
+      poses_occluded_other, pose_clutter_cost, pose_segmentation_label
     );
     // if (objects.size() == 3)
     // if (perch_params_.vis_expanded_states) {
@@ -1511,7 +1514,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         GetStateImagesGPU(
           modified_last_object_states, source_result_color, source_result_depth, 
           adjusted_result_color, adjusted_result_depth, adjusted_poses_occluded, 0,
-          adjusted_poses_occluded_other, pose_clutter_cost
+          adjusted_poses_occluded_other, pose_clutter_cost, pose_segmentation_label
         );
         // if (source_id == 136)
         // if (objects.size() == 2)
@@ -5041,6 +5044,10 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
       // For FAT dataset, we have 16bit images
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
       cv_predicted_mask_image = cv::imread(input.predicted_mask_image, CV_LOAD_IMAGE_UNCHANGED);
+      predicted_mask_image.assign(
+        cv_predicted_mask_image.ptr<uint8_t>(0), 
+        cv_predicted_mask_image.ptr<uint8_t>(0) + env_params_.width * env_params_.height
+      );
       // Index of this variable is the label for corresponding model name in the segmentation mask
       segmented_object_names = input.model_names;
       for (int i = 0; i < input.model_names.size(); i++)
@@ -5088,7 +5095,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
       cuda_renderer::depth2cloud_global(
         observed_depth_data, cv_input_filtered_color_image_vec, result_observed_cloud, result_observed_cloud_color, observed_dc_index, observed_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
         1, random_poses_occluded.data(), kCameraCX, kCameraCY, kCameraFX, kCameraFY, input.depth_factor, gpu_stride, gpu_point_dim,
-        result_observed_cloud_label, cv_predicted_mask_image.ptr<uint8_t>(0)
+        result_observed_cloud_label, predicted_mask_image.data()
       );
       PrintGPUClouds(
         last_object_states, result_observed_cloud, result_observed_cloud_color, 

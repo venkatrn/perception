@@ -372,6 +372,8 @@ bool depth2cloud_global(int32_t* depth_data,
 {
     printf("depth2cloud_global()\n");
     /**
+        @label_mask_data - Label of every pixel in input 2D image
+        @result_observed_cloud_label - Label of every pixel in output 3D cloud, downsampled
         Returns :
             cloud_pose_map - Mapping of every point in the cloud to a pose number
             rendered_cloud_point_num - Total number of points in the rendered pose arrays

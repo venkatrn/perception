@@ -248,7 +248,9 @@ device_vector_holder<int> render_cuda_multi(
                             std::vector<int>& pose_occluded,
                             int single_result_image,
                             std::vector<int>& pose_occluded_other,
-                            std::vector<float>& clutter_cost);
+                            std::vector<float>& clutter_cost,
+                            const std::vector<uint8_t>& source_mask_label,
+                            const std::vector<int>& pose_segmentation_label);
 
 device_vector_holder<int> render_cuda(const std::vector<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
                             size_t width, size_t height, const Model::mat4x4& proj_mat, 

@@ -213,7 +213,9 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                                         int32_t* lock_entry,
                                         int* pose_occluded_other_entry,
                                         float* pose_clutter_points_entry,
-                                        float* pose_total_points_entry) {
+                                        float* pose_total_points_entry,
+                                        uint8_t* source_label_entry,
+                                        int* pose_segmentation_label_entry) {
                                         // float* l_entry,float* a_entry,float* b_entry){
     // refer to tiny renderer
     // https://github.com/ssloy/tinyrenderer/blob/master/our_gl.cpp
@@ -274,6 +276,7 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
             uint8_t source_red = source_red_entry[x_to_write+y_to_write*real_width];
             uint8_t source_green = source_green_entry[x_to_write+y_to_write*real_width];
             uint8_t source_blue = source_blue_entry[x_to_write+y_to_write*real_width];
+            uint8_t source_label = source_label_entry[x_to_write+y_to_write*real_width];
 
             // if(depth_to_write > curr_depth){
             //     red_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v0);
@@ -295,36 +298,41 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                 }
             }
             int32_t& new_depth = depth_entry[x_to_write+y_to_write*real_width];
-            if(new_depth > source_depth && source_depth > 0){
-                // when we are rendering at x,y where source pixel is also present at depth closer to camera
-                // valid condition as source occludes render
-                // if (false)
-                // {
-                //     // add source pixels
-                //     red_entry[x_to_write+y_to_write*real_width] = source_red;
-                //     green_entry[x_to_write+y_to_write*real_width] = source_green;
-                //     blue_entry[x_to_write+y_to_write*real_width] = source_blue;
-                //     atomicMin(&new_depth, source_depth);
-                // }
-                // else
-                // {
-                    // add black
-                    red_entry[x_to_write+y_to_write*real_width] = 0;
-                    green_entry[x_to_write+y_to_write*real_width] = 0;
-                    blue_entry[x_to_write+y_to_write*real_width] = 0;
-                    atomicMax(&new_depth, INT_MAX);
-                    atomicOr(pose_occluded_other_entry, 1);
-                    if (source_depth <=  new_depth - 5)
-                    {
-                        atomicAdd(pose_clutter_points_entry, 1);
-                    }
-                // }
-            }
-            // invalid condition where source pixel is behind and we are rendering a pixel at same x,y with lesser depth 
-            else if(new_depth <= source_depth && source_depth > 0){
-                // invalid as render occludes source
-                atomicOr(pose_occluded_entry, 1);
-                // printf("Occlusion\n");
+            if (pose_segmentation_label_entry == NULL ||
+                (pose_segmentation_label_entry != NULL && *pose_segmentation_label_entry != source_label))
+            {
+                // printf("%d, %d\n", *pose_segmentation_label_entry, source_label);
+                if(new_depth > source_depth && source_depth > 0){
+                    // when we are rendering at x,y where source pixel is also present at depth closer to camera
+                    // valid condition as source occludes render
+                    // if (false)
+                    // {
+                    //     // add source pixels
+                    //     red_entry[x_to_write+y_to_write*real_width] = source_red;
+                    //     green_entry[x_to_write+y_to_write*real_width] = source_green;
+                    //     blue_entry[x_to_write+y_to_write*real_width] = source_blue;
+                    //     atomicMin(&new_depth, source_depth);
+                    // }
+                    // else
+                    // {
+                        // add black
+                        red_entry[x_to_write+y_to_write*real_width] = 0;
+                        green_entry[x_to_write+y_to_write*real_width] = 0;
+                        blue_entry[x_to_write+y_to_write*real_width] = 0;
+                        atomicMax(&new_depth, INT_MAX);
+                        atomicOr(pose_occluded_other_entry, 1);
+                        if (source_depth <=  new_depth - 5)
+                        {
+                            atomicAdd(pose_clutter_points_entry, 1);
+                        }
+                    // }
+                }
+                // invalid condition where source pixel is behind and we are rendering a pixel at same x,y with lesser depth 
+                else if(new_depth <= source_depth && source_depth > 0){
+                    // invalid as render occludes source
+                    atomicOr(pose_occluded_entry, 1);
+                    // printf("Occlusion\n");
+                }
             }
             atomicAdd(pose_total_points_entry, 1);
 
@@ -461,7 +469,9 @@ __global__ void render_triangle_multi(
                                 int32_t* lock_int_vec,
                                 int* pose_occluded_other_vec,
                                 float* pose_clutter_points_vec, 
-                                float* pose_total_points_vec) {
+                                float* pose_total_points_vec,
+                                uint8_t* device_source_mask_label_vec,
+                                int* pose_segmentation_label_vec) {
     size_t pose_i = blockIdx.y;
     int model_id = device_pose_model_map_ptr[pose_i];
     size_t tri_i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -486,6 +496,7 @@ __global__ void render_triangle_multi(
     int* pose_occluded_other_entry;
     float* pose_clutter_points_entry;
     float* pose_total_points_entry;
+    int* pose_segmentation_label_entry = NULL;
     // printf("device_single_result_image:%d\n",device_single_result_image);
     if (*device_single_result_image)
     {
@@ -498,6 +509,8 @@ __global__ void render_triangle_multi(
         pose_occluded_other_entry = pose_occluded_other_vec;
         pose_clutter_points_entry = pose_clutter_points_vec;
         pose_total_points_entry = pose_total_points_vec;
+        if (pose_segmentation_label_vec != NULL)
+            pose_segmentation_label_entry = pose_segmentation_label_vec;
     }
     else
     {
@@ -510,6 +523,8 @@ __global__ void render_triangle_multi(
         pose_occluded_other_entry = pose_occluded_other_vec + pose_i;
         pose_clutter_points_entry = pose_clutter_points_vec + pose_i;
         pose_total_points_entry = pose_total_points_vec + pose_i;
+        if (pose_segmentation_label_vec != NULL)
+            pose_segmentation_label_entry = pose_segmentation_label_vec + pose_i;
     }
     
 
@@ -538,7 +553,9 @@ __global__ void render_triangle_multi(
         lock_entry,
         pose_occluded_other_entry,
         pose_clutter_points_entry,
-        pose_total_points_entry);
+        pose_total_points_entry,
+        device_source_mask_label_vec,
+        pose_segmentation_label_entry);
 }
 __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* blue_in,
                                     uint8_t* red_ob, uint8_t* green_ob,uint8_t* blue_ob, 
@@ -758,7 +775,9 @@ device_vector_holder<int> render_cuda_multi(
                             std::vector<int>& pose_occluded,
                             int single_result_image,
                             std::vector<int>& pose_occluded_other,
-                            std::vector<float>& clutter_cost) {
+                            std::vector<float>& clutter_cost,
+                            const std::vector<uint8_t>& source_mask_label,
+                            const std::vector<int>& pose_segmentation_label) {
 
     // Create device inputs
     int* device_single_result_image;
@@ -781,16 +800,25 @@ device_vector_holder<int> render_cuda_multi(
     thrust::device_vector<int> device_tris_model_count_low = tris_model_count;
     thrust::device_vector<int> device_tris_model_count_high = tris_model_count;
     thrust::device_vector<int> device_pose_model_map = pose_model_map;
+    thrust::device_vector<int> device_pose_segmentation_label = pose_segmentation_label;
 
     thrust::device_vector<int32_t> device_source_depth = source_depth;
     thrust::device_vector<uint8_t> device_source_color_red = source_color[0];
     thrust::device_vector<uint8_t> device_source_color_green = source_color[1];
     thrust::device_vector<uint8_t> device_source_color_blue = source_color[2];
+    thrust::device_vector<uint8_t> device_source_mask_label = source_mask_label;
+
     // thrust::copy(
     //     device_tris_model_count.begin(),
     //     device_tris_model_count.end(), 
     //     std::ostream_iterator<int>(std::cout, " ")
     // );
+    printf("\nPose segmentation label : \n");
+    thrust::copy(
+        device_pose_segmentation_label.begin(),
+        device_pose_segmentation_label.end(), 
+        std::ostream_iterator<int>(std::cout, " ")
+    );
     thrust::exclusive_scan(
         device_tris_model_count_low.begin(), device_tris_model_count_low.end(), 
         device_tris_model_count_low.begin(), 0
@@ -853,11 +881,18 @@ device_vector_holder<int> render_cuda_multi(
     int* device_pose_occluded_other_vec = thrust::raw_pointer_cast(device_pose_occluded_other.data());
     float* device_pose_clutter_points_vec = thrust::raw_pointer_cast(device_pose_clutter_points.data());
     float* device_pose_total_points_vec = thrust::raw_pointer_cast(device_pose_total_points.data());
+    int* device_pose_segmentation_label_vec;
+    
+    if (device_pose_segmentation_label.size() > 0)
+        device_pose_segmentation_label_vec = thrust::raw_pointer_cast(device_pose_segmentation_label.data());
+    else
+        device_pose_segmentation_label_vec = NULL;
 
     int32_t* device_source_depth_vec = thrust::raw_pointer_cast(device_source_depth.data());
     uint8_t* device_source_red_vec = thrust::raw_pointer_cast(device_source_color_red.data());
     uint8_t* device_source_green_vec = thrust::raw_pointer_cast(device_source_color_green.data());
     uint8_t* device_source_blue_vec = thrust::raw_pointer_cast(device_source_color_blue.data());
+    uint8_t* device_source_mask_label_vec = thrust::raw_pointer_cast(device_source_mask_label.data());
 
     int32_t* depth_image_vec = device_depth_int.data();
     int32_t* lock_int_vec = thrust::raw_pointer_cast(device_lock_int.data());
@@ -891,7 +926,9 @@ device_vector_holder<int> render_cuda_multi(
                                                     lock_int_vec,
                                                     device_pose_occluded_other_vec,
                                                     device_pose_clutter_points_vec,
-                                                    device_pose_total_points_vec);
+                                                    device_pose_total_points_vec,
+                                                    device_source_mask_label_vec,
+                                                    device_pose_segmentation_label_vec);
     // cudaDeviceSynchronize();
     // Objects occluding other objects already in the scene
     printf("Pose Occlusions\n");
@@ -913,12 +950,12 @@ device_vector_holder<int> render_cuda_multi(
     printf("\n");
     thrust::copy(device_pose_occluded_other.begin(), device_pose_occluded_other.end(), pose_occluded_other.begin());
 
-    printf("Pose Clutter Ratio\n");
-    thrust::transform(
-        device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
-        device_pose_total_points.begin(), device_pose_clutter_points.begin(), 
-        thrust::divides<float>()
-    );
+    // printf("Pose Clutter Ratio\n");
+    // thrust::transform(
+    //     device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
+    //     device_pose_total_points.begin(), device_pose_clutter_points.begin(), 
+    //     thrust::divides<float>()
+    // );
     thrust::device_vector<float> rendered_multiplier_val(num_images, 100);
     thrust::transform(
         device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
@@ -927,11 +964,11 @@ device_vector_holder<int> render_cuda_multi(
     );
     thrust::copy(device_pose_clutter_points.begin(), device_pose_clutter_points.end(), clutter_cost.begin());
 
-    thrust::copy(
-        device_pose_clutter_points.begin(),
-        device_pose_clutter_points.end(), 
-        std::ostream_iterator<float>(std::cout, " ")
-    );
+    // thrust::copy(
+    //     device_pose_clutter_points.begin(),
+    //     device_pose_clutter_points.end(), 
+    //     std::ostream_iterator<float>(std::cout, " ")
+    // );
     printf("\n");
 
     result_depth.resize(num_images*real_width*real_height);

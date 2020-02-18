@@ -1140,18 +1140,18 @@ class FATImage:
 
             cnt = 0
             object_rotation_list = []
-            rotation_samples = self.get_rotation_samples(label, num_samples)
+            # rotation_samples = self.get_rotation_samples(label, num_samples)
             # Sample sphere and collect rotations
-            # for viewpoint in viewpoints_xyz:
-            #     r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
-            #     theta, phi = sphere2euler(theta, phi)
-            #     xyz_rotation_angles = [phi, theta, 0]
-            #     print("Recovered rotation : {}".format(xyz_rotation_angles))
-            #     quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(phi, theta, 0).tolist())
-            #     object_rotation_list.append(quaternion)
-            for xyz_rotation_angles in rotation_samples:
+            for viewpoint in viewpoints_xyz:
+                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+                theta, phi = sphere2euler(theta, phi)
+                xyz_rotation_angles = [phi, theta, 0]
                 print("Recovered rotation : {}".format(xyz_rotation_angles))
-                quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(xyz_rotation_angles[0], xyz_rotation_angles[1], xyz_rotation_angles[2]).tolist())
+                quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(phi, theta, 0).tolist())
+            #     object_rotation_list.append(quaternion)
+            # for xyz_rotation_angles in rotation_samples:
+            #     print("Recovered rotation : {}".format(xyz_rotation_angles))
+            #     quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(xyz_rotation_angles[0], xyz_rotation_angles[1], xyz_rotation_angles[2]).tolist())
                 object_rotation_list.append(quaternion)
                 if print_poses:
                     rgb_gl, depth_gl = self.render_pose(
@@ -2463,8 +2463,8 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
-    for scene_i in range(48, 49):
-        for img_i in range(905,1134):
+    for scene_i in range(51, 52):
+        for img_i in range(946,947):
         # for img_i in IMG_LISTx:
             # if "0050" not in img_i:
             #     continue
