@@ -609,17 +609,17 @@ __global__ void compute_render_cost(
                 {
                     // the point is explained, so mark corresponding observed point explained
                     // atomicOr(cuda_observed_explained[o_point_index], 1);
-                    float lab2[3];
-                    rgb2lab(red2,green2,blue2,lab2);
+                    // float lab2[3];
+                    // rgb2lab(red2,green2,blue2,lab2);
 
-                    float lab1[3];
-                    rgb2lab(red1,green1,blue1,lab1);
+                    // float lab1[3];
+                    // rgb2lab(red1,green1,blue1,lab1);
 
-                    double cur_dist = color_distance(lab1[0],lab1[1],lab1[2],lab2[0],lab2[1],lab2[2]);
-                    if(cur_dist > 30)
-                        atomicAdd(&cuda_rendered_cost[pose_index], cost);
-                    else
-                        cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
+                    // double cur_dist = color_distance(lab1[0],lab1[1],lab1[2],lab2[0],lab2[1],lab2[2]);
+                    // if(cur_dist > 30)
+                    //     atomicAdd(&cuda_rendered_cost[pose_index], cost);
+                    // else
+                    cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
                 }
             }
         }

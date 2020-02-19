@@ -330,6 +330,9 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unique_ptr<RCNNHeuristicFactory> rcnn_heuristic_factory_;
   Heuristics rcnn_heuristics_;
 
+  void getGlobalPointCV (int u, int v, float range,
+                          const Eigen::Isometry3d &pose, Eigen::Vector3f &world_point);
+
   PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, cv::Mat predicted_mask_image, double depth_factor);
   PointCloudPtr GetGravityAlignedPointCloudCV(cv::Mat depth_image, cv::Mat color_image, double depth_factor);
   PointCloudPtr GetGravityAlignedPointCloud(

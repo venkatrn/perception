@@ -109,9 +109,12 @@ EnvObjectRecognition::EnvObjectRecognition(const
   // kCameraWidth = kCameraWidth;
   // kNumPixels = kCameraWidth * kCameraHeight;
 
-  kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
-                                                     kCameraHeight, kCameraWidth));
-  scene_ = kinect_simulator_->scene_;
+  if (!kUseGPU)
+  {
+    kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
+                                                      kCameraHeight, kCameraWidth));
+    scene_ = kinect_simulator_->scene_;
+  }
   observed_cloud_.reset(new PointCloud);
   original_input_cloud_.reset(new PointCloud);
   constraint_cloud_.reset(new PointCloud);
@@ -3707,6 +3710,33 @@ int EnvObjectRecognition::GetLastLevelCost(const PointCloudPtr
   return last_level_cost;
 }
 
+
+void EnvObjectRecognition::getGlobalPointCV (int u, int v, float range,
+                                                  const Eigen::Isometry3d &pose, Eigen::Vector3f &world_point) {
+  pcl::PointXYZ p;
+  // range = -range;
+
+  float camera_fx_reciprocal_ = 1.0f / kCameraFX;
+  float camera_fy_reciprocal_ = 1.0f / kCameraFY;
+
+  p.z = range;
+  p.x = (static_cast<float> (u) - kCameraCX) * range * (camera_fx_reciprocal_);
+  p.y = (static_cast<float> (v) - kCameraCY) * range * (camera_fy_reciprocal_);
+
+  // Eigen::Matrix4f T;
+  // T <<  0, 0, -1, 0,
+  // -1, 0,  0, 0,
+  // 0, 1,  0, 0,
+  // 0, 0,  0, 1;
+  Eigen::Matrix4f transform = pose.matrix ().cast<float> ();
+  // transform = transform * T;
+  Eigen::Matrix<float, 3, 1> pt (p.x, p.y, p.z);
+
+  world_point = transform.block<3,3>(0,0) * pt;
+  world_point += transform.block<3,1>(0,3);
+
+}
+
 PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
   cv::Mat depth_image, cv::Mat color_image, cv::Mat predicted_mask_image, double depth_factor) {
 
@@ -3757,14 +3787,14 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       if (env_params_.use_external_pose_list == 1)
       {
         // When using FAT dataset with model
-        kinect_simulator_->rl_->getGlobalPointCV(u, v,
-                                                  static_cast<float>(depth_image.at<unsigned short>(v,u)/depth_factor), transform,
-                                                  point_eig);
+        getGlobalPointCV(u, v,
+                              static_cast<float>(depth_image.at<unsigned short>(v,u)/depth_factor), transform,
+                              point_eig);
       }
       else {
-        kinect_simulator_->rl_->getGlobalPointCV(u, v,
-                                                  static_cast<float>(depth_image.at<uchar>(v,u)/depth_factor), transform,
-                                                  point_eig);
+        getGlobalPointCV(u, v,
+                              static_cast<float>(depth_image.at<uchar>(v,u)/depth_factor), transform,
+                              point_eig);
         // printf("depth data : %d\n", (depth_image.at<int>(v,u)));
         // printf("depth data : %d\n", (depth_image.at<uchar>(v,u)));
         // printf("depth data : %f\n", static_cast<float>(depth_image.at<unsigned short>(v,u) - min)/1000);
@@ -3870,7 +3900,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       // 255.0 * 10.0
       Eigen::Vector3f point_eig;
       // When using FAT dataset with model
-      kinect_simulator_->rl_->getGlobalPointCV(u, v,
+      getGlobalPointCV(u, v,
                                                 static_cast<float>(depth_image.at<int32_t>(v,u)/depth_factor), transform,
                                                   point_eig);
 
