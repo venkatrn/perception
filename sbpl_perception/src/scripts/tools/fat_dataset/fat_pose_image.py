@@ -2470,7 +2470,7 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
     for scene_i in range(48, 60):
-        for img_i in range(1,2):
+        for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
@@ -2525,7 +2525,7 @@ def run_ycb_6d(dataset_cfg=None):
                 # Convert model output poses to table frame and save them to file so that they can be read by perch
                 _, max_min_dict, _ = fat_image.visualize_pose_ros(
                     # image_data, model_annotations, frame='table', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False
-                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=True,
+                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False,
                 )
 
                 # for anno in model_annotations:
