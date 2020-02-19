@@ -45,7 +45,7 @@ namespace pcl
         typedef boost::shared_ptr<const SimExample> ConstPtr;
     	
         SimExample (int argc, char** argv,
-    		int height,int width);
+    		int height,int width, bool use_opengl = true);
         void initializeGL (int argc, char** argv);
         
         Scene::Ptr scene_;

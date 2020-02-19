@@ -1155,7 +1155,8 @@ void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
           int required_object_id = distance(segmented_object_names.begin(), 
           find(segmented_object_names.begin(), segmented_object_names.end(), model_name));
           GetICPAdjustedPose(
-            transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels, segmented_object_clouds[required_object_id]);
+            transformed_cloud, pose_in, cloud_out, &pose_out, parent_counted_pixels, 
+            segmented_object_clouds[required_object_id], model_name);
         }
         else
         {
@@ -1257,7 +1258,12 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
       obj_models_[model_id].preprocessing_transform().matrix().cast<double>();
     Eigen::Matrix4d transform;
     transform = cur.ContPose::GetTransform().matrix().cast<double>();
+
+    // For non-6d dof this is needed to align model base to table, 
+    // we need to remove it because we are going back to camera frame on gpu render
+    // if (env_params_.use_external_pose_list != 1)
     transform = transform * preprocess_transform;
+    
     Eigen::Matrix4d pose_in_cam = cam_matrix * transform;
     cuda_renderer::Model::mat4x4 mat4;
     mat4.init_from_eigen(pose_in_cam, 100);
@@ -1285,6 +1291,37 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                           pose_clutter_cost,
                           predicted_mask_image,
                           pose_segmentation_label);
+}
+void EnvObjectRecognition::PrintStateGPU(GraphState state)
+{
+  std::vector<std::vector<uint8_t>> random_color(3);
+  std::vector<uint8_t> random_red(kCameraWidth * kCameraHeight, 255);
+  std::vector<uint8_t> random_green(kCameraWidth * kCameraHeight, 255);
+  std::vector<uint8_t> random_blue(kCameraWidth * kCameraHeight, 255);
+  random_color[0] = random_red;
+  random_color[1] = random_green;
+  random_color[2] = random_blue;
+  std::vector<int32_t> random_depth(kCameraWidth * kCameraHeight, 0);
+  std::vector<int> random_poses_occluded(1, 0);
+  std::vector<int> random_poses_occluded_other(1, 0);
+  std::vector<float> random_poses_clutter_cost(1, 0);
+
+  std::vector<ObjectState> objects = state.object_states();
+
+  //// Need to init source color and depth for root level, where no object is present in source state
+  std::vector<std::vector<uint8_t>> source_result_color(3);
+  source_result_color[0] = random_red;
+  source_result_color[1] = random_green;
+  source_result_color[2] = random_blue;
+  // By default source is set to max depth so that nothing happens when we merge with rendered
+  std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, 0);
+
+  GetStateImagesGPU(
+    objects, random_color, random_depth, 
+    source_result_color, source_result_depth, random_poses_occluded, 1,
+    random_poses_occluded_other, random_poses_clutter_cost
+  );
+  PrintGPUImages(source_result_depth, source_result_color, 1, "graph_state", random_poses_occluded);
 }
 void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
                                                   std::vector<CostComputationOutput> *output,
@@ -1825,7 +1862,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
   ObjectState temp(-1, false, DiscPose(0, 0, 0, 0, 0, 0));
   vector<int> lowest_cost_per_object(env_params_.num_models, INT_MAX);
   vector<ObjectState> lowest_cost_state_per_object(env_params_.num_models, temp);
-  printf("State number,     target_cost    source_cost    last_level_cost    candidate_costs    g_value_map\n");
+  printf("State number,     label         target_cost    source_cost    last_level_cost    candidate_costs    g_value_map\n");
   for (size_t ii = 0; ii < candidate_succ_ids.size(); ++ii) {
       const auto &output_unit = cost_computation_output[ii];
       const auto &adjusted_state = cost_computation_output[ii].adjusted_state;
@@ -1871,7 +1908,8 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
   }
   string fname = debug_dir_ + "depth_greedy_state.png";
   string cname = debug_dir_ + "color_greedy_state.png";
-  PrintState(greedy_state, fname, cname);
+  // PrintState(greedy_state, fname, cname);
+  PrintStateGPU(greedy_state);
   return greedy_state;
 }
 
@@ -3764,6 +3802,8 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
         {
           cloud->points.push_back(point);
           int label_mask_i = predicted_mask_image.at<uchar>(v, u);
+
+          // Store point cloud corresponding to this object, will be used for label specific icp
           segmented_object_clouds[label_mask_i-1]->points.push_back(point);
           filtered_depth_image.at<int32_t>(v,u) = static_cast<int32_t>(depth_image.at<unsigned short>(v,u));
           r_vec[u + v * s.width] = static_cast<uchar>(cv_vec[2]);
@@ -5226,7 +5266,8 @@ void EnvObjectRecognition::Initialize(const EnvConfig &env_config) {
 double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
                                                 const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
                                                 const std::vector<int> counted_indices /*= std::vector<int>(0)*/,
-                                                const PointCloudPtr target_cloud) {
+                                                const PointCloudPtr target_cloud,
+                                                const std::string object_name) {
   if (cost_debug_msgs)
     printf("GetICPAdjustedPose()\n");
   auto start = std::chrono::high_resolution_clock::now();
@@ -5250,6 +5291,17 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
     icp.setInputSource(cloud_in_downsampled);
   } else {
     icp.setInputSource(cloud_in);
+  }
+
+  // Trying to account for lack of depth points in fish can
+  float max_correspondence = perch_params_.icp_max_correspondence;
+  if (object_name.size() > 0)
+  {
+    if (object_name.compare("007_tuna_fish_can") == 0)
+    {
+      printf("Resetting ICP max correspondence\n");
+      max_correspondence = 0.08;
+    }
   }
 
   if (target_cloud == NULL)
@@ -5299,7 +5351,7 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
 
   // TODO: make all of the following algorithm parameters and place in a config file.
   // Set the max correspondence distance (e.g., correspondences with higher distances will be ignored)
-  icp.setMaxCorrespondenceDistance(perch_params_.icp_max_correspondence);
+  icp.setMaxCorrespondenceDistance(max_correspondence);
   // Set the maximum number of iterations (criterion 1)
   icp.setMaximumIterations(perch_params_.max_icp_iterations);
   // Set the transformation epsilon (criterion 2)

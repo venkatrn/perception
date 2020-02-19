@@ -5,7 +5,7 @@
 #include <opencv2/core/core.hpp>
 
 pcl::simulation::SimExample::SimExample(int argc, char **argv,
-                                        int height, int width):
+                                        int height, int width, bool use_opengl):
   height_(height), width_(width) {
 
   initializeGL (argc, argv);

@@ -241,7 +241,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   double GetICPAdjustedPose(const PointCloudPtr cloud_in,
                             const ContPose &pose_in, PointCloudPtr &cloud_out, ContPose *pose_out,
                             const std::vector<int> counted_indices = std::vector<int>(0),
-                            const PointCloudPtr target_cloud = NULL);
+                            const PointCloudPtr target_cloud = NULL,
+                            const std::string object_name = "");
 
   std::vector<unsigned short> GetInputDepthImage() {
     return observed_depth_image_;
@@ -417,6 +418,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                               int* poses_occluded);
 
   GraphState ComputeGreedyRenderPoses();
+  void PrintStateGPU(GraphState state);
 
   // We should get rid of this eventually.
   friend class ObjectRecognizer;

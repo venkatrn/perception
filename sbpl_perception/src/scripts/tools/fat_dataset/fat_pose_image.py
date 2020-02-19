@@ -1016,54 +1016,59 @@ class FATImage:
             # Second for changing raw. Here may need to rewrite the render or transition matrix!!!!!!!
             # First (half: 0, whole: 1) Second (0:0, 1:0-pi, 2:0-2pi)
             "002_master_chef_can": [0,0], #half_0
-            "003_cracker_box": [0,1], #half_0-pi
+            # "003_cracker_box": [0,1], #half_0-pi
             "004_sugar_box": [0,1], #half_0-pi
             "005_tomato_soup_can": [0,0], #half_0
-            "006_mustard_bottle": [1,1], #whole_0-pi
+            # "006_mustard_bottle": [1,1], #whole_0-pi
             "007_tuna_fish_can": [0,0], #half_0
-            "008_pudding_box": [0,1], #half_0-pi
-            "009_gelatin_box": [0,1], #half_0-pi
-            "010_potted_meat_can": [0,1], #half_0-pi
-            "011_banana": [1,2], #whole_0-2pi
-            "019_pitcher_base": [1,2], #whole_0-2pi
-            "021_bleach_cleanser": [1,2], #whole_0-2pi
+            # "008_pudding_box": [0,1], #half_0-pi
+            # "009_gelatin_box": [0,1], #half_0-pi
+            "010_potted_meat_can": [0,0], #half_0-pi
+            # "011_banana": [1,2], #whole_0-2pi
+            # "019_pitcher_base": [1,2], #whole_0-2pi
+            # "021_bleach_cleanser": [1,2], #whole_0-2pi
             "024_bowl": [1,0], #whole_0
-            "025_mug": [1,0], #whole_0-2pi
-            "035_power_drill" : [1,2], #whole_0-2pi
-            "036_wood_block": [0,1], #half_0-pi
-            "037_scissors": [1,2], #whole_0-2pi
+            # "025_mug": [1,0], #whole_0-2pi
+            # "035_power_drill" : [1,2], #whole_0-2pi
+            # "036_wood_block": [0,1], #half_0-pi
+            # "037_scissors": [1,2], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
-            "051_large_clamp": [1,1], #whole_0-pi
-            "052_extra_large_clamp": [1,2], #whole_0-pi
-            "061_foam_brick": [0,1] #half_0-pi
+            # "051_large_clamp": [1,1], #whole_0-pi
+            # "052_extra_large_clamp": [1,2], #whole_0-pi
+            # "061_foam_brick": [0,1] #half_0-pi
         }
         
         viewpoints_xyz = sphere_fibonacci_grid_points_with_sym_metric(num_samples,name_sym_dict[label][0])
-        if name_sym_dict[label][1] == 0:
-            for viewpoint in viewpoints_xyz:
-                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
-                theta, phi = sphere2euler(theta, phi)
-                xyz_rotation_angles = [phi, theta, 0]
-                # cn+=1
+        # if name_sym_dict[label][1] == 0:
+        for viewpoint in viewpoints_xyz:
+            r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+            theta, phi = sphere2euler(theta, phi)
+            if name_sym_dict[label][1] == 0:
+                xyz_rotation_angles = [-phi, theta, 0]
                 all_rots.append(xyz_rotation_angles)
-        if name_sym_dict[label][1] == 1:
-            for viewpoint in viewpoints_xyz:
-                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
-                theta, phi = sphere2euler(theta, phi)
-                step_size = math.pi/5
+            elif name_sym_dict[label][1] == 1:
+                step_size = math.pi/3
                 for yaw_temp in np.arange(0,math.pi, step_size):
-                    xyz_rotation_angles = [phi, theta, yaw_temp]
-                    # cn+=1
+                    xyz_rotation_angles = [-phi, yaw_temp, theta]
                     all_rots.append(xyz_rotation_angles)
-        if name_sym_dict[label][1] == 2:
-            for viewpoint in viewpoints_xyz:
-                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
-                theta, phi = sphere2euler(theta, phi)
-                step_size = math.pi/5
-                for yaw_temp in np.arange(-math.pi,math.pi, step_size):
-                    xyz_rotation_angles = [phi, theta, yaw_temp]
-                    # cn+=1
-                    all_rots.append(xyz_rotation_angles)
+        # if name_sym_dict[label][1] == 1:
+        #     for viewpoint in viewpoints_xyz:
+        #         r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+        #         theta, phi = sphere2euler(theta, phi)
+        #         step_size = math.pi/5
+        #         for yaw_temp in np.arange(0,math.pi, step_size):
+        #             xyz_rotation_angles = [phi, theta, yaw_temp]
+        #             # cn+=1
+        #             all_rots.append(xyz_rotation_angles)
+        # if name_sym_dict[label][1] == 2:
+        #     for viewpoint in viewpoints_xyz:
+        #         r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+        #         theta, phi = sphere2euler(theta, phi)
+        #         step_size = math.pi/5
+        #         for yaw_temp in np.arange(-math.pi,math.pi, step_size):
+        #             xyz_rotation_angles = [phi, theta, yaw_temp]
+        #             # cn+=1
+        #             all_rots.append(xyz_rotation_angles)
         # print("cn: {}".format(cn))
         return all_rots
 
@@ -1079,9 +1084,10 @@ class FATImage:
         # Load GT mask
         color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
         color_img = cv2.imread(color_img_path)
+
         composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
                 = self.coco_demo.run_on_opencv_image(color_img, use_thresh=True)
-        composite_image_path = '{}/mask_{}.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
+        composite_image_path = '{}/{}/mask.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
         cv2.imwrite(composite_image_path, composite)
 
         # depth_img_path = color_img_path.replace('.jpg', '.depth.png')
@@ -1140,18 +1146,18 @@ class FATImage:
 
             cnt = 0
             object_rotation_list = []
-            # rotation_samples = self.get_rotation_samples(label, num_samples)
+            rotation_samples = self.get_rotation_samples(label, num_samples)
             # Sample sphere and collect rotations
-            for viewpoint in viewpoints_xyz:
-                r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
-                theta, phi = sphere2euler(theta, phi)
-                xyz_rotation_angles = [phi, theta, 0]
-                print("Recovered rotation : {}".format(xyz_rotation_angles))
-                quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(phi, theta, 0).tolist())
-            #     object_rotation_list.append(quaternion)
-            # for xyz_rotation_angles in rotation_samples:
+            # for viewpoint in viewpoints_xyz:
+            #     r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
+            #     theta, phi = sphere2euler(theta, phi)
+            #     xyz_rotation_angles = [phi, theta, 0]
             #     print("Recovered rotation : {}".format(xyz_rotation_angles))
-            #     quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(xyz_rotation_angles[0], xyz_rotation_angles[1], xyz_rotation_angles[2]).tolist())
+            #     quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(phi, theta, 0).tolist())
+            # #     object_rotation_list.append(quaternion)
+            for xyz_rotation_angles in rotation_samples:
+                print("Recovered rotation : {}".format(xyz_rotation_angles))
+                quaternion =  get_xyzw_quaternion(RT_transform.euler2quat(xyz_rotation_angles[0], xyz_rotation_angles[1], xyz_rotation_angles[2]).tolist())
                 object_rotation_list.append(quaternion)
                 if print_poses:
                     rgb_gl, depth_gl = self.render_pose(
@@ -2437,13 +2443,13 @@ def run_ycb_6d(dataset_cfg=None):
     f_runtime = open('{}/runtime_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w")
     f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
 
-    #filter_objects = ['010_potted_meat_can']
+    #filter_objects = ['010_potted_meat_can'] - 49, 59, 53
     filter_objects = None
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can', '025_mug']
-    required_objects = ['002_master_chef_can']
+    required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
+    # required_objects = ['002_master_chef_can']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
     fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
@@ -2463,128 +2469,15 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
-    can_test =[
-        'data/0051/000713-color.png',
-        'data/0056/000375-color.png',
-        'data/0055/001666-color.png',
-        'data/0051/001528-color.png',
-        'data/0055/000425-color.png',
-        'data/0056/001116-color.png',
-        'data/0055/000454-color.png',
-        'data/0056/000517-color.png',
-        'data/0051/000964-color.png',
-        'data/0056/000504-color.png',
-        'data/0055/000464-color.png',
-        'data/0056/000236-color.png',
-        'data/0056/001135-color.png',
-        'data/0056/000116-color.png',
-        'data/0056/000604-color.png',
-        'data/0051/001673-color.png',
-        'data/0055/001374-color.png',
-        'data/0051/001368-color.png',
-        'data/0051/001603-color.png',
-        'data/0051/001650-color.png',
-        'data/0051/000943-color.png',
-        'data/0055/000461-color.png',
-        'data/0055/001811-color.png',
-        'data/0051/001092-color.png',
-        'data/0048/000907-color.png',
-        'data/0056/000170-color.png',
-        'data/0055/000761-color.png',
-        'data/0055/001327-color.png',
-        'data/0051/001729-color.png',
-        'data/0055/000944-color.png',
-        'data/0051/001617-color.png',
-        'data/0056/000254-color.png',
-        'data/0051/001150-color.png',
-        'data/0056/000249-color.png',
-        'data/0051/001091-color.png',
-        'data/0056/000303-color.png',
-        'data/0051/001968-color.png',
-        'data/0051/001424-color.png',
-        'data/0051/001339-color.png',
-        'data/0051/000789-color.png',
-        'data/0051/001111-color.png',
-        'data/0051/001080-color.png',
-        'data/0051/001497-color.png',
-        'data/0051/001316-color.png',
-        'data/0051/001182-color.png',
-        'data/0051/001521-color.png',
-        'data/0051/001393-color.png',
-        'data/0051/000740-color.png',
-        'data/0051/000982-color.png',
-        'data/0051/001996-color.png',
-        'data/0051/000773-color.png',
-        'data/0051/000930-color.png',
-        'data/0051/001629-color.png',
-        'data/0051/000997-color.png',
-        'data/0051/000939-color.png',
-        'data/0051/000916-color.png',
-        'data/0051/000897-color.png',
-        'data/0051/000721-color.png',
-        'data/0051/001499-color.png',
-        'data/0051/001788-color.png',
-        'data/0051/001452-color.png',
-        'data/0051/000848-color.png',
-        'data/0051/001366-color.png',
-        'data/0051/001057-color.png',
-        'data/0051/000961-color.png',
-        'data/0051/000819-color.png',
-        'data/0051/001531-color.png',
-        'data/0051/001518-color.png',
-        'data/0051/001932-color.png',
-        'data/0051/001687-color.png',
-        'data/0051/001045-color.png',
-        'data/0051/001005-color.png',
-        'data/0051/001021-color.png',
-        'data/0051/001445-color.png',
-        'data/0051/001545-color.png',
-        'data/0056/000878-color.png',
-        'data/0048/001773-color.png',
-        'data/0048/001776-color.png',
-        'data/0048/001576-color.png',
-        'data/0048/000821-color.png',
-        'data/0048/001888-color.png',
-        'data/0048/001705-color.png',
-        'data/0048/001708-color.png',
-        'data/0048/001595-color.png',
-        'data/0048/001135-color.png',
-        'data/0048/001849-color.png',
-        'data/0048/001750-color.png',
-        'data/0048/001693-color.png',
-        'data/0048/001597-color.png',
-        'data/0048/001881-color.png',
-        'data/0048/001840-color.png',
-        'data/0048/001819-color.png',
-        'data/0048/001722-color.png',
-        'data/0048/001643-color.png',
-        'data/0048/001289-color.png',
-        'data/0048/001823-color.png',
-        'data/0048/000971-color.png',
-        'data/0051/000249-color.png',
-        'data/0048/001151-color.png',
-        'data/0048/000884-color.png',
-        'data/0048/001413-color.png',
-        'data/0048/000874-color.png',
-        'data/0055/000513-color.png',
-        'data/0048/001235-color.png',
-        'data/0048/001233-color.png',
-        'data/0051/000611-color.png',
-        'data/0055/000649-color.png',
-        'data/0055/000951-color.png',
-        'data/0051/001734-color.png',
-        'data/0051/001149-color.png',
-        'data/0051/000946-color.png',
-    ]
-    for scene_i in range(49, 60):
-        for img_i in range(1,2500):
+    for scene_i in range(48, 60):
+        for img_i in range(1,2):
         # for img_i in IMG_LIST:
-        # for img_i in can_test:
+        # for img_i in tuna_list:
+        # for img_i in can_list:
             # if "0050" not in img_i:
             #     continue
             # Get Image
             image_name = 'data/00{}/00{}-color.png'.format(str(scene_i), str(img_i).zfill(4))
-            # image_name = 'data/{}-color.png'.format(img_i)
             # image_name = '{}'.format(img_i)
             # if image_name in skip_list:
             #     continue
@@ -2632,7 +2525,7 @@ def run_ycb_6d(dataset_cfg=None):
                 # Convert model output poses to table frame and save them to file so that they can be read by perch
                 _, max_min_dict, _ = fat_image.visualize_pose_ros(
                     # image_data, model_annotations, frame='table', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False
-                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False,
+                    image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=True,
                 )
 
                 # for anno in model_annotations:
