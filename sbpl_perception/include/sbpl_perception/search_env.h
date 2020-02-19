@@ -383,7 +383,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   void PrintGPUImages(vector<int32_t>& result_depth, 
                       vector<vector<uint8_t>>& result_color, 
                       int num_poses, string suffix, 
-                      vector<int> pose_occluded);
+                      vector<int> pose_occluded,
+                      const vector<int> cost = vector<int>());
 
   void PrintGPUClouds(const vector<ObjectState>& objects,
                       float* cloud, 

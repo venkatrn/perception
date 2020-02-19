@@ -1171,6 +1171,8 @@ class FATImage:
             centroid = np.flip(np.mean(np.argwhere(mask_list[box_id] > 0), axis=0))
             print("Centroid from mask : {}".format(centroid))
             print("Centroid from box : {}".format(centroids_2d[box_id]))
+            # centroid[1] -= 60
+            centroid = centroids_2d[box_id]
             for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                 ## Vary depth only
                 centre_world_point = self.get_world_point(centroid.tolist() + [depth])
@@ -2448,11 +2450,11 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
-    required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
-    # required_objects = ['002_master_chef_can']
+    # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
+    required_objects = ['024_bowl']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
-    fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
+    fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
     for object_name in required_objects:
         f_accuracy.write("{}-add,{}-adds,".format(object_name, object_name))
@@ -2468,12 +2470,40 @@ def run_ycb_6d(dataset_cfg=None):
     #for img_i in list(range(0,100)) + list(range(100,120)) + list(range(155,177)):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
+    bowl_list = [
+        'data/0049/001172-color.png',
+        'data/0049/001095-color.png',
+        'data/0049/000783-color.png',
+        'data/0049/001036-color.png',
+        'data/0049/000671-color.png',
+        'data/0049/001655-color.png',
+        'data/0049/001719-color.png',
+        'data/0049/000695-color.png',
+        'data/0049/000751-color.png',
+        'data/0049/000785-color.png',
+        'data/0049/001595-color.png',
+        'data/0049/000576-color.png',
+        'data/0049/001682-color.png',
+        'data/0049/001631-color.png',
+        'data/0049/001391-color.png',
+        'data/0049/001789-color.png',
+        'data/0049/000058-color.png',
+        'data/0049/001587-color.png',
+        'data/0049/002097-color.png',
+        'data/0049/001229-color.png',
+        'data/0049/001575-color.png',
+        'data/0049/001187-color.png',
+        'data/0049/000951-color.png',
+        'data/0049/001250-color.png',
+        'data/0049/001205-color.png',
+    ]
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
     for scene_i in range(48, 60):
         for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
+        # for img_i in bowl_list:
             # if "0050" not in img_i:
             #     continue
             # Get Image
@@ -2512,7 +2542,7 @@ def run_ycb_6d(dataset_cfg=None):
                 model_poses_file = None
                 labels, model_annotations, predicted_mask_path = \
                     fat_image.visualize_sphere_sampling(
-                        image_data, print_poses=False, required_objects=required_objects, num_samples=60
+                        image_data, print_poses=True, required_objects=required_objects, num_samples=60
                     )
                 
                 # # Run model to get multiple poses for each object

@@ -288,6 +288,7 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
             while(wait){
                 if(0 == atomicExch(&lock_entry[x_to_write+y_to_write*real_width], 1)){
                     if(curr_depth < depth_entry[x_to_write+y_to_write*real_width]){
+                        // occluding an existing point of same object
                         depth_entry[x_to_write+y_to_write*real_width] = curr_depth;
                         red_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v0);
                         green_entry[x_to_write+y_to_write*real_width] = (uint8_t)(dev_tri.color.v1);
