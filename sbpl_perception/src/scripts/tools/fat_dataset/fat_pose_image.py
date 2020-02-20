@@ -2543,7 +2543,7 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [0]:    
 
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
-    for scene_i in range(49, 60):
+    for scene_i in range(48, 60):
         for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
