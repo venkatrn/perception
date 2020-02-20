@@ -24,6 +24,7 @@ import time
 import yaml
 import argparse
 import scipy.io as scio
+import shutil
 
 ROS_PYTHON2_PKG_PATH = ['/opt/ros/kinetic/lib/python2.7/dist-packages',
                             '/usr/local/lib/python2.7/dist-packages/',
@@ -1031,7 +1032,7 @@ class FATImage:
             "024_bowl": [1,0], #whole_0
             # "025_mug": [1,0], #whole_0-2pi
             # "035_power_drill" : [1,2], #whole_0-2pi
-            # "036_wood_block": [0,1], #half_0-pi
+            "036_wood_block": [0,1], #half_0-pi
             # "037_scissors": [1,2], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
             # "051_large_clamp": [1,1], #whole_0-pi
@@ -1048,9 +1049,10 @@ class FATImage:
                 xyz_rotation_angles = [-phi, theta, 0]
                 all_rots.append(xyz_rotation_angles)
             elif name_sym_dict[label][1] == 1:
-                step_size = math.pi/3
+                step_size = math.pi/2
                 for yaw_temp in np.arange(0,math.pi, step_size):
                     xyz_rotation_angles = [-phi, yaw_temp, theta]
+                    # xyz_rotation_angles = [yaw_temp, -phi, theta]
                     all_rots.append(xyz_rotation_angles)
         # if name_sym_dict[label][1] == 1:
         #     for viewpoint in viewpoints_xyz:
@@ -1152,11 +1154,17 @@ class FATImage:
         depth_img_path = self.get_depth_img_path(color_img_path)
         depth_image = cv2.imread(depth_img_path, cv2.IMREAD_ANYDEPTH)
 
+        rotation_output_dir = os.path.join(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
+        if print_poses:
+            shutil.rmtree(rotation_output_dir, ignore_errors=True)
+            mkdir_if_missing(rotation_output_dir)
+
         if mask_type == "mask_rcnn":
             predicted_mask_path = os.path.join(os.path.dirname(depth_img_path), os.path.splitext(os.path.basename(color_img_path))[0] + '.predicted_mask.png')
             composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
                     = self.coco_demo.run_on_opencv_image(color_img, use_thresh=True)
-            composite_image_path = '{}/{}/mask.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
+            # if print_poses:
+            composite_image_path = '{}/mask.png'.format(rotation_output_dir)
             cv2.imwrite(composite_image_path, composite)
             print(rotation_list['top_viewpoint_ids'])
             labels_all = rotation_list['labels']
@@ -1201,8 +1209,7 @@ class FATImage:
         viewpoints_xyz = sphere_fibonacci_grid_points(num_samples)
         annotations = []
         grid_i = 0
-        rotation_output_dir = os.path.join(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
-        mkdir_if_missing(rotation_output_dir)
+        
         for box_id in range(len(labels)):
             label = labels[box_id]
             object_depth_mask = np.copy(depth_image)
@@ -2508,6 +2515,8 @@ def run_ycb_6d(dataset_cfg=None):
         python_debug_dir=dataset_cfg["python_debug_dir"]
     )
 
+    mask_type = 'mask_rcnn'
+    print_poses = False
     # Running on model and PERCH
     cfg_file = dataset_cfg['maskrcnn_config']
 
@@ -2522,10 +2531,12 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
-    required_objects = ['002_master_chef_can']
+    # required_objects = ['002_master_chef_can']
+    required_objects = ['036_wood_block']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
-    fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
+    if mask_type != "posecnn" or print_poses:
+        fat_image.init_model(cfg_file, print_poses=print_poses, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
     for object_name in required_objects:
         f_accuracy.write("{}-add,{}-adds,".format(object_name, object_name))
@@ -2543,11 +2554,38 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [0]:    
 
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
-    for scene_i in range(48, 60):
-        for img_i in range(1,2500):
+    wood_list = [
+        'data/0055/001120-color.png',
+        'data/0055/000884-color.png',
+        'data/0055/000927-color.png',
+        'data/0055/001055-color.png',
+        'data/0055/001216-color.png',
+        'data/0055/001046-color.png',
+        'data/0055/001520-color.png',
+        'data/0055/001151-color.png',
+        'data/0055/001229-color.png',
+        'data/0055/000997-color.png',
+        'data/0055/001188-color.png',
+        'data/0055/001044-color.png',
+        'data/0055/001358-color.png',
+        'data/0055/000915-color.png',
+        'data/0055/001064-color.png',
+        'data/0055/001088-color.png',
+        'data/0055/000687-color.png',
+        'data/0055/001042-color.png',
+        'data/0055/000839-color.png',
+        'data/0055/000901-color.png',
+        'data/0055/000910-color.png',
+        'data/0055/001505-color.png',
+        'data/0055/001161-color.png',
+        'data/0055/000893-color.png',
+    ]
+    for scene_i in range(55, 56):
+        for img_i in range(512,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
+        # for img_i in wood_list:
         # for img_i in bowl_list:
             # if "0050" not in img_i:
             #     continue
@@ -2585,14 +2623,16 @@ def run_ycb_6d(dataset_cfg=None):
             # )
             if True:
                 model_poses_file = None
-                keylist_name = '00{}/00{}'.format(str(scene_i), str(img_i).zfill(4))
-                mask_image_index = IMG_LIST.index(keylist_name)
+                mask_image_index = None
+                if mask_type == 'posecnn':
+                    # keylist_name = '00{}/00{}'.format(str(scene_i), str(img_i).zfill(4))
+                    keylist_name = image_name.replace('data/', '').replace('-color.png', '')
+                    mask_image_index = IMG_LIST.index(keylist_name)
                 labels, model_annotations, predicted_mask_path = \
                     fat_image.visualize_sphere_sampling(
-                        image_data, print_poses=False, required_objects=required_objects, num_samples=60,
-                        mask_type='posecnn', mask_image_id=mask_image_index
+                        image_data, print_poses=print_poses, required_objects=required_objects, num_samples=60,
+                        mask_type=mask_type, mask_image_id=mask_image_index
                     )
-                mask_image_index += 1 
                 # # Run model to get multiple poses for each object
                 # labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
                 #     fat_image.visualize_model_output(

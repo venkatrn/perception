@@ -6,7 +6,7 @@ dataset :
     maskrcnn_model_path : "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/ycb_trained_models/model_0025000.pth"
     perch_debug_dir : "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/visualization"
     # perch_debug_dir : "./visualization"
-    python_debug_dir : "./model_outputs_test"
+    python_debug_dir : "./model_outputs_new"
 python2_paths :
   - '/opt/ros/kinetic/lib/python2.7/dist-packages'
   - '/usr/local/lib/python2.7/dist-packages/'

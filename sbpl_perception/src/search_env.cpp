@@ -1044,7 +1044,7 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
 
       // cv::Mat color_depth_image;
       // ColorizeDepthImage(cv_depth, color_depth_image, min_observed_depth_, max_observed_depth_);
-      if ((cost.size() > 0 && cost[n] < 100) || cost.size() == 0)
+      if ((cost.size() > 0 && cost[n] < 200) || cost.size() == 0)
       {
         cv::imwrite(color_image_path, cv_color);
         cv::imwrite(depth_image_path, cv_depth);
@@ -1806,8 +1806,8 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       else
       {
         // cur_unit.cost = rendered_cost[i] + observed_cost[i];
-        // cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i]);
-        cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i] + pose_clutter_cost[i]);
+        cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i]);
+        // cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i] + pose_clutter_cost[i]);
       }
     }
     // if (root_level)
@@ -1898,7 +1898,8 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
         continue;  // Invalid successor
       }
 
-      if (output_unit.cost < lowest_cost_per_object[model_id])
+      if (output_unit.cost < lowest_cost_per_object[model_id] 
+      && abs(output_unit.state_properties.target_cost - output_unit.state_properties.source_cost) < 40)
       {
         lowest_cost_per_object[model_id] = output_unit.cost;
         lowest_cost_state_per_object[model_id] = adjusted_object_state;
