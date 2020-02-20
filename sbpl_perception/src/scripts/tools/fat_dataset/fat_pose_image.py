@@ -23,6 +23,7 @@ import calendar
 import time
 import yaml
 import argparse
+import scipy.io as scio
 
 ROS_PYTHON2_PKG_PATH = ['/opt/ros/kinetic/lib/python2.7/dist-packages',
                             '/usr/local/lib/python2.7/dist-packages/',
@@ -1072,7 +1073,70 @@ class FATImage:
         # print("cn: {}".format(cn))
         return all_rots
 
-    def visualize_sphere_sampling(self, image_data, print_poses=True, required_objects=None, num_samples=80):
+    def get_posecnn_bbox(self, idx, posecnn_rois):
+        border_list = [-1, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 480, 520, 560, 600, 640, 680]
+        rmin = int(posecnn_rois[idx][3]) + 1
+        rmax = int(posecnn_rois[idx][5]) - 1
+        cmin = int(posecnn_rois[idx][2]) + 1
+        cmax = int(posecnn_rois[idx][4]) - 1
+        r_b = rmax - rmin
+        for tt in range(len(border_list)):
+            if r_b > border_list[tt] and r_b < border_list[tt + 1]:
+                r_b = border_list[tt + 1]
+                break
+        c_b = cmax - cmin
+        for tt in range(len(border_list)):
+            if c_b > border_list[tt] and c_b < border_list[tt + 1]:
+                c_b = border_list[tt + 1]
+                break
+        center = [int((rmin + rmax) / 2), int((cmin + cmax) / 2)]
+        rmin = center[0] - int(r_b / 2)
+        rmax = center[0] + int(r_b / 2)
+        cmin = center[1] - int(c_b / 2)
+        cmax = center[1] + int(c_b / 2)
+        if rmin < 0:
+            delt = -rmin
+            rmin = 0
+            rmax += delt
+        if cmin < 0:
+            delt = -cmin
+            cmin = 0
+            cmax += delt
+        if rmax > self.width:
+            delt = rmax - self.width
+            rmax = self.width
+            rmin -= delt
+        if cmax > self.height:
+            delt = cmax - self.height
+            cmax = self.height
+            cmin -= delt
+        return rmin, rmax, cmin, cmax
+
+    def get_posecnn_mask(self, mask_image_id=None):
+        posecnn_meta = scio.loadmat('{0}/results_PoseCNN_RSS2018/{1}.mat'.format(self.coco_image_directory, str(mask_image_id).zfill(6)))
+        overall_mask = np.array(posecnn_meta['labels'])
+        posecnn_rois = np.array(posecnn_meta['rois'])
+
+        lst = posecnn_rois[:, 1:2].flatten()
+        labels = []
+        centroids_2d = []
+        masks = []
+        boxes = []
+        for idx in range(len(lst)):
+            itemid = int(lst[idx])
+            # print(itemid)
+            labels.append(self.category_id_to_names[itemid-1]['name'])
+            rmin, rmax, cmin, cmax = self.get_posecnn_bbox(idx, posecnn_rois)
+            boxes.append([rmin, rmax, cmin, cmax])
+            centroids_2d.append(np.flip(np.array([(rmin+rmax)/2, (cmin+cmax)/2])))
+            mask = np.copy(overall_mask)
+            mask[mask != itemid] = 0
+            masks.append(mask)
+        
+        return labels, masks, boxes, centroids_2d 
+
+    def visualize_sphere_sampling(
+            self, image_data, print_poses=True, required_objects=None, num_samples=80, mask_type='mask_rcnn', mask_image_id=None):
         
         from maskrcnn_benchmark.config import cfg
         from dipy.core.geometry import cart2sphere, sphere2cart
@@ -1084,23 +1148,30 @@ class FATImage:
         # Load GT mask
         color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
         color_img = cv2.imread(color_img_path)
-
-        composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
-                = self.coco_demo.run_on_opencv_image(color_img, use_thresh=True)
-        composite_image_path = '{}/{}/mask.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
-        cv2.imwrite(composite_image_path, composite)
-
         # depth_img_path = color_img_path.replace('.jpg', '.depth.png')
         depth_img_path = self.get_depth_img_path(color_img_path)
         depth_image = cv2.imread(depth_img_path, cv2.IMREAD_ANYDEPTH)
-        predicted_mask_path = os.path.join(os.path.dirname(depth_img_path), os.path.splitext(os.path.basename(color_img_path))[0] + '.predicted_mask.png')
 
-        labels = rotation_list['labels']
+        if mask_type == "mask_rcnn":
+            predicted_mask_path = os.path.join(os.path.dirname(depth_img_path), os.path.splitext(os.path.basename(color_img_path))[0] + '.predicted_mask.png')
+            composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
+                    = self.coco_demo.run_on_opencv_image(color_img, use_thresh=True)
+            composite_image_path = '{}/{}/mask.png'.format(self.python_debug_dir, self.get_clean_name(image_data['file_name']))
+            cv2.imwrite(composite_image_path, composite)
+            print(rotation_list['top_viewpoint_ids'])
+            labels_all = rotation_list['labels']
+            
+        elif mask_type == "posecnn":
+            predicted_mask_path = os.path.join(os.path.dirname(depth_img_path), os.path.splitext(os.path.basename(color_img_path))[0] + '.predicted_mask_posecnn.png')
+            labels_all, mask_list_all, boxes_all, centroids_2d_all = self.get_posecnn_mask(mask_image_id)
+            # print(labels_all)
+        
+
+        labels = labels_all
         mask_list = mask_list_all
         boxes = boxes_all
         centroids_2d = centroids_2d_all
 
-        print(rotation_list['top_viewpoint_ids'])
         # Select only those labels from network output that are required objects
         if required_objects is not None:
             labels = []
@@ -1110,11 +1181,11 @@ class FATImage:
             overall_binary_mask = np.zeros((self.height, self.width))
             mask_label_i = 1
             for label in required_objects:
-                if label in rotation_list['labels']:
-                    mask_i = rotation_list['labels'].index(label)
+                if label in labels_all:
+                    mask_i = labels_all.index(label)
                     # print(str(mask_i) + " found")
                     filter_mask = mask_list_all[mask_i]
-                    # print(filter_mask > 0)
+                    print(mask_label_i)
                     # Use binary mask to assign label in overall mask
                     overall_binary_mask[filter_mask > 0] = mask_label_i
                     labels.append(label)
@@ -2451,10 +2522,10 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
-    required_objects = ['024_bowl']
+    required_objects = ['002_master_chef_can']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
-    fat_image.init_model(cfg_file, print_poses=True, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
+    fat_image.init_model(cfg_file, print_poses=False, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
     for object_name in required_objects:
         f_accuracy.write("{}-add,{}-adds,".format(object_name, object_name))
@@ -2470,35 +2541,9 @@ def run_ycb_6d(dataset_cfg=None):
     #for img_i in list(range(0,100)) + list(range(100,120)) + list(range(155,177)):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:    
-    bowl_list = [
-        'data/0049/001172-color.png',
-        'data/0049/001095-color.png',
-        'data/0049/000783-color.png',
-        'data/0049/001036-color.png',
-        'data/0049/000671-color.png',
-        'data/0049/001655-color.png',
-        'data/0049/001719-color.png',
-        'data/0049/000695-color.png',
-        'data/0049/000751-color.png',
-        'data/0049/000785-color.png',
-        'data/0049/001595-color.png',
-        'data/0049/000576-color.png',
-        'data/0049/001682-color.png',
-        'data/0049/001631-color.png',
-        'data/0049/001391-color.png',
-        'data/0049/001789-color.png',
-        'data/0049/000058-color.png',
-        'data/0049/001587-color.png',
-        'data/0049/002097-color.png',
-        'data/0049/001229-color.png',
-        'data/0049/001575-color.png',
-        'data/0049/001187-color.png',
-        'data/0049/000951-color.png',
-        'data/0049/001250-color.png',
-        'data/0049/001205-color.png',
-    ]
-    IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str)[23:].tolist()
-    for scene_i in range(48, 60):
+
+    IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
+    for scene_i in range(49, 60):
         for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
@@ -2540,11 +2585,14 @@ def run_ycb_6d(dataset_cfg=None):
             # )
             if True:
                 model_poses_file = None
+                keylist_name = '00{}/00{}'.format(str(scene_i), str(img_i).zfill(4))
+                mask_image_index = IMG_LIST.index(keylist_name)
                 labels, model_annotations, predicted_mask_path = \
                     fat_image.visualize_sphere_sampling(
-                        image_data, print_poses=True, required_objects=required_objects, num_samples=60
+                        image_data, print_poses=False, required_objects=required_objects, num_samples=60,
+                        mask_type='posecnn', mask_image_id=mask_image_index
                     )
-                
+                mask_image_index += 1 
                 # # Run model to get multiple poses for each object
                 # labels, model_annotations, model_poses_file, predicted_mask_path, top_model_annotations = \
                 #     fat_image.visualize_model_output(
