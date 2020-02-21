@@ -1030,14 +1030,14 @@ class FATImage:
             # "019_pitcher_base": [1,2], #whole_0-2pi
             # "021_bleach_cleanser": [1,2], #whole_0-2pi
             "024_bowl": [1,0], #whole_0
-            # "025_mug": [1,0], #whole_0-2pi
+            "025_mug": [0,1], #whole_0-2pi
             # "035_power_drill" : [1,2], #whole_0-2pi
             "036_wood_block": [0,1], #half_0-pi
             # "037_scissors": [1,2], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
             # "051_large_clamp": [1,1], #whole_0-pi
             # "052_extra_large_clamp": [1,2], #whole_0-pi
-            # "061_foam_brick": [0,1] #half_0-pi
+            "061_foam_brick": [0,1] #half_0-pi
         }
         
         viewpoints_xyz = sphere_fibonacci_grid_points_with_sym_metric(num_samples,name_sym_dict[label][0])
@@ -2515,7 +2515,7 @@ def run_ycb_6d(dataset_cfg=None):
         python_debug_dir=dataset_cfg["python_debug_dir"]
     )
 
-    mask_type = 'mask_rcnn'
+    mask_type = 'posecnn'
     print_poses = False
     # Running on model and PERCH
     cfg_file = dataset_cfg['maskrcnn_config']
@@ -2532,7 +2532,7 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
     # required_objects = ['002_master_chef_can']
-    required_objects = ['036_wood_block']
+    required_objects = ['025_mug']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
     if mask_type != "posecnn" or print_poses:
@@ -2554,34 +2554,9 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [0]:    
 
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
-    wood_list = [
-        'data/0055/001120-color.png',
-        'data/0055/000884-color.png',
-        'data/0055/000927-color.png',
-        'data/0055/001055-color.png',
-        'data/0055/001216-color.png',
-        'data/0055/001046-color.png',
-        'data/0055/001520-color.png',
-        'data/0055/001151-color.png',
-        'data/0055/001229-color.png',
-        'data/0055/000997-color.png',
-        'data/0055/001188-color.png',
-        'data/0055/001044-color.png',
-        'data/0055/001358-color.png',
-        'data/0055/000915-color.png',
-        'data/0055/001064-color.png',
-        'data/0055/001088-color.png',
-        'data/0055/000687-color.png',
-        'data/0055/001042-color.png',
-        'data/0055/000839-color.png',
-        'data/0055/000901-color.png',
-        'data/0055/000910-color.png',
-        'data/0055/001505-color.png',
-        'data/0055/001161-color.png',
-        'data/0055/000893-color.png',
-    ]
-    for scene_i in range(55, 56):
-        for img_i in range(512,2500):
+
+    for scene_i in range(48, 60):
+        for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
@@ -2670,7 +2645,7 @@ def run_ycb_6d(dataset_cfg=None):
                     stats = None                        
             else:
                 run_perch = True
-                output_dir_name = os.path.join("greedy_6d_symmetry", fat_image.get_clean_name(image_data['file_name']))
+                output_dir_name = os.path.join("greedy_mug", fat_image.get_clean_name(image_data['file_name']))
                 perch_annotations, stats = fat_image.read_perch_output(output_dir_name)
             
             f_accuracy.write("{},".format(image_data['file_name']))            

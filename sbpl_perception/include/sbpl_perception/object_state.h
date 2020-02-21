@@ -156,6 +156,7 @@ class ObjectState {
   ObjectState();
   ObjectState(int id, bool symmetric, const ContPose &cont_pose);
   ObjectState(int id, bool symmetric, const DiscPose &disc_pose);
+  ObjectState(int id, bool symmetric, const ContPose &cont_pose, int segmentation_label_id);
 
   const int &id() const {
     return id_;
@@ -169,6 +170,9 @@ class ObjectState {
   const DiscPose &disc_pose() const {
     return disc_pose_;
   }
+  const int &segmentation_label_id() const {
+    return segmentation_label_id_;
+  }
 
   // Two object states are equal if they have the same ID and have the same discrete pose (up to symmetry).
   bool operator==(const ObjectState &other) const;
@@ -176,6 +180,7 @@ class ObjectState {
 
  private:
   int id_;
+  int segmentation_label_id_ = -1;
   bool symmetric_;
   ContPose cont_pose_;
   DiscPose disc_pose_;

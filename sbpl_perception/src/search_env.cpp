@@ -5891,12 +5891,19 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
 
   std::vector<std::vector<uint8_t>> result_color;
   std::vector<int32_t> result_depth;
+  vector<int> pose_segmentation_label;
+
+  for (ObjectState state : objects)
+  {
+    pose_segmentation_label.push_back(state.segmentation_label_id());
+  }
 
   GetStateImagesGPU(
-        objects, random_color, source_result_depth, 
-        result_color, result_depth, random_poses_occluded, 0,
-        random_poses_occluded_other, random_pose_clutter_cost
-      );
+    objects, random_color, source_result_depth, 
+    result_color, result_depth, random_poses_occluded, 0,
+    random_poses_occluded_other, random_pose_clutter_cost,
+    pose_segmentation_label
+  );
   
   // PrintGPUImages(result_depth, result_color, num_poses, "succ_pre_shift", random_poses_occluded);
 
@@ -6102,7 +6109,7 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               }
 
               GraphState s = source_state; // Can only add objects, not remove them
-              const ObjectState new_object(ii, obj_models_[ii].symmetric(), p);
+              const ObjectState new_object(ii, obj_models_[ii].symmetric(), p, required_object_id + 1);
               
               unshifted_object_states.push_back(new_object);
               succ_count += 1;

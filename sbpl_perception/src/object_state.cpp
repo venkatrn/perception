@@ -203,6 +203,11 @@ ObjectState::ObjectState(int id, bool symmetric,
                          const DiscPose &disc_pose) : id_(id), symmetric_(symmetric),
   cont_pose_(disc_pose), disc_pose_(disc_pose) {}
 
+ObjectState::ObjectState(int id, bool symmetric,
+                         const ContPose &cont_pose,
+                         int segmentation_label_id) : id_(id), symmetric_(symmetric),
+  cont_pose_(cont_pose), disc_pose_(cont_pose), segmentation_label_id_(segmentation_label_id) {}
+
 bool ObjectState::operator==(const ObjectState &other) const {
   if (id_ != other.id()) {
     return false;
