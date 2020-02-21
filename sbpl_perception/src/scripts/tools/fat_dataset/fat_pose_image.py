@@ -1021,13 +1021,13 @@ class FATImage:
             # "003_cracker_box": [0,1], #half_0-pi
             "004_sugar_box": [0,1], #half_0-pi
             "005_tomato_soup_can": [0,0], #half_0
-            # "006_mustard_bottle": [1,1], #whole_0-pi
+            "006_mustard_bottle": [0,0], #whole_0-pi
             "007_tuna_fish_can": [0,0], #half_0
             # "008_pudding_box": [0,1], #half_0-pi
             # "009_gelatin_box": [0,1], #half_0-pi
             "010_potted_meat_can": [0,0], #half_0-pi
             # "011_banana": [1,2], #whole_0-2pi
-            # "019_pitcher_base": [1,2], #whole_0-2pi
+            "019_pitcher_base": [0,0], #whole_0-2pi
             # "021_bleach_cleanser": [1,2], #whole_0-2pi
             "024_bowl": [1,0], #whole_0
             "025_mug": [0,1], #whole_0-2pi
@@ -1052,6 +1052,12 @@ class FATImage:
                 step_size = math.pi/2
                 for yaw_temp in np.arange(0,math.pi, step_size):
                     xyz_rotation_angles = [-phi, yaw_temp, theta]
+                    # xyz_rotation_angles = [yaw_temp, -phi, theta]
+                    all_rots.append(xyz_rotation_angles)
+            elif name_sym_dict[label][1] == 2:
+                step_size = math.pi/2
+                for yaw_temp in np.arange(0,math.pi, step_size):
+                    xyz_rotation_angles = [-phi, theta, yaw_temp]
                     # xyz_rotation_angles = [yaw_temp, -phi, theta]
                     all_rots.append(xyz_rotation_angles)
         # if name_sym_dict[label][1] == 1:
@@ -2532,7 +2538,8 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
     # required_objects = ['002_master_chef_can']
-    required_objects = ['025_mug']
+    # required_objects = ['025_mug']
+    required_objects = ['006_mustard_bottle', '019_pitcher_base']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
     if mask_type != "posecnn" or print_poses:
