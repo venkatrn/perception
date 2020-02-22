@@ -1029,9 +1029,9 @@ class FATImage:
             # "011_banana": [1,2], #whole_0-2pi
             "019_pitcher_base": [0,0], #whole_0-2pi
             # "021_bleach_cleanser": [1,2], #whole_0-2pi
-            "024_bowl": [1,0], #whole_0
+            "024_bowl": [0,2], #whole_0
             "025_mug": [0,1], #whole_0-2pi
-            # "035_power_drill" : [1,2], #whole_0-2pi
+            "035_power_drill" : [1,0], #whole_0-2pi
             "036_wood_block": [0,1], #half_0-pi
             # "037_scissors": [1,2], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
@@ -1057,7 +1057,7 @@ class FATImage:
             elif name_sym_dict[label][1] == 2:
                 step_size = math.pi/2
                 for yaw_temp in np.arange(0,math.pi, step_size):
-                    xyz_rotation_angles = [-phi, theta, yaw_temp]
+                    xyz_rotation_angles = [-phi, yaw_temp, theta]
                     # xyz_rotation_angles = [yaw_temp, -phi, theta]
                     all_rots.append(xyz_rotation_angles)
         # if name_sym_dict[label][1] == 1:
@@ -2522,7 +2522,7 @@ def run_ycb_6d(dataset_cfg=None):
     )
 
     mask_type = 'posecnn'
-    print_poses = False
+    print_poses = True
     # Running on model and PERCH
     cfg_file = dataset_cfg['maskrcnn_config']
 
@@ -2538,8 +2538,8 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
     # required_objects = ['002_master_chef_can']
-    # required_objects = ['025_mug']
-    required_objects = ['006_mustard_bottle', '019_pitcher_base']
+    required_objects = ['010_potted_meat_can']
+    # required_objects = ['006_mustard_bottle', '019_pitcher_base']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
     if mask_type != "posecnn" or print_poses:
