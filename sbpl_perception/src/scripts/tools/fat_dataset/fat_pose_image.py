@@ -1029,9 +1029,9 @@ class FATImage:
             # "011_banana": [1,2], #whole_0-2pi
             "019_pitcher_base": [0,0], #whole_0-2pi
             # "021_bleach_cleanser": [1,2], #whole_0-2pi
-            "024_bowl": [0,2], #whole_0
+            "024_bowl": [1,0], #whole_0
             "025_mug": [0,1], #whole_0-2pi
-            "035_power_drill" : [1,0], #whole_0-2pi
+            # "035_power_drill" : [1,0], #whole_0-2pi
             "036_wood_block": [0,1], #half_0-pi
             # "037_scissors": [1,2], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
