@@ -47,7 +47,8 @@ class FATImage:
             img_height=540,
             distance_scale=100,
             perch_debug_dir=None,
-            python_debug_dir="./model_outputs"
+            python_debug_dir="./model_outputs",
+            dataset_type="ycb"
         ):
         '''
             env_config : env_config.yaml in sbpl_perception/config to use with PERCH
@@ -57,6 +58,7 @@ class FATImage:
         self.width = img_width
         self.height = img_height
         self.distance_scale = distance_scale
+        self.dataset_type = dataset_type
         self.coco_image_directory = coco_image_directory
         self.example_coco = COCO(coco_annotation_file)
         example_coco = self.example_coco
@@ -561,6 +563,7 @@ class FATImage:
 
         cam_to_body = self.cam_to_body if camera_optical_frame == False else None
 
+        camera_pose_table = None
         if input_camera_pose is None:
             if (frame == 'camera' and get_table_pose) or frame =='table':
                 depth_img_path = self.get_depth_img_path(color_img_path)
@@ -683,14 +686,16 @@ class FATImage:
         # max_min_dict['zmin'] = table_pose_msg.pose.position.z
         # print("Yaw only objects in the image : {}".format(yaw_only_objects))
 
-        return yaw_only_objects, max_min_dict, transformed_annotations
+        return yaw_only_objects, max_min_dict, transformed_annotations, camera_pose_table
 
 
     def get_depth_img_path(self, color_img_path):
         # For FAT/NDDS
-        # return color_img_path.replace(os.path.splitext(color_img_path)[1], '.depth.png')
+        if self.dataset_type == "ndds":
+            return color_img_path.replace(os.path.splitext(color_img_path)[1], '.depth.png')
         # For YCB
-        return color_img_path.replace('color', 'depth')
+        elif self.dataset_type == "ycb":
+            return color_img_path.replace('color', 'depth')
 
     def get_mask_img_path(self, color_img_path):
         # For YCB
@@ -2317,20 +2322,15 @@ def run_dope_6d():
 
     return
 
-def run_sameshape_gpu():
+def run_sameshape_gpu(dataset_cfg=None):
     ## Running on PERCH only with synthetic color dataset - shape
-    # Use normalize cost to get best results
-    # base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed"
-    base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed/Final"
-    # base_dir = "/media/sbpl/Data/Aditya/datasets/Zed"
-    image_directory = base_dir
-    # annotation_file = base_dir + '/instances_newmap1_reduced_2_2018.json'
-    annotation_file = base_dir + '/instances_newmap1_turbosquid_2018.json'
-    # annotation_file = base_dir + '/instances_newmap1_turbosquid_can_only_2018.json'
 
-    model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
-    # model_dir = "/media/sbpl/Data/Aditya/datasets/turbosquid/models"
-    # model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models"
+    image_directory = dataset_cfg['image_dir']
+    # annotation_file = image_directory + '/instances_newmap1_turbosquid_can_only_2018.json'
+    annotation_file = image_directory + '/instances_newmap1_turbosquid_2018.json'
+    model_dir = dataset_cfg['model_dir']
+
+
     fat_image = FATImage(
         coco_annotation_file=annotation_file,
         coco_image_directory=image_directory,
@@ -2339,21 +2339,29 @@ def run_sameshape_gpu():
         model_mesh_in_mm=True,
         # model_mesh_scaling_factor=0.005,
         model_mesh_scaling_factor=1,
-        models_flipped=False
+        models_flipped=False,
+        img_width=960,
+        img_height=540,
+        distance_scale=100,
+        env_config="pr2_env_config.yaml",
+        planner_config="pr2_planner_config.yaml",
+        perch_debug_dir=dataset_cfg["perch_debug_dir"],
+        python_debug_dir=dataset_cfg["python_debug_dir"],
+        dataset_type=dataset_cfg["type"]
     )
 
-    f_runtime = open('runtime.txt', "w")
-    f_accuracy = open('accuracy.txt', "w")
+    f_runtime = open('runtime.txt', "w", 1)
+    f_accuracy = open('accuracy.txt', "w", 1)
     f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
 
     # required_objects = ['coke_can', 'coke_bottle', 'pepsi_can']
     # required_objects = ['coke_bottle']
     # required_objects = ['010_potted_meat_can', '008_pudding_box']
     # required_objects = ['010_potted_meat_can']
-    # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
-    required_objects = ['pepsi_can']
+    required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
+    # required_objects = ['sprite_bottle']
     # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
-    # required_objects = ['coke_bottle']
+    # required_objects = ['sprite_can']
     # required_objects = ['pepsi_can', 'sprite_bottle', 'coke_bottle']
 
     f_accuracy.write("name ")
@@ -2363,14 +2371,14 @@ def run_sameshape_gpu():
     f_accuracy.write("\n")
 
     read_results_only = False
+    # fat_image.search_resolution_yaw = 1.57
     # 5 in can only
-    for img_i in range(0,1):
+    for img_i in range(0,50):
 
-        # image_name = 'NewMap1_reduced_2/0000{}.left.png'.format(str(img_i).zfill(2))
         # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
         image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
         image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
-        yaw_only_objects, max_min_dict, transformed_annotations = \
+        yaw_only_objects, max_min_dict, transformed_annotations, camera_pose_table = \
                 fat_image.visualize_pose_ros(image_data, annotations, frame='table', camera_optical_frame=False)
 
         if read_results_only == False:
@@ -2387,7 +2395,7 @@ def run_sameshape_gpu():
                 # use_external_render=0, required_object=['coke', 'sprite', 'pepsi'],
                 # use_external_render=0, required_object=['sprite', 'coke', 'pepsi'],
                 camera_optical_frame=False, use_external_pose_list=0, gt_annotations=transformed_annotations,
-                num_cores=0
+                num_cores=0, input_camera_pose=camera_pose_table
             )
         else:
             output_dir_name = os.path.join("final_comp", "color_lazy_histogram", fat_image.get_clean_name(image_data['file_name']))
@@ -2528,8 +2536,8 @@ def run_ycb_6d(dataset_cfg=None):
     cfg_file = dataset_cfg['maskrcnn_config']
 
     ts = calendar.timegm(time.gmtime())
-    f_accuracy = open('{}/accuracy_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w")
-    f_runtime = open('{}/runtime_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w")
+    f_accuracy = open('{}/accuracy_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w", 1)
+    f_runtime = open('{}/runtime_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w", 1)
     f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
 
     #filter_objects = ['010_potted_meat_can'] - 49, 59, 53
@@ -2601,7 +2609,7 @@ def run_ycb_6d(dataset_cfg=None):
                     continue
 
             # Visualize ground truth in ros
-            # yaw_only_objects, max_min_dict_gt, transformed_annotations = fat_image.visualize_pose_ros(
+            # yaw_only_objects, max_min_dict_gt, transformed_annotations, _ = fat_image.visualize_pose_ros(
             #     image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
             # )
             if True:
@@ -2624,7 +2632,7 @@ def run_ycb_6d(dataset_cfg=None):
                 #     )
 
                 # Convert model output poses to table frame and save them to file so that they can be read by perch
-                _, max_min_dict, _ = fat_image.visualize_pose_ros(
+                _, max_min_dict, _, _ = fat_image.visualize_pose_ros(
                     # image_data, model_annotations, frame='table', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False
                     image_data, model_annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=True, ros_publish=False,
                 )
@@ -2689,7 +2697,8 @@ if __name__ == '__main__':
     ROS_PYTHON2_PKG_PATH = config['python2_paths']
     ROS_PYTHON3_PKG_PATH = config['python3_paths'][0]
 
-    run_ycb_6d(dataset_cfg=config['dataset'])
+    # run_ycb_6d(dataset_cfg=config['dataset'])
+    run_sameshape_gpu(dataset_cfg=config['dataset'])
 
     # coco_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/coco_results.pth')
     # all_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/predictions.pth')

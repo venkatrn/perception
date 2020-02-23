@@ -215,7 +215,8 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                                         float* pose_clutter_points_entry,
                                         float* pose_total_points_entry,
                                         uint8_t* source_label_entry,
-                                        int* pose_segmentation_label_entry) {
+                                        int* pose_segmentation_label_entry,
+                                        bool use_segmentation_label) {
                                         // float* l_entry,float* a_entry,float* b_entry){
     // refer to tiny renderer
     // https://github.com/ssloy/tinyrenderer/blob/master/our_gl.cpp
@@ -299,10 +300,11 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                 }
             }
             int32_t& new_depth = depth_entry[x_to_write+y_to_write*real_width];
-            if (pose_segmentation_label_entry == NULL ||
-                (pose_segmentation_label_entry != NULL && *pose_segmentation_label_entry != source_label))
+            if ((use_segmentation_label == false && abs(new_depth - source_depth) > 1.0) ||
+                (use_segmentation_label == true && *pose_segmentation_label_entry != source_label))
             {
                 // printf("%d, %d\n", *pose_segmentation_label_entry, source_label);
+                // printf("%d, %d\n", source_depth, curr_depth);
                 if(new_depth > source_depth && source_depth > 0){
                     // when we are rendering at x,y where source pixel is also present at depth closer to camera
                     // valid condition as source occludes render
@@ -472,7 +474,8 @@ __global__ void render_triangle_multi(
                                 float* pose_clutter_points_vec, 
                                 float* pose_total_points_vec,
                                 uint8_t* device_source_mask_label_vec,
-                                int* pose_segmentation_label_vec) {
+                                int* pose_segmentation_label_vec,
+                                bool use_segmentation_label) {
     size_t pose_i = blockIdx.y;
     int model_id = device_pose_model_map_ptr[pose_i];
     size_t tri_i = blockIdx.x*blockDim.x + threadIdx.x;
@@ -556,7 +559,8 @@ __global__ void render_triangle_multi(
         pose_clutter_points_entry,
         pose_total_points_entry,
         device_source_mask_label_vec,
-        pose_segmentation_label_entry);
+        pose_segmentation_label_entry,
+        use_segmentation_label);
 }
 __global__ void bgr_to_gray_kernel( uint8_t* red_in,uint8_t* green_in,uint8_t* blue_in,
                                     uint8_t* red_ob, uint8_t* green_ob,uint8_t* blue_ob, 
@@ -882,12 +886,10 @@ device_vector_holder<int> render_cuda_multi(
     int* device_pose_occluded_other_vec = thrust::raw_pointer_cast(device_pose_occluded_other.data());
     float* device_pose_clutter_points_vec = thrust::raw_pointer_cast(device_pose_clutter_points.data());
     float* device_pose_total_points_vec = thrust::raw_pointer_cast(device_pose_total_points.data());
-    int* device_pose_segmentation_label_vec;
-    
+    int* device_pose_segmentation_label_vec = thrust::raw_pointer_cast(device_pose_segmentation_label.data());
+    bool use_segmentation_label = false;
     if (device_pose_segmentation_label.size() > 0)
-        device_pose_segmentation_label_vec = thrust::raw_pointer_cast(device_pose_segmentation_label.data());
-    else
-        device_pose_segmentation_label_vec = NULL;
+        use_segmentation_label = true ;
 
     int32_t* device_source_depth_vec = thrust::raw_pointer_cast(device_source_depth.data());
     uint8_t* device_source_red_vec = thrust::raw_pointer_cast(device_source_color_red.data());
@@ -929,7 +931,8 @@ device_vector_holder<int> render_cuda_multi(
                                                     device_pose_clutter_points_vec,
                                                     device_pose_total_points_vec,
                                                     device_source_mask_label_vec,
-                                                    device_pose_segmentation_label_vec);
+                                                    device_pose_segmentation_label_vec,
+                                                    use_segmentation_label);
     // cudaDeviceSynchronize();
     // Objects occluding other objects already in the scene
     printf("Pose Occlusions\n");

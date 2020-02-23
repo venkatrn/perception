@@ -70,7 +70,9 @@ namespace cuda_renderer {
         std::vector<float> pose_observed_points_total,
         float* &observed_cost,
         int* pose_segmentation_label,
-        int* result_observed_cloud_label);
+        int* result_observed_cloud_label,
+        int cost_type,
+        bool calculate_observed_cost);
 
     bool knn_cuda_global(const float * ref,
                         int           ref_nb,

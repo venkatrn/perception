@@ -529,7 +529,8 @@ __global__ void compute_render_cost(
         float* rendered_cloud,
         uint8_t* cuda_observed_explained,
         int* pose_segmentation_label,
-        int* result_observed_cloud_label)
+        int* result_observed_cloud_label,
+        int type)
 {
     /**
      * Params -
@@ -566,7 +567,6 @@ __global__ void compute_render_cost(
         {
             // compute color cost
             // printf("%d, %d\n", pose_segmentation_label[pose_index], result_observed_cloud_label[o_point_index]);
-            int type = 2;
             uint8_t red2  = rendered_cloud_color[point_index + 2*rendered_cloud_point_num];
             uint8_t green2  = rendered_cloud_color[point_index + 1*rendered_cloud_point_num];
             uint8_t blue2  = rendered_cloud_color[point_index + 0*rendered_cloud_point_num];
@@ -584,7 +584,7 @@ __global__ void compute_render_cost(
                 rgb2lab(red1,green1,blue1,lab1);
                 double cur_dist = color_distance(lab1[0],lab1[1],lab1[2],lab2[0],lab2[1],lab2[2]);
                 // printf("color distance :%f\n", cur_dist);
-                if(cur_dist > 20){
+                if(cur_dist > 12.5){
                     // add to render cost if color doesnt match
                     atomicAdd(&cuda_rendered_cost[pose_index], cost);
                 }
@@ -655,7 +655,9 @@ bool compute_rgbd_cost(
     std::vector<float> pose_observed_points_total,
     float* &observed_cost,
     int* pose_segmentation_label,
-    int* result_observed_cloud_label
+    int* result_observed_cloud_label,
+    int cost_type,
+    bool calculate_observed_cost
 )
 {
     // for (int i = 0; i < num_poses; i++)
@@ -730,7 +732,8 @@ bool compute_rgbd_cost(
         cuda_rendered_cloud,
         cuda_observed_explained,
         cuda_pose_segmentation_label,
-        cuda_observed_cloud_label);
+        cuda_observed_cloud_label,
+        cost_type);
     
 
     
@@ -770,7 +773,7 @@ bool compute_rgbd_cost(
 
 
     // Compute observe cost using points marked in render cost kernel
-    if (true)
+    if (calculate_observed_cost)
     {
         thrust::device_vector<float> cuda_pose_observed_explained_vec(num_poses, 0);
         float* cuda_pose_observed_explained = thrust::raw_pointer_cast(cuda_pose_observed_explained_vec.data());

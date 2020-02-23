@@ -290,13 +290,12 @@ bool ObjectRecognizer::LocalizeObjectsGreedyRender(const RecognitionInput &input
 
   bool plan_success = true;
   env_obj_->SetInput(input);
-  chrono::time_point<chrono::system_clock> start, end;
-  start = chrono::system_clock::now();
+  // chrono::time_point<chrono::system_clock> start, end;
+  // start = chrono::system_clock::now();
 
   auto greedy_state = env_obj_->ComputeGreedyRenderPoses();
-	end = chrono::system_clock::now();
-  chrono::duration<double> elapsed_seconds = end-start;
-  // if (IsMaster(mpi_world_)) {
+	// end = chrono::system_clock::now();
+  // chrono::duration<double> elapsed_seconds = end-start;
 
   const auto &models = env_obj_->obj_models_;
   // object_transforms->resize(input.model_names.size());
@@ -304,14 +303,14 @@ bool ObjectRecognizer::LocalizeObjectsGreedyRender(const RecognitionInput &input
   // detected_poses->resize(input.model_names.size());
 
   last_env_stats_ = env_obj_->GetEnvStats();
-  last_env_stats_.scenes_rendered = 0;
+  // last_env_stats_.scenes_rendered = 0;
   last_env_stats_.scenes_valid = 0;
 
   PlannerStats icp_stats;
   icp_stats.eps = 0;
   icp_stats.cost = 0;
-  icp_stats.time = elapsed_seconds.count();
-  icp_stats.expands = 0;
+  icp_stats.time = last_env_stats_.time;
+  icp_stats.expands = last_env_stats_.scenes_rendered;
   last_planning_stats_.push_back(icp_stats);
 
   int ii = 0;

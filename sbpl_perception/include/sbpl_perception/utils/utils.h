@@ -114,6 +114,7 @@ struct ModelMetaData {
 struct EnvStats {
   int scenes_rendered;
   int scenes_valid;
+  double time;
 };
 
 typedef std::function<int(const GraphState &state)> Heuristic;

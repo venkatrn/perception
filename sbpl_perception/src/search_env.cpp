@@ -69,7 +69,7 @@ namespace {
 
   constexpr double kNormalizeCostBase = 100;
 
-  bool kUseColorCost = false;
+  bool kUseColorCost = true;
 
   bool kUseColorPruning = false;
 
@@ -1380,11 +1380,14 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     {
       // source_result_depth.assign(observed_depth_data, observed_depth_data + kCameraWidth * kCameraHeight-1);
       source_result_depth.assign(unfiltered_depth_data, unfiltered_depth_data + kCameraWidth * kCameraHeight-1);
-      for (int i = 0; i < source_result_depth.size(); i++)
-      {
-        // TODO : fix this hardcode
-        // ycb has depth factor of 10000, and gpu is using 100, divide by 100 to get it to gpu's depth factor
-        source_result_depth[i] /= 100;
+      if (env_params_.use_external_pose_list == 1)
+      {    
+        for (int i = 0; i < source_result_depth.size(); i++)
+        {
+          // TODO : fix this hardcode
+          // ycb has depth factor of 10000, and gpu is using 100, divide by 100 to get it to gpu's depth factor
+          source_result_depth[i] /= 100;
+        }
       }
     }
   }
@@ -1487,6 +1490,11 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
     // std::vector<cuda_renderer::Model::mat4x4> cur_transform(start,finish);
     std::vector<std::vector<uint8_t>> result_color, adjusted_result_color;
     std::vector<int32_t> result_depth, adjusted_result_depth;
+
+    if (env_params_.use_external_pose_list == 0)
+    {
+      pose_segmentation_label.clear();
+    }
 
     GetStateImagesGPU(
       last_object_states, source_result_color, source_result_depth, 
@@ -1620,6 +1628,26 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
       cout << "KNN done\n";
       float sensor_resolution = perch_params_.sensor_resolution;
       //// Count parallely how many points are explained in color and distance
+      int cost_type;
+      bool calc_obs_cost = false;
+      if (env_params_.use_external_pose_list == 1)
+      {
+        cost_type = 2;
+        calc_obs_cost = true;
+      }
+      else
+      {
+        if (kUseColorCost)
+        {
+          cost_type = 1;
+        }
+        else
+        {
+          cost_type = 0;
+        }
+        calc_obs_cost = false;
+      }
+      printf("Using cost type : %d\n", cost_type);
       cuda_renderer::compute_rgbd_cost(
         sensor_resolution, knn_dist, knn_index, 
         poses_occluded_ptr, cloud_pose_map,
@@ -1628,7 +1656,7 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         rendered_point_num, observed_point_num,
         num_poses, rendered_cost_gpu, pose_observed_points_total,
         observed_cost_gpu, pose_segmentation_label.data(),
-        result_observed_cloud_label
+        result_observed_cloud_label, cost_type, calc_obs_cost
       );
 
       for(int i = 0; i < num_poses; i++){
@@ -1848,6 +1876,9 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
 
 GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
 
+  chrono::time_point<chrono::system_clock> start, end;
+  start = chrono::system_clock::now();
+
   GraphState source_state;
   vector<GraphState> candidate_succs;
   GenerateSuccessorStates(source_state, &candidate_succs);
@@ -1898,11 +1929,22 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
         continue;  // Invalid successor
       }
 
-      if (output_unit.cost < lowest_cost_per_object[model_id] 
-      && abs(output_unit.state_properties.target_cost - output_unit.state_properties.source_cost) < 40)
+      if (env_params_.use_external_pose_list == 1)
       {
-        lowest_cost_per_object[model_id] = output_unit.cost;
-        lowest_cost_state_per_object[model_id] = adjusted_object_state;
+        if (output_unit.cost < lowest_cost_per_object[model_id] 
+        && abs(output_unit.state_properties.target_cost - output_unit.state_properties.source_cost) < 40)
+        {
+          lowest_cost_per_object[model_id] = output_unit.cost;
+          lowest_cost_state_per_object[model_id] = adjusted_object_state;
+        }
+      }
+      else
+      {
+        if (output_unit.cost < lowest_cost_per_object[model_id])
+        {
+          lowest_cost_per_object[model_id] = output_unit.cost;
+          lowest_cost_state_per_object[model_id] = adjusted_object_state;
+        }
       }
 
       if (image_debug_) {
@@ -1927,6 +1969,9 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
       printf("Cost of lowest cost state for %s : %d\n", obj_models_[model_id].name().c_str(),lowest_cost_per_object[model_id]);
     }
   }
+  end = chrono::system_clock::now();
+  chrono::duration<double> elapsed_seconds = end-start;
+  env_stats_.time = elapsed_seconds.count();
   string fname = debug_dir_ + "depth_greedy_state.png";
   string cname = debug_dir_ + "color_greedy_state.png";
   // PrintState(greedy_state, fname, cname);
@@ -3770,7 +3815,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
   cv::Size s = depth_image.size();
   cv::Mat filtered_depth_image(s.height, s.width, CV_32SC1, cv::Scalar(0));
   cv::Mat unfiltered_depth_image(s.height, s.width, CV_32SC1, cv::Scalar(0));
-  cv::Mat filtered_color_image = cv::Mat(s.height, s.width, CV_8UC3, cv::Scalar(0,0,0));
+  // cv::Mat filtered_color_image = cv::Mat(s.height, s.width, CV_8UC3, cv::Scalar(0,0,0));
   vector<uint8_t> r_vec(s.height * s.width, 0);
   vector<uint8_t> g_vec(s.height * s.width, 0);
   vector<uint8_t> b_vec(s.height * s.width, 0);
@@ -3828,13 +3873,14 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
 
       if (env_params_.use_external_pose_list == 0)
       {
+        unfiltered_depth_image.at<int32_t>(v,u) = static_cast<int32_t>(depth_image.at<uchar>(v,u));
         if (point.z >= env_params_.table_height
             && point.x <= env_params_.x_max && point.x >= env_params_.x_min
             && point.y <= env_params_.y_max && point.y >= env_params_.y_min)
           {
             cloud->points.push_back(point);
             filtered_depth_image.at<int32_t>(v,u) = static_cast<int32_t>(depth_image.at<uchar>(v,u));
-            filtered_color_image.at<cv::Vec3b>(v,u) = color_image.at<cv::Vec3b>(v,u);
+            // filtered_color_image.at<cv::Vec3b>(v,u) = color_image.at<cv::Vec3b>(v,u);
             r_vec[u + v * s.width] = static_cast<uchar>(cv_vec[2]);
             g_vec[u + v * s.width] = static_cast<uchar>(cv_vec[1]);
             b_vec[u + v * s.width] = static_cast<uchar>(cv_vec[0]);
@@ -3863,7 +3909,7 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
   }
   // cv::imwrite("test_filter_depth.png", filtered_depth_image);
   cv_input_filtered_depth_image = filtered_depth_image;
-  cv_input_filtered_color_image = filtered_color_image;
+  // cv_input_filtered_color_image = filtered_color_image;
   cv_input_unfiltered_depth_image = unfiltered_depth_image;
   cv_input_filtered_color_image_vec.push_back(r_vec);
   cv_input_filtered_color_image_vec.push_back(g_vec);
@@ -5129,6 +5175,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     cv::Mat cv_depth_image, cv_predicted_mask_image;
     input_depth_image_path = input.input_depth_image;
     if (env_params_.use_external_pose_list == 1) {
+      gpu_stride = 5;
       // For FAT dataset, we have 16bit images
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
       cv_predicted_mask_image = cv::imread(input.predicted_mask_image, CV_LOAD_IMAGE_UNCHANGED);
@@ -5145,6 +5192,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
       }
     }
     else {
+      gpu_stride = 4;
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_UNCHANGED);
     }
     cv_input_color_image = cv::imread(input.input_color_image, CV_LOAD_IMAGE_COLOR);
@@ -5881,11 +5929,14 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   if (kUseRenderGreedy)
   {
     source_result_depth.assign(unfiltered_depth_data, unfiltered_depth_data + kCameraWidth * kCameraHeight-1);
-    for (int i = 0; i < source_result_depth.size(); i++)
-    {
-      // TODO : fix this hardcode
-      // ycb has depth factor of 10000, and gpu is using 100, divide by 100 to get it to gpu's depth factor
-      source_result_depth[i] /= 100;
+    if (env_params_.use_external_pose_list == 1)
+    {  
+      for (int i = 0; i < source_result_depth.size(); i++)
+      {
+        // TODO : fix this hardcode
+        // ycb has depth factor of 10000, and gpu is using 100, divide by 100 to get it to gpu's depth factor
+        source_result_depth[i] /= 100;
+      }
     }
   }
 
@@ -5893,9 +5944,12 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   std::vector<int32_t> result_depth;
   vector<int> pose_segmentation_label;
 
-  for (ObjectState state : objects)
+  if (env_params_.use_external_pose_list == 1)
   {
-    pose_segmentation_label.push_back(state.segmentation_label_id());
+    for (ObjectState state : objects)
+    {
+      pose_segmentation_label.push_back(state.segmentation_label_id());
+    }
   }
 
   GetStateImagesGPU(
