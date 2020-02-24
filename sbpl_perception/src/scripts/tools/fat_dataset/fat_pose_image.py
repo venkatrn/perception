@@ -325,6 +325,65 @@ class FATImage:
 
         return world_point
 
+    def get_scene_cloud(self, image_data, downsampling_leaf_size):
+        '''
+            Get PCL point cloud in camera frame from depth image
+        '''
+        import rospy
+        if '/opt/ros/kinetic/lib/python2.7/dist-packages' in sys.path:
+            sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+        import cv2
+        from PIL import Image
+        
+        color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
+        depth_img_path = self.get_depth_img_path(color_img_path)
+        print("depth_img_path : {}".format(depth_img_path))
+
+        depth_image = cv2.imread(depth_img_path, cv2.IMREAD_ANYDEPTH)
+        K_inv = np.linalg.inv(self.camera_intrinsic_matrix)
+        points_3d = np.zeros((depth_image.shape[0]*depth_image.shape[1], 3), dtype=np.float32)
+        count = 0
+        cloud = pcl.PointCloud()
+        depth_image_pil = np.asarray(Image.open(depth_img_path), dtype=np.float16)
+        for x in range(depth_image.shape[1]):
+            for y in range(depth_image.shape[0]):
+                point = np.array([x,y,depth_image[y,x]/self.depth_factor])
+                w_point = self.get_world_point(point)
+                points_3d[count, :] = w_point.tolist()
+                count += 1
+
+        cloud.from_array(points_3d)
+        seg = cloud.make_segmenter()
+        seg.set_optimize_coefficients (True)
+        seg.set_model_type (pcl.SACMODEL_PLANE)
+        seg.set_method_type (pcl.SAC_RANSAC)
+        seg.set_distance_threshold (0.02)
+        inliers, model = seg.segment()
+        # print(inliers)
+
+        # points_3d_filtered = points_3d[..., [i for i in range(points_3d.shape[0]) if i not in inliers]]
+
+        # points_3d_filtered = points_3d[points_3d != points_3d[inliers]]
+
+        points_3d_filtered = np.delete(points_3d, inliers, axis = 0)
+        cloud_n = pcl.PointCloud()
+        cloud_n.from_array(points_3d_filtered)
+        sor = cloud_n.make_voxel_grid_filter()
+        sor.set_leaf_size(downsampling_leaf_size, downsampling_leaf_size, downsampling_leaf_size)
+        cloud_n = sor.filter()
+
+        cloud_n_array = np.asarray(cloud_n)
+
+        cloud_color = np.zeros(cloud_n_array.shape[0])
+        pose_cloud_msg = self.xyzrgb_array_to_pointcloud2(
+            cloud_n_array, cloud_color, rospy.Time.now(), "camera"
+        )
+        self.scene_cloud_pub.publish(pose_cloud_msg)
+
+        return cloud_n
+
+
+
     def get_table_pose(self, depth_img_path, frame):
         # Creates a point cloud in camera frame and calculates table pose using RANSAC
 
@@ -590,6 +649,7 @@ class FATImage:
                 if frame == 'table':
                     location, quat = get_object_pose_in_world(annotation, camera_pose_table)
                     # location, quat = get_object_pose_in_world(annotation, camera_pose_table, self.world_to_fat_world)
+                    # Transform ground truth to original model frame from NDDS
                     location, quat = self.get_object_pose_with_fixed_transform(
                         class_name, location,
                         RT_transform.quat2euler(get_wxyz_quaternion(quat)),
@@ -1567,15 +1627,20 @@ class FATImage:
         rospy.set_param('camera_info_url', 'package://dope/config/camera_info.yaml')
         mkdir_if_missing("dope_outputs")
 
-        self.dopenode = DopeNode()
+        self.dopenode = DopeNode(fixed_transforms_dict = self.fixed_transforms_dict)
 
     def visualize_dope_output(self, image_data):
 
         color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
         output_image_filepath = os.path.join("dope_outputs", (self.get_clean_name(image_data['file_name']) + ".png"))
-        annotations = self.dopenode.run_on_image(color_img_path, self.category_names_to_id, output_image_filepath)
+        # annotations = self.dopenode.run_on_image(color_img_path, self.category_names_to_id, output_image_filepath)
+        
+        cloud_scene = self.get_scene_cloud(image_data, 0.015)
+        annotations, runtime = self.dopenode.run_on_image_icp(
+            color_img_path, self.category_names_to_id, cloud_scene, output_image_filepath
+        )
 
-        return annotations
+        return annotations, runtime
 
     def compare_clouds(self, annotations_1, annotations_2, downsample=False, use_add_s=True, convert_annotation_2=False, use_points_file=False):
         from plyfile import PlyData, PlyElement
@@ -1592,6 +1657,7 @@ class FATImage:
             # print(annotation_1)
             if len(annotation_1) == 0:
                 # Possible in DOPE where wrong object may be detected
+                print("Wrong object, no matching object to ground truth found in detection")
                 return None, None
 
             # There might two occurences of same category, take ground truth closer to prediction - For 6D version
@@ -2175,8 +2241,8 @@ def run_dope_sameshape():
     base_dir = "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed"
     # base_dir = "/media/sbpl/Data/Aditya/datasets/Zed"
     image_directory = base_dir
-    # annotation_file = base_dir + '/instances_newmap1_turbosquid_can_only_2018.json'
-    annotation_file = base_dir + '/instances_newmap1_turbosquid_2018.json'
+    annotation_file = base_dir + '/instances_newmap1_turbosquid_can_only_2018.json'
+    # annotation_file = base_dir + '/instances_newmap1_turbosquid_2018.json'
     model_dir = "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
     # model_dir = "/media/sbpl/Data/Aditya/datasets/turbosquid/models"
     fat_image = FATImage(
@@ -2187,43 +2253,52 @@ def run_dope_sameshape():
         model_mesh_in_mm=True,
         # model_mesh_scaling_factor=0.005,
         model_mesh_scaling_factor=1,
-        models_flipped=False
+        models_flipped=False,
+        distance_scale=100,
+        img_width=960,
+        img_height=540,
+        dataset_type="ndds"
     )
 
-    f_runtime = open('runtime.txt', "w")
-    f_accuracy = open('accuracy.txt', "w")
-    f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
+    f_runtime = open('runtime.txt', "w", 1)
+    f_accuracy = open('accuracy.txt', "w", 1)
+    f_runtime.write("{},{},{}\n".format('name', 'expands', 'runtime'))
 
     # required_objects = ['coke_can', 'pepsi_can']
-    # required_objects = ['7up_can', 'sprite_can', 'pepsi_can', 'coke_can']
+    required_objects = ['7up_can', 'sprite_can', 'pepsi_can', 'coke_can']
     # required_objects = ['coke_can', 'pepsi_can']
-    required_objects = ['sprite_bottle']
-    f_accuracy.write("name ")
+    # required_objects = ['pepsi_can', 'coke_can']
+    # required_objects = ['coke_bottle', 'pepsi_can', 'coke_can', 'sprite_bottle']
+    f_accuracy.write("name,")
     # for object_name in required_objects:
     #     f_accuracy.write("{} ".format(object_name))
     # f_accuracy.write("\n")
 
     for object_name in required_objects:
-        f_accuracy.write("{}-add {}-adds ".format(object_name, object_name))
+        f_accuracy.write("{}-add,{}-adds,".format(object_name, object_name))
     f_accuracy.write("\n")
 
     fat_image.init_dope_node()
 
     for img_i in range(0,50):
     # for img_i in [5]:
-        # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
-        image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
+        image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
+        # image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
+
         image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
 
-        yaw_only_objects, max_min_dict, transformed_annotations = \
-            fat_image.visualize_pose_ros(image_data, annotations, frame='camera', camera_optical_frame=False)
-
+        yaw_only_objects, max_min_dict, transformed_annotations, _ = \
+            fat_image.visualize_pose_ros(image_data, annotations, frame='camera', camera_optical_frame=False, ros_publish=True, num_publish=1)
+        # print(transformed_annotations)
         # dopenode = DopeNode()
         # color_img_path = os.path.join(self.coco_image_directory, image_data['file_name'])
         # dopenode.run_on_image(color_img_path)
-        dope_annotations = fat_image.visualize_dope_output(image_data)
+        dope_annotations, runtime = fat_image.visualize_dope_output(image_data)
+        # print(dope_annotations)
 
         f_accuracy.write("{},".format(image_data['file_name']))
+        # Dope assumes that model of object is according to camera frame (NDDS) and GT is also in that
+        # So no need to apply any fixed transform when comparing the clouds by converting the model
         add_dict, add_s_dict = fat_image.compare_clouds(
             transformed_annotations, dope_annotations, downsample=True, use_add_s=True, convert_annotation_2=True
         )
@@ -2235,10 +2310,10 @@ def run_dope_sameshape():
                 f_accuracy.write(" , ,")
         f_accuracy.write("\n")
 
-        # yaw_only_objects, max_min_dict, transformed_annotations = \
-        #     fat_image.visualize_pose_ros(image_data, dope_annotations, frame='camera', camera_optical_frame=False)
+        f_runtime.write("{},{},{}\n".format(image_data['file_name'], 0, runtime))
 
     f_accuracy.close()
+    f_runtime.close()
 
     return
 
@@ -2699,8 +2774,9 @@ if __name__ == '__main__':
     ROS_PYTHON2_PKG_PATH = config['python2_paths']
     ROS_PYTHON3_PKG_PATH = config['python3_paths'][0]
 
-    run_ycb_6d(dataset_cfg=config['dataset'])
+    # run_ycb_6d(dataset_cfg=config['dataset'])
     # run_sameshape_gpu(dataset_cfg=config['dataset'])
+    run_dope_sameshape()
 
     # coco_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/coco_results.pth')
     # all_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/predictions.pth')
