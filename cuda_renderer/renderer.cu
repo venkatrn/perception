@@ -9,6 +9,8 @@
 #define POW7(x) (POW3(x)*POW3(x)*(x))
 #define DegToRad(x) ((x)*M_PI/180)
 #define RadToDeg(x) ((x)/M_PI*180)
+#define USE_TREE 0
+#define USE_CLUTTER 0
 
 namespace cuda_renderer {
 static inline void _safe_cuda_call(cudaError err, const char* msg, const char* file_name, const int line_number)
@@ -323,21 +325,25 @@ void rasterization_with_source(const Model::Triangle dev_tri, Model::float3 last
                         green_entry[x_to_write+y_to_write*real_width] = 0;
                         blue_entry[x_to_write+y_to_write*real_width] = 0;
                         atomicMax(&new_depth, INT_MAX);
-                        atomicOr(pose_occluded_other_entry, 1);
-                        if (source_depth <=  new_depth - 5)
+                        if (USE_TREE)
+                            atomicOr(pose_occluded_other_entry, 1);
+                        if (USE_CLUTTER)
                         {
-                            atomicAdd(pose_clutter_points_entry, 1);
+                            if (source_depth <=  new_depth - 5)
+                            {
+                                atomicAdd(pose_clutter_points_entry, 1);
+                            }
                         }
-                    // }
                 }
                 // invalid condition where source pixel is behind and we are rendering a pixel at same x,y with lesser depth 
                 else if(new_depth <= source_depth && source_depth > 0){
                     // invalid as render occludes source
-                    atomicOr(pose_occluded_entry, 1);
+                    if (USE_TREE)
+                        atomicOr(pose_occluded_entry, 1);
                     // printf("Occlusion\n");
                 }
             }
-            atomicAdd(pose_total_points_entry, 1);
+            // atomicAdd(pose_total_points_entry, 1);
 
         }
     }
@@ -935,39 +941,43 @@ device_vector_holder<int> render_cuda_multi(
                                                     use_segmentation_label);
     // cudaDeviceSynchronize();
     // Objects occluding other objects already in the scene
-    printf("Pose Occlusions\n");
-    thrust::copy(
-        device_pose_occluded.begin(),
-        device_pose_occluded.end(), 
-        std::ostream_iterator<int>(std::cout, " ")
-    );
-    printf("\n");
-    thrust::copy(device_pose_occluded.begin(), device_pose_occluded.end(), pose_occluded.begin());
-    
-    // Objects occluded by existing objects in the scene, need to do ICP again for these
-    printf("Pose Occlusions Other\n");
-    thrust::copy(
-        device_pose_occluded_other.begin(),
-        device_pose_occluded_other.end(), 
-        std::ostream_iterator<int>(std::cout, " ")
-    );
-    printf("\n");
-    thrust::copy(device_pose_occluded_other.begin(), device_pose_occluded_other.end(), pose_occluded_other.begin());
-
-    // printf("Pose Clutter Ratio\n");
-    thrust::transform(
-        device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
-        device_pose_total_points.begin(), device_pose_clutter_points.begin(), 
-        thrust::divides<float>()
-    );
-    thrust::device_vector<float> rendered_multiplier_val(num_images, 100);
-    thrust::transform(
-        device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
-        rendered_multiplier_val.begin(), device_pose_clutter_points.begin(), 
-        thrust::multiplies<float>()
-    );
-    thrust::copy(device_pose_clutter_points.begin(), device_pose_clutter_points.end(), clutter_cost.begin());
-
+    if (USE_TREE)
+    {
+        printf("Pose Occlusions\n");
+        thrust::copy(
+            device_pose_occluded.begin(),
+            device_pose_occluded.end(), 
+            std::ostream_iterator<int>(std::cout, " ")
+        );
+        printf("\n");
+        thrust::copy(device_pose_occluded.begin(), device_pose_occluded.end(), pose_occluded.begin());
+        
+        // Objects occluded by existing objects in the scene, need to do ICP again for these
+        printf("Pose Occlusions Other\n");
+        thrust::copy(
+            device_pose_occluded_other.begin(),
+            device_pose_occluded_other.end(), 
+            std::ostream_iterator<int>(std::cout, " ")
+        );
+        printf("\n");
+        thrust::copy(device_pose_occluded_other.begin(), device_pose_occluded_other.end(), pose_occluded_other.begin());
+    }
+    if (USE_CLUTTER)
+    {
+        // printf("Pose Clutter Ratio\n");
+        thrust::transform(
+            device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
+            device_pose_total_points.begin(), device_pose_clutter_points.begin(), 
+            thrust::divides<float>()
+        );
+        thrust::device_vector<float> rendered_multiplier_val(num_images, 100);
+        thrust::transform(
+            device_pose_clutter_points.begin(), device_pose_clutter_points.end(), 
+            rendered_multiplier_val.begin(), device_pose_clutter_points.begin(), 
+            thrust::multiplies<float>()
+        );
+        thrust::copy(device_pose_clutter_points.begin(), device_pose_clutter_points.end(), clutter_cost.begin());
+    }
     // thrust::copy(
     //     device_pose_clutter_points.begin(),
     //     device_pose_clutter_points.end(), 

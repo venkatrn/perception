@@ -1262,7 +1262,9 @@ class FATImage:
             print("Centroid from mask : {}".format(centroid))
             print("Centroid from box : {}".format(centroids_2d[box_id]))
             # centroid[1] -= 60
-            centroid = centroids_2d[box_id]
+            if label != "021_bleach_cleanser":
+                # bbox in bleach is inaccurate
+                centroid = centroids_2d[box_id]
             for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                 ## Vary depth only
                 centre_world_point = self.get_world_point(centroid.tolist() + [depth])
@@ -2326,8 +2328,8 @@ def run_sameshape_gpu(dataset_cfg=None):
     ## Running on PERCH only with synthetic color dataset - shape
 
     image_directory = dataset_cfg['image_dir']
-    # annotation_file = image_directory + '/instances_newmap1_turbosquid_can_only_2018.json'
-    annotation_file = image_directory + '/instances_newmap1_turbosquid_2018.json'
+    annotation_file = image_directory + '/instances_newmap1_turbosquid_can_only_2018.json'
+    # annotation_file = image_directory + '/instances_newmap1_turbosquid_2018.json'
     model_dir = dataset_cfg['model_dir']
 
 
@@ -2358,9 +2360,9 @@ def run_sameshape_gpu(dataset_cfg=None):
     # required_objects = ['coke_bottle']
     # required_objects = ['010_potted_meat_can', '008_pudding_box']
     # required_objects = ['010_potted_meat_can']
-    required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
+    # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
     # required_objects = ['sprite_bottle']
-    # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
+    required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
     # required_objects = ['sprite_can']
     # required_objects = ['pepsi_can', 'sprite_bottle', 'coke_bottle']
 
@@ -2373,10 +2375,10 @@ def run_sameshape_gpu(dataset_cfg=None):
     read_results_only = False
     # fat_image.search_resolution_yaw = 1.57
     # 5 in can only
-    for img_i in range(0,50):
+    for img_i in range(0,25):
 
-        # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
-        image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
+        image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
+        # image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
         image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
         yaw_only_objects, max_min_dict, transformed_annotations, camera_pose_table = \
                 fat_image.visualize_pose_ros(image_data, annotations, frame='table', camera_optical_frame=False)
@@ -2531,7 +2533,7 @@ def run_ycb_6d(dataset_cfg=None):
     )
 
     mask_type = 'posecnn'
-    print_poses = True
+    print_poses = False
     # Running on model and PERCH
     cfg_file = dataset_cfg['maskrcnn_config']
 
@@ -2697,8 +2699,8 @@ if __name__ == '__main__':
     ROS_PYTHON2_PKG_PATH = config['python2_paths']
     ROS_PYTHON3_PKG_PATH = config['python3_paths'][0]
 
-    # run_ycb_6d(dataset_cfg=config['dataset'])
-    run_sameshape_gpu(dataset_cfg=config['dataset'])
+    run_ycb_6d(dataset_cfg=config['dataset'])
+    # run_sameshape_gpu(dataset_cfg=config['dataset'])
 
     # coco_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/coco_results.pth')
     # all_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/predictions.pth')

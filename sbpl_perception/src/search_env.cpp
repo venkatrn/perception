@@ -1105,7 +1105,7 @@ void EnvObjectRecognition::GetICPAdjustedPosesCPU(const vector<ObjectState>& obj
     cloud.push_back(empty);
   }
   // #pragma omp parallel for if (do_icp)
-  for(int cloud_index = 0; cloud_index < rendered_point_num; cloud_index++)
+  for(int cloud_index = 0; cloud_index < rendered_point_num; cloud_index = cloud_index + 1)
   {
     int n = cloud_pose_map[cloud_index];
     // printf("n : %d\n", n);
@@ -1784,10 +1784,10 @@ void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputation
         result_observed_cloud_label, cost_type, calc_obs_cost
       );
 
-      for(int i = 0; i < num_poses; i++){
-        total_cost[i] =  (int) (rendered_cost_gpu[i] + observed_cost_gpu[i] + pose_clutter_cost[i]);
-        // printf("total cost :%d\n", total_cost[i]);
-      }
+      // for(int i = 0; i < num_poses; i++){
+      //   total_cost[i] =  (int) (rendered_cost_gpu[i] + observed_cost_gpu[i] + pose_clutter_cost[i]);
+      //   // printf("total cost :%d\n", total_cost[i]);
+      // }
 
       if (perch_params_.vis_expanded_states && kUseRenderGreedy) {
         PrintGPUImages(
