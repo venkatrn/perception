@@ -1,0 +1,13 @@
+dataset :
+    name : "soda_can"
+    type : "ndds"
+    model_dir : "/media/aditya/A69AFABA9AFA85D9/Datasets/SameShape/turbosquid/models"
+    image_dir : "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/Dataset_Synthesizer/Test/Zed/Final"
+    perch_debug_dir : "/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/src/perception/sbpl_perception/visualization"
+    python_debug_dir : "./model_3dof"
+python2_paths :
+  - '/opt/ros/kinetic/lib/python2.7/dist-packages'
+  - '/usr/local/lib/python2.7/dist-packages/'
+  - '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/DOPE/catkin_ws/devel/lib/python2.7/dist-packages'
+python3_paths :
+  - '/media/aditya/A69AFABA9AFA85D9/Cruzr/code/ros_python3_ws/devel/lib/python3/dist-packages'

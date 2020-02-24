@@ -386,6 +386,18 @@ class EnvObjectRecognition : public EnvironmentMHA {
                       vector<int> pose_occluded,
                       const vector<int> cost = vector<int>());
 
+  void GetICPAdjustedPosesCPU(const vector<ObjectState>& objects,
+                              int num_poses,
+                              float* result_cloud,
+                              uint8_t* result_cloud_color,
+                              int rendered_point_num,
+                              int* cloud_pose_map,
+                              int* pose_occluded,
+                              vector<ObjectState>& modified_objects,
+                              bool do_icp,
+                              ros::Publisher render_point_cloud_topic,
+                              bool print_cloud);
+
   void PrintGPUClouds(const vector<ObjectState>& objects,
                       float* cloud, 
                       uint8_t* cloud_color,
