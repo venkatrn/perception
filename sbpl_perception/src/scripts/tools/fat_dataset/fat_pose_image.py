@@ -2650,6 +2650,8 @@ def run_ycb_6d(dataset_cfg=None):
     #for img_i in list(range(0,100)) + list(range(100,120)) + list(range(155,177)):
     # for img_i in [138,142,153,163, 166, 349]:    
     # for img_i in [0]:
+    # Used 60 samples sphere for all
+    # Trying 80 for sugar
     sugar_list = [
         'data/0058/000061-color.png',
         'data/0058/000086-color.png',
@@ -2696,18 +2698,18 @@ def run_ycb_6d(dataset_cfg=None):
     ]
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
-    for scene_i in range(48, 49):
-        # for img_i in range(1,2500):
+    for scene_i in range(48, 60):
+        for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
-        for img_i in sugar_list:
+        # for img_i in sugar_list:
         # for img_i in bleach_list:
             # if "0050" not in img_i:
             #     continue
             # Get Image
-            # image_name = 'data/00{}/00{}-color.png'.format(str(scene_i), str(img_i).zfill(4))
-            image_name = '{}'.format(img_i)
+            image_name = 'data/00{}/00{}-color.png'.format(str(scene_i), str(img_i).zfill(4))
+            # image_name = '{}'.format(img_i)
             # if image_name in skip_list:
             #     continue
             # image_data, annotations = fat_image.get_random_image(name='{}_16k/kitchen_4/000005.left.jpg'.format(category_name))
