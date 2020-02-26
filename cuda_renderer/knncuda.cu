@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <cuda.h>
 #include <cublas.h>
-#include "cuda_renderer/renderer.h"
+// #include "cuda_renderer/renderer.h"
 #include "cuda_renderer/knncuda.h"
 #include "cuda_renderer/common.cuh"
 #include <thrust/transform_reduce.h>
@@ -272,82 +272,7 @@ __global__ void add_query_points_norm_and_sqrt(float * array, int width, int pit
     if (xIndex<width && yIndex<k)
         array[yIndex*pitch + xIndex] = sqrt(array[yIndex*pitch + xIndex] + norm[xIndex]);
 }
-__global__ void depth_to_mask(
-    int32_t* depth, int* mask, int width, int height, int stride, int* pose_occluded)
-{
-    /**
-     * Creates a mask corresponding to valid depth points by using the depth data
-     *
-    */
-    int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/(width/stride));
-    int x = (blockIdx.x * blockDim.x + threadIdx.x)%(width/stride);
-    int y = blockIdx.y*blockDim.y + threadIdx.y;
-    x = x*stride;
-    y = y*stride;
-    if(x >= width) return;
-    if(y >= height) return;
-    uint32_t idx_depth = n * width * height + x + y*width;
-    uint32_t idx_mask = n * width * height + x + y*width;
 
-    // if(depth[idx_depth] > 0 && !pose_occluded[n]) 
-    if(depth[idx_depth] > 0) 
-    {
-        mask[idx_mask] = 1;
-    }
-}
-
-__global__ void depth_to_cloud(
-    int32_t* depth, uint8_t* r_in, uint8_t* g_in, uint8_t* b_in, float* cloud, uint8_t* cloud_color, int cloud_rendered_cloud_point_num, int* mask, int width, int height, 
-    float kCameraCX, float kCameraCY, float kCameraFX, float kCameraFY, float depth_factor,
-    int stride, int* cloud_pose_map, uint8_t* label_mask_data,  int* cloud_mask_label)
-{
-    /**
-     * Creates a point cloud by combining a mask corresponding to valid depth pixels and depth data using the camera params
-     * Optionally also records the correct color of the points and their mask label
-    */
-    int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/(width/stride));
-    int x = (blockIdx.x * blockDim.x + threadIdx.x)%(width/stride);
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-
-    // uint32_t x = blockIdx.x*blockDim.x + threadIdx.x;
-    // uint32_t y = blockIdx.y*blockDim.y + threadIdx.y;
-    x = x*stride;
-    y = y*stride;
-    if(x >= width) return;
-    if(y >= height) return;
-    uint32_t idx_depth = n * width * height + x + y*width;
-
-    if(depth[idx_depth] <= 0) return;
-
-    // printf("depth:%d\n", depth[idx_depth]);
-    // uchar depth_val = depth[idx_depth];
-    float z_pcd = static_cast<float>(depth[idx_depth])/depth_factor;
-    float x_pcd = (static_cast<float>(x) - kCameraCX)/kCameraFX * z_pcd;
-    float y_pcd = (static_cast<float>(y) - kCameraCY)/kCameraFY * z_pcd;
-    // printf("kCameraCX:%f,kCameraFX:%f, kCameraCY:%f, kCameraCY:%f\n", kCameraCX,kCameraFX,kCameraCY, y_pcd, z_pcd);
-
-    // printf("x:%d,y:%d, x_pcd:%f, y_pcd:%f, z_pcd:%f\n", x,y,x_pcd, y_pcd, z_pcd);
-    uint32_t idx_mask = n * width * height + x + y*width;
-    int cloud_idx = mask[idx_mask];
-    cloud[cloud_idx + 0*cloud_rendered_cloud_point_num] = x_pcd;
-    cloud[cloud_idx + 1*cloud_rendered_cloud_point_num] = y_pcd;
-    cloud[cloud_idx + 2*cloud_rendered_cloud_point_num] = z_pcd;
-
-    cloud_color[cloud_idx + 0*cloud_rendered_cloud_point_num] = r_in[idx_depth];
-    cloud_color[cloud_idx + 1*cloud_rendered_cloud_point_num] = g_in[idx_depth];
-    cloud_color[cloud_idx + 2*cloud_rendered_cloud_point_num] = b_in[idx_depth];
-
-    cloud_pose_map[cloud_idx] = n;
-    if (label_mask_data != NULL)
-    {
-        cloud_mask_label[cloud_idx] = label_mask_data[idx_depth];
-    }
-    // printf("cloud_idx:%d\n", label_mask_data[idx_depth]);
-
-    // cloud[3*cloud_idx + 0] = x_pcd;
-    // cloud[3*cloud_idx + 1] = y_pcd;
-    // cloud[3*cloud_idx + 2] = z_pcd;
-}
 
 bool depth2cloud_global(int32_t* depth_data,
                         std::vector<std::vector<u_int8_t>>& color_data,

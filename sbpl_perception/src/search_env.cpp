@@ -2057,7 +2057,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
       if (env_params_.use_external_pose_list == 1)
       {
         if (output_unit.cost < lowest_cost_per_object[model_id] 
-        && abs(output_unit.state_properties.target_cost - output_unit.state_properties.source_cost) < 40)
+        && abs(output_unit.state_properties.target_cost - output_unit.state_properties.source_cost) < 30)
         {
           lowest_cost_per_object[model_id] = output_unit.cost;
           lowest_cost_state_per_object[model_id] = adjusted_object_state;
@@ -4090,8 +4090,8 @@ PointCloudPtr EnvObjectRecognition::GetGravityAlignedPointCloudCV(
       Eigen::Vector3f point_eig;
       // When using FAT dataset with model
       getGlobalPointCV(u, v,
-                                                static_cast<float>(depth_image.at<int32_t>(v,u)/depth_factor), transform,
-                                                  point_eig);
+                            static_cast<float>(depth_image.at<int32_t>(v,u)/depth_factor), transform,
+                              point_eig);
 
       point.x = point_eig[0];
       point.y = point_eig[1];

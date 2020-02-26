@@ -63,7 +63,7 @@ Visualization Manager:
       Axes Radius: 0.00999999978
       Class: rviz/PoseArray
       Color: 255; 25; 0
-      Enabled: false
+      Enabled: true
       Head Length: 0.0700000003
       Head Radius: 0.0299999993
       Name: PoseArray
@@ -72,7 +72,7 @@ Visualization Manager:
       Shape: Axes
       Topic: /fat_image/objects_pose
       Unreliable: false
-      Value: false
+      Value: true
     - Class: rviz/Axes
       Enabled: false
       Length: 0.300000012
@@ -182,7 +182,7 @@ Visualization Manager:
       Marker Topic: /perch_fat_experiments/perch_marker_array
       Name: MarkerArray
       Namespaces:
-        {}
+        perch: true
       Queue Size: 100
       Value: true
     - Alpha: 1
@@ -255,7 +255,7 @@ Visualization Manager:
       Shaft Length: 1
       Shaft Radius: 0.0500000007
       Shape: Axes
-      Topic: /dope/pose_pepsi_can
+      Topic: /move_base_simple/goal
       Unreliable: false
       Value: true
     - Alpha: 1
@@ -322,7 +322,7 @@ Visualization Manager:
   Global Options:
     Background Color: 48; 48; 48
     Default Light: true
-    Fixed Frame: camera
+    Fixed Frame: table
     Frame Rate: 30
   Name: root
   Tools:
@@ -343,25 +343,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 1.29139853
+      Distance: 2.1187067
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.0172214974
-        Y: -0.177435607
-        Z: 0.972737074
+        X: 0.550347686
+        Y: 0.136418909
+        Z: 0.713652015
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: -1.49979699
+      Pitch: 0.770202279
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.66900253
+      Yaw: 0.101037219
     Saved:
       - Class: rviz/Orbit
         Distance: 1.5690062

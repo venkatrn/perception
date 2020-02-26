@@ -1084,7 +1084,7 @@ class FATImage:
             # First (half: 0, whole: 1) Second (0:0, 1:0-pi, 2:0-2pi)
             "002_master_chef_can": [0,0], #half_0
             # "003_cracker_box": [0,1], #half_0-pi
-            "004_sugar_box": [0,1], #half_0-pi
+            "004_sugar_box": [0,0], #half_0-pi
             "005_tomato_soup_can": [0,0], #half_0
             "006_mustard_bottle": [0,0], #whole_0-pi
             "007_tuna_fish_can": [0,0], #half_0
@@ -1125,6 +1125,11 @@ class FATImage:
                 xyz_rotation_angles = [-phi, 0, theta]
                 all_rots.append(xyz_rotation_angles)
                 xyz_rotation_angles = [-phi, math.pi, theta]
+                all_rots.append(xyz_rotation_angles)
+            elif name_sym_dict[label][1] == 3:
+                xyz_rotation_angles = [-phi, 0, theta]
+                all_rots.append(xyz_rotation_angles)
+                xyz_rotation_angles = [-phi, math.pi/2, theta]
                 all_rots.append(xyz_rotation_angles)
         # if name_sym_dict[label][1] == 1:
         #     for viewpoint in viewpoints_xyz:
@@ -2450,7 +2455,7 @@ def run_sameshape_gpu(dataset_cfg=None):
     read_results_only = False
     # fat_image.search_resolution_yaw = 1.57
     # 5 in can only
-    for img_i in range(0,25):
+    for img_i in range(0,50):
 
         image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
         # image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
@@ -2624,7 +2629,7 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
     # required_objects = ['002_master_chef_can']
-    required_objects = ['021_bleach_cleanser']
+    required_objects = ['004_sugar_box']
     # required_objects = ['006_mustard_bottle', '019_pitcher_base']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
@@ -2644,22 +2649,65 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in range(155,177):
     #for img_i in list(range(0,100)) + list(range(100,120)) + list(range(155,177)):
     # for img_i in [138,142,153,163, 166, 349]:    
-    # for img_i in [0]:    
-
+    # for img_i in [0]:
+    sugar_list = [
+        'data/0058/000061-color.png',
+        'data/0058/000086-color.png',
+        'data/0051/001927-color.png',
+        'data/0051/001914-color.png',
+        'data/0051/001932-color.png',
+        'data/0058/000553-color.png',
+        'data/0058/000445-color.png',
+        'data/0058/000469-color.png',
+        'data/0058/000516-color.png',
+        'data/0058/000472-color.png',
+        'data/0058/000519-color.png',
+        'data/0058/000498-color.png',
+        'data/0058/000495-color.png',
+        'data/0058/000476-color.png',
+        'data/0058/000531-color.png',
+    ]    
+    bleach_list = [
+        'data/0055/000049-color.png',
+        'data/0055/000011-color.png',
+        'data/0055/000411-color.png',
+        'data/0055/000363-color.png',
+        'data/0055/000271-color.png',
+        'data/0055/000219-color.png',
+        'data/0055/000415-color.png',
+        'data/0055/000385-color.png',
+        'data/0055/000022-color.png',
+        'data/0055/000346-color.png',
+        'data/0055/000352-color.png',
+        'data/0055/000078-color.png',
+        'data/0055/000155-color.png',
+        'data/0055/000407-color.png',
+        'data/0055/000122-color.png',
+        'data/0055/000359-color.png',
+        'data/0055/000179-color.png',
+        'data/0055/000273-color.png',
+        'data/0055/000348-color.png',
+        'data/0055/000128-color.png',
+        'data/0055/000094-color.png',
+        'data/0055/000358-color.png',
+        'data/0055/000479-color.png',
+        'data/0055/000255-color.png',
+        'data/0055/000107-color.png',
+    ]
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
-    for scene_i in range(54, 60):
-        for img_i in range(1,500):
+    for scene_i in range(48, 49):
+        # for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
-        # for img_i in wood_list:
-        # for img_i in bowl_list:
+        for img_i in sugar_list:
+        # for img_i in bleach_list:
             # if "0050" not in img_i:
             #     continue
             # Get Image
-            image_name = 'data/00{}/00{}-color.png'.format(str(scene_i), str(img_i).zfill(4))
-            # image_name = '{}'.format(img_i)
+            # image_name = 'data/00{}/00{}-color.png'.format(str(scene_i), str(img_i).zfill(4))
+            image_name = '{}'.format(img_i)
             # if image_name in skip_list:
             #     continue
             # image_data, annotations = fat_image.get_random_image(name='{}_16k/kitchen_4/000005.left.jpg'.format(category_name))
@@ -2698,7 +2746,7 @@ def run_ycb_6d(dataset_cfg=None):
                     mask_image_index = IMG_LIST.index(keylist_name)
                 labels, model_annotations, predicted_mask_path = \
                     fat_image.visualize_sphere_sampling(
-                        image_data, print_poses=print_poses, required_objects=required_objects, num_samples=60,
+                        image_data, print_poses=print_poses, required_objects=required_objects, num_samples=80,
                         mask_type=mask_type, mask_image_id=mask_image_index
                     )
                 # # Run model to get multiple poses for each object
@@ -2774,9 +2822,9 @@ if __name__ == '__main__':
     ROS_PYTHON2_PKG_PATH = config['python2_paths']
     ROS_PYTHON3_PKG_PATH = config['python3_paths'][0]
 
-    # run_ycb_6d(dataset_cfg=config['dataset'])
+    run_ycb_6d(dataset_cfg=config['dataset'])
     # run_sameshape_gpu(dataset_cfg=config['dataset'])
-    run_dope_sameshape()
+    # run_dope_sameshape()
 
     # coco_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/coco_results.pth')
     # all_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/predictions.pth')
