@@ -1420,6 +1420,97 @@ void EnvObjectRecognition::GetStateImagesGPU(const vector<ObjectState>& objects,
                           predicted_mask_image,
                           pose_segmentation_label);
 }
+
+
+void EnvObjectRecognition::GetStateImagesUnifiedGPU(const vector<ObjectState>& objects,
+                    const vector<vector<uint8_t>>& source_result_color,
+                    const vector<int32_t>& source_result_depth,
+                    vector<vector<uint8_t>>& result_color,
+                    vector<int32_t>& result_depth,
+                    int single_result_image,
+                    vector<float>& pose_clutter_cost,
+                    float* &result_cloud,
+                    uint8_t* &result_cloud_color,
+                    int& result_cloud_point_num,
+                    int* &result_dc_index,
+                    int* &result_cloud_pose_map,
+                    const vector<int>& pose_segmentation_label)
+{
+   /*
+    Takes a bunch of ObjectState objects and renders them. 
+    @pose_segmentation_label : the segmentation label for the pose that identifies the object, for 6dof
+    Possible outputs - 1 image output with multiple objects in different pose each in single image
+                     - Multiple images with different object in different poses, one object per image
+  */
+  printf("GetStateImagesUnifiedGPU() for %d poses\n", objects.size());
+  Eigen::Isometry3d cam_z_front, cam_to_body;
+  cam_to_body.matrix() << 0, 0, 1, 0,
+                    -1, 0, 0, 0,
+                    0, -1, 0, 0,
+                    0, 0, 0, 1;
+  cam_z_front = cam_to_world_ * cam_to_body;
+  Eigen::Matrix4d cam_matrix =cam_z_front.matrix().inverse();
+
+  vector<cuda_renderer::Model::mat4x4> mat4_v;
+  vector<int> pose_model_map;
+  // vector<int> tris_model_count;
+  // vector<cuda_renderer::Model::Triangle> tris;
+
+  int num_poses = objects.size();
+  int model_id_prev = -1;
+
+  // Transform from table frame to camera frame
+  for(int i = 0; i < num_poses; i ++) {
+    int model_id = objects[i].id();
+
+    ContPose cur = objects[i].cont_pose();
+    Eigen::Matrix4d preprocess_transform = 
+      obj_models_[model_id].preprocessing_transform().matrix().cast<double>();
+    Eigen::Matrix4d transform;
+    transform = cur.ContPose::GetTransform().matrix().cast<double>();
+
+    // For non-6d dof this is needed to align model base to table, 
+    // we need to remove it because we are going back to camera frame on gpu render
+    // if (env_params_.use_external_pose_list != 1)
+    transform = transform * preprocess_transform;
+    
+    Eigen::Matrix4d pose_in_cam = cam_matrix * transform;
+    cuda_renderer::Model::mat4x4 mat4;
+    mat4.init_from_eigen(pose_in_cam, 100);
+    // mat4.print();
+    mat4_v.push_back(mat4);
+
+    pose_model_map.push_back(model_id);
+    model_id_prev = model_id;
+  }
+  cuda_renderer::render_cuda_multi_unified(
+                          tris,
+                          mat4_v,
+                          pose_model_map,
+                          tris_model_count,
+                          env_params_.width, env_params_.height, 
+                          env_params_.proj_mat, 
+                          source_result_depth,
+                          source_result_color,
+                          single_result_image,
+                          pose_clutter_cost,
+                          predicted_mask_image,
+                          pose_segmentation_label,
+                          gpu_stride,
+                          gpu_point_dim,
+                          gpu_depth_factor,
+                          kCameraCX,
+                          kCameraCY,
+                          kCameraFX,
+                          kCameraFY,
+                          result_depth,
+                          result_color,
+                          result_cloud,
+                          result_cloud_color,
+                          result_cloud_point_num,
+                          result_cloud_pose_map,
+                          result_dc_index);
+}
 void EnvObjectRecognition::PrintStateGPU(GraphState state)
 {
   std::vector<std::vector<uint8_t>> random_color(3);
@@ -6077,12 +6168,12 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
     }
   }
 
-  GetStateImagesGPU(
-    objects, random_color, source_result_depth, 
-    result_color, result_depth, random_poses_occluded, 0,
-    random_poses_occluded_other, random_pose_clutter_cost,
-    pose_segmentation_label
-  );
+  // GetStateImagesGPU(
+  //   objects, random_color, source_result_depth, 
+  //   result_color, result_depth, random_poses_occluded, 0,
+  //   random_poses_occluded_other, random_pose_clutter_cost,
+  //   pose_segmentation_label
+  // );
   
   // PrintGPUImages(result_depth, result_color, num_poses, "succ_pre_shift", random_poses_occluded);
 
@@ -6090,16 +6181,31 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   uint8_t* result_cloud_color;
   int* dc_index;
   int* cloud_pose_map;
-  int32_t* depth_data = result_depth.data();
+  // int32_t* depth_data = result_depth.data();
   int rendered_point_num;
-  int* poses_occluded_ptr = random_poses_occluded.data();
-  int* cloud_label;
+  // int* poses_occluded_ptr = random_poses_occluded.data();
+  // int* cloud_label;
 
-  cuda_renderer::depth2cloud_global(
-        depth_data, result_color, result_cloud, result_cloud_color, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
-        num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim, cloud_label
-      );
+  // cuda_renderer::depth2cloud_global(
+  //       depth_data, result_color, result_cloud, result_cloud_color, dc_index, rendered_point_num, cloud_pose_map, env_params_.width, env_params_.height, 
+  //       num_poses, poses_occluded_ptr, kCameraCX, kCameraCY, kCameraFX, kCameraFY, gpu_depth_factor, gpu_stride, gpu_point_dim, cloud_label
+  //     );
   
+  GetStateImagesUnifiedGPU(
+    objects,
+    random_color,
+    source_result_depth,
+    result_color,
+    result_depth,
+    0,
+    random_pose_clutter_cost,
+    result_cloud,
+    result_cloud_color,
+    rendered_point_num,
+    dc_index,
+    cloud_pose_map
+  );
+
   vector<float> pose_centroid_x(num_poses, 0.0);
   vector<float> pose_centroid_y(num_poses, 0.0);
   vector<float> pose_centroid_z(num_poses, 0.0);

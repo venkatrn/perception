@@ -197,5 +197,130 @@ namespace cuda_renderer {
         double cur_dist = sqrtf(SQR(deltaL / sl) + SQR(deltaC / sc) + SQR(deltaH / sh) + rt * deltaC / sc * deltaH / sh);
         return cur_dist;
     }
+    __global__ void compute_render_cost(
+        float* cuda_knn_dist,
+        int* cuda_knn_index,
+        int* cuda_cloud_pose_map,
+        int* cuda_poses_occluded,
+        float* cuda_rendered_cost,
+        float sensor_resolution,
+        int rendered_cloud_point_num,
+        int observed_cloud_point_num,
+        float* cuda_pose_point_num,
+        uint8_t* rendered_cloud_color,
+        uint8_t* observed_cloud_color,
+        float* rendered_cloud,
+        uint8_t* cuda_observed_explained,
+        int* pose_segmentation_label,
+        int* result_observed_cloud_label,
+        int type)
+    {
+        /**
+        * Params -
+        * @cuda_knn_dist : distance to nn from knn library
+        * @cuda_knn_index : index of nn in observed cloud from knn library
+        * @cuda_cloud_pose_map : the pose corresponding to every point in cloud
+        * @*_cloud_color : color values of clouds, to compare rgb cost of NNs
+        * @rendered_cloud : rendered point cloud of all poses, all objects
+        * Returns :
+        * @cuda_pose_point_num : Number of points in each rendered pose
+        */
+        size_t point_index = blockIdx.x*blockDim.x + threadIdx.x;
+        if(point_index >= rendered_cloud_point_num) return;
+
+        int pose_index = cuda_cloud_pose_map[point_index];
+        int o_point_index = cuda_knn_index[point_index];
+        if (cuda_poses_occluded[pose_index])
+        {
+            cuda_rendered_cost[pose_index] = -1;
+        }
+        else
+        {
+            // count total number of points in this pose for normalization later
+            atomicAdd(&cuda_pose_point_num[pose_index], 1);
+            // float camera_z = rendered_cloud[point_index + 2 * rendered_cloud_point_num];
+            // float cost = 10 * camera_z;
+            float cost = 1.0;
+            // printf("KKN distance : %f\n", cuda_knn_dist[point_index]);
+            if (cuda_knn_dist[point_index] > sensor_resolution)
+            {
+                atomicAdd(&cuda_rendered_cost[pose_index], cost);
+            }
+            else
+            {
+                // compute color cost
+                // printf("%d, %d\n", pose_segmentation_label[pose_index], result_observed_cloud_label[o_point_index]);
+                uint8_t red2  = rendered_cloud_color[point_index + 2*rendered_cloud_point_num];
+                uint8_t green2  = rendered_cloud_color[point_index + 1*rendered_cloud_point_num];
+                uint8_t blue2  = rendered_cloud_color[point_index + 0*rendered_cloud_point_num];
+
+                uint8_t red1  = observed_cloud_color[o_point_index + 2*observed_cloud_point_num];
+                uint8_t green1  = observed_cloud_color[o_point_index + 1*observed_cloud_point_num];
+                uint8_t blue1  = observed_cloud_color[o_point_index + 0*observed_cloud_point_num];
+
+                if (type == 1)
+                {
+                    
+                    float lab2[3];
+                    rgb2lab(red2,green2,blue2,lab2);
+                    float lab1[3];
+                    rgb2lab(red1,green1,blue1,lab1);
+                    double cur_dist = color_distance(lab1[0],lab1[1],lab1[2],lab2[0],lab2[1],lab2[2]);
+                    // printf("color distance :%f\n", cur_dist);
+                    if(cur_dist > 12.5){
+                        // add to render cost if color doesnt match
+                        atomicAdd(&cuda_rendered_cost[pose_index], cost);
+                    }
+                    else {
+                        // the point is explained, so mark corresponding observed point explained
+                        // atomicOr(cuda_observed_explained[o_point_index], 1);
+                        cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
+                    }
+                }
+                else if (type == 0) {
+                    // the point is explained, so mark corresponding observed point explained
+                    // atomicOr(cuda_observed_explained[o_point_index], 1);
+                    cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
+                }
+                else if (type == 2) {
+                    if (pose_segmentation_label[pose_index] != result_observed_cloud_label[o_point_index])
+                    {
+                        // the euclidean distance is fine, but segmentation labels dont match
+                        atomicAdd(&cuda_rendered_cost[pose_index], cost);
+                    }
+                    else
+                    {
+                        // the point is explained, so mark corresponding observed point explained
+                        // atomicOr(cuda_observed_explained[o_point_index], 1);
+                        // float lab2[3];
+                        // rgb2lab(red2,green2,blue2,lab2);
+
+                        // float lab1[3];
+                        // rgb2lab(red1,green1,blue1,lab1);
+
+                        // double cur_dist = color_distance(lab1[0],lab1[1],lab1[2],lab2[0],lab2[1],lab2[2]);
+                        // if(cur_dist > 30)
+                        //     atomicAdd(&cuda_rendered_cost[pose_index], cost);
+                        // else
+                        cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
+                    }
+                }
+            }
+        }
+    }
+    __global__ void compute_observed_cost(
+        int num_poses,
+        int observed_cloud_point_num,
+        uint8_t* cuda_observed_explained,
+        float* observed_total_explained)
+    {
+        size_t point_index = blockIdx.x*blockDim.x + threadIdx.x;
+        if(point_index >= num_poses * observed_cloud_point_num) return;
+
+        size_t pose_index = point_index/observed_cloud_point_num;
+        atomicAdd(&observed_total_explained[pose_index], (float) cuda_observed_explained[point_index]);
+        // printf("%d\n", cuda_observed_explained[point_index]);
+    }
+
 }
 #endif

@@ -32,48 +32,6 @@
 namespace cuda_renderer {
     
 
-    bool depth2cloud_global(int32_t* depth_data, 
-                            std::vector<std::vector<u_int8_t>>& color_data,
-                            float* &result_cloud, 
-                            uint8_t* &result_cloud_color,
-                            int* &dc_index,
-                            int &point_num,
-                            int* &cloud_pose_map,
-                            int width, 
-                            int height, 
-                            int num_poses,
-                            int* pose_occluded,
-                            float kCameraCX, 
-                            float kCameraCY, 
-                            float kCameraFX, 
-                            float kCameraFY,
-                            float depth_factor,
-                            int stride,
-                            int point_dim,
-                            int* &result_observed_cloud_label,
-                            uint8_t* label_mask_data = NULL);
-
-    bool compute_rgbd_cost(
-        float &sensor_resolution,
-        float* knn_dist,
-        int* knn_index,
-        int* poses_occluded,
-        int* cloud_pose_map,
-        float* result_observed_cloud,
-        uint8_t* result_observed_cloud_color,
-        float* result_rendered_cloud,
-        uint8_t* result_rendered_cloud_color,
-        int rendered_cloud_point_num,
-        int observed_cloud_point_num,
-        int num_poses,
-        float* &rendered_cost,
-        std::vector<float> pose_observed_points_total,
-        float* &observed_cost,
-        int* pose_segmentation_label,
-        int* result_observed_cloud_label,
-        int cost_type,
-        bool calculate_observed_cost);
-
     bool knn_cuda_global(const float * ref,
                         int           ref_nb,
                         const float * query,

@@ -268,7 +268,78 @@ device_vector_holder<int> render_cuda_keep_in_gpu(const std::vector<Model::Trian
 // triangles in gpu side
 device_vector_holder<int> render_cuda_keep_in_gpu(device_vector_holder<Model::Triangle>& tris,const std::vector<Model::mat4x4>& poses,
                             size_t width, size_t height, const Model::mat4x4& proj_mat,
-                                                       const Model::ROI roi= {0, 0, 0, 0});
+                                                               const Model::ROI roi= {0, 0, 0, 0});
+
+ 
+bool depth2cloud_global(int32_t* depth_data, 
+                            std::vector<std::vector<u_int8_t>>& color_data,
+                            float* &result_cloud, 
+                            uint8_t* &result_cloud_color,
+                            int* &dc_index,
+                            int &point_num,
+                            int* &cloud_pose_map,
+                            int width, 
+                            int height, 
+                            int num_poses,
+                            int* pose_occluded,
+                            float kCameraCX, 
+                            float kCameraCY, 
+                            float kCameraFX, 
+                            float kCameraFY,
+                            float depth_factor,
+                            int stride,
+                            int point_dim,
+                            int* &result_observed_cloud_label,
+                            uint8_t* label_mask_data = NULL);
+
+bool compute_rgbd_cost(
+    float &sensor_resolution,
+    float* knn_dist,
+    int* knn_index,
+    int* poses_occluded,
+    int* cloud_pose_map,
+    float* result_observed_cloud,
+    uint8_t* result_observed_cloud_color,
+    float* result_rendered_cloud,
+    uint8_t* result_rendered_cloud_color,
+    int rendered_cloud_point_num,
+    int observed_cloud_point_num,
+    int num_poses,
+    float* &rendered_cost,
+    std::vector<float> pose_observed_points_total,
+    float* &observed_cost,
+    int* pose_segmentation_label,
+    int* result_observed_cloud_label,
+    int cost_type,
+    bool calculate_observed_cost);
+
+void render_cuda_multi_unified(
+        const std::vector<Model::Triangle>& tris,
+        const std::vector<Model::mat4x4>& poses,
+        const std::vector<int> pose_model_map,
+        const std::vector<int> tris_model_count,
+        size_t width, size_t height, const Model::mat4x4& proj_mat,
+        const std::vector<int32_t>& source_depth,
+        const std::vector<std::vector<uint8_t>>& source_color,
+        int single_result_image,
+        std::vector<float>& clutter_cost,
+        const std::vector<uint8_t>& source_mask_label,
+        const std::vector<int>& pose_segmentation_label,
+        int stride,
+        int point_dim,
+        int depth_factor,
+        float kCameraCX,
+        float kCameraCY,
+        float kCameraFX,
+        float kCameraFY,
+        std::vector<int32_t>& result_depth, 
+        std::vector<std::vector<uint8_t>>& result_color,
+        float* &result_cloud,
+        uint8_t* &result_cloud_color,
+        int& result_cloud_point_num,
+        int* &result_cloud_pose_map,
+        int* &result_dc_index);
+
 #endif
 
 // render: results keep in gpu or cpu side

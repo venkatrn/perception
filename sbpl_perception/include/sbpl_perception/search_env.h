@@ -424,6 +424,20 @@ class EnvObjectRecognition : public EnvironmentMHA {
                         vector<float>& pose_clutter_cost,
                         const vector<int>& pose_segmentation_label = vector<int>());
 
+  void GetStateImagesUnifiedGPU(const vector<ObjectState>& objects,
+                      const vector<vector<uint8_t>>& source_result_color,
+                      const vector<int32_t>& source_result_depth,
+                      vector<vector<uint8_t>>& result_color,
+                      vector<int32_t>& result_depth,
+                      int single_result_image,
+                      vector<float>& pose_clutter_cost,
+                      float* &result_cloud,
+                      uint8_t* &result_cloud_color,
+                      int& result_cloud_point_num,
+                      int* &dc_index,
+                      int* &cloud_pose_map,
+                      const vector<int>& pose_segmentation_label = vector<int>());
+
   void GetICPAdjustedPosesGPU(float* result_rendered_clouds,
                               int* dc_index,
                               int32_t* depth_data,
