@@ -16,8 +16,81 @@
 #define POW7(x) (POW3(x)*POW3(x)*(x))
 #define DegToRad(x) ((x)*M_PI/180)
 #define RadToDeg(x) ((x)/M_PI*180)
+#define BLOCK_DIM 16
 
 namespace cuda_renderer {
+    __global__ void compute_distances_render(float * ref,
+                                  int     ref_width,
+                                  int     ref_pitch,
+                                  float * query,
+                                  int     query_width,
+                                  int     query_pitch,
+                                  int     height,
+                                  float * dist) {
+
+        // Declaration of the shared memory arrays As and Bs used to store the sub-matrix of A and B
+        __shared__ float shared_A[BLOCK_DIM][BLOCK_DIM];
+        __shared__ float shared_B[BLOCK_DIM][BLOCK_DIM];
+
+        // Sub-matrix of A (begin, step, end) and Sub-matrix of B (begin, step)
+        __shared__ int begin_A;
+        __shared__ int begin_B;
+        __shared__ int step_A;
+        __shared__ int step_B;
+        __shared__ int end_A;
+
+        // Thread index
+        int tx = threadIdx.x;
+        int ty = threadIdx.y;
+
+        // Initializarion of the SSD for the current thread
+        float ssd = 0.f;
+
+        // Loop parameters
+        begin_A = BLOCK_DIM * blockIdx.y;
+        begin_B = BLOCK_DIM * blockIdx.x;
+        step_A  = BLOCK_DIM * ref_pitch;
+        step_B  = BLOCK_DIM * query_pitch;
+        end_A   = begin_A + (height-1) * ref_pitch;
+
+        // Conditions
+        int cond0 = (begin_A + tx < ref_width); // used to write in shared memory
+        int cond1 = (begin_B + tx < query_width); // used to write in shared memory & to computations and to write in output array 
+        int cond2 = (begin_A + ty < ref_width); // used to computations and to write in output matrix
+
+        // Loop over all the sub-matrices of A and B required to compute the block sub-matrix
+        for (int a = begin_A, b = begin_B; a <= end_A; a += step_A, b += step_B) {
+
+            // Load the matrices from device memory to shared memory; each thread loads one element of each matrix
+            if (a/ref_pitch + ty < height) {
+                shared_A[ty][tx] = (cond0)? ref[a + ref_pitch * ty + tx] : 0;
+                shared_B[ty][tx] = (cond1)? query[b + query_pitch * ty + tx] : 0;
+            }
+            else {
+                shared_A[ty][tx] = 0;
+                shared_B[ty][tx] = 0;
+            }
+
+            // Synchronize to make sure the matrices are loaded
+            __syncthreads();
+
+            // Compute the difference between the two matrixes; each thread computes one element of the block sub-matrix
+            if (cond2 && cond1) {
+                for (int k = 0; k < BLOCK_DIM; ++k){
+                    float tmp = shared_A[k][ty] - shared_B[k][tx];
+                    ssd += tmp*tmp;
+                }
+            }
+
+            // Synchronize to make sure that the preceeding computation is done before loading two new sub-matrices of A and B in the next iteration
+            __syncthreads();
+        }
+
+        // Write the block sub-matrix to device memory; each thread writes one element
+        if (cond2 && cond1) {
+            dist[ (begin_A + ty) * query_pitch + begin_B + tx ] = ssd;
+        }
+    }
     __global__ void depth_to_mask(
         int32_t* depth, int* mask, int width, int height, int stride, int* pose_occluded)
     {
@@ -42,6 +115,62 @@ namespace cuda_renderer {
         }
     }
     
+    __global__ void depth_to_2d_cloud(
+        int32_t* depth, uint8_t* r_in, uint8_t* g_in, uint8_t* b_in, float* cloud, size_t cloud_pitch, uint8_t* cloud_color, int cloud_rendered_cloud_point_num, int* mask, int width, int height, 
+        float kCameraCX, float kCameraCY, float kCameraFX, float kCameraFY, float depth_factor,
+        int stride, int* cloud_pose_map, uint8_t* label_mask_data,  int* cloud_mask_label)
+    {
+        /**
+         * Creates a point cloud by combining a mask corresponding to valid depth pixels and depth data using the camera params
+         * Optionally also records the correct color of the points and their mask label
+        */
+        int n = (int)floorf((blockIdx.x * blockDim.x + threadIdx.x)/(width/stride));
+        int x = (blockIdx.x * blockDim.x + threadIdx.x)%(width/stride);
+        int y = blockIdx.y * blockDim.y + threadIdx.y;
+    
+        // uint32_t x = blockIdx.x*blockDim.x + threadIdx.x;
+        // uint32_t y = blockIdx.y*blockDim.y + threadIdx.y;
+        x = x*stride;
+        y = y*stride;
+        if(x >= width) return;
+        if(y >= height) return;
+        uint32_t idx_depth = n * width * height + x + y*width;
+    
+        if(depth[idx_depth] <= 0) return;
+    
+        // printf("depth:%d\n", depth[idx_depth]);
+        // uchar depth_val = depth[idx_depth];
+        float z_pcd = static_cast<float>(depth[idx_depth])/depth_factor;
+        float x_pcd = (static_cast<float>(x) - kCameraCX)/kCameraFX * z_pcd;
+        float y_pcd = (static_cast<float>(y) - kCameraCY)/kCameraFY * z_pcd;
+        // printf("kCameraCX:%f,kCameraFX:%f, kCameraCY:%f, kCameraCY:%f\n", kCameraCX,kCameraFX,kCameraCY, y_pcd, z_pcd);
+    
+        // printf("x:%d,y:%d, x_pcd:%f, y_pcd:%f, z_pcd:%f\n", x,y,x_pcd, y_pcd, z_pcd);
+        uint32_t idx_mask = n * width * height + x + y*width;
+        int cloud_idx = mask[idx_mask];
+        float* row_0 = (float *)((char*)cloud + 0 * cloud_pitch);
+        float* row_1 = (float *)((char*)cloud + 1 * cloud_pitch);
+        float* row_2 = (float *)((char*)cloud + 2 * cloud_pitch);
+        row_0[cloud_idx] = x_pcd;
+        row_1[cloud_idx] = y_pcd;
+        row_2[cloud_idx] = z_pcd;
+    
+        cloud_color[cloud_idx + 0*cloud_rendered_cloud_point_num] = r_in[idx_depth];
+        cloud_color[cloud_idx + 1*cloud_rendered_cloud_point_num] = g_in[idx_depth];
+        cloud_color[cloud_idx + 2*cloud_rendered_cloud_point_num] = b_in[idx_depth];
+    
+        cloud_pose_map[cloud_idx] = n;
+        if (label_mask_data != NULL)
+        {
+            cloud_mask_label[cloud_idx] = label_mask_data[idx_depth];
+        }
+        // printf("cloud_idx:%d\n", label_mask_data[idx_depth]);
+    
+        // cloud[3*cloud_idx + 0] = x_pcd;
+        // cloud[3*cloud_idx + 1] = y_pcd;
+        // cloud[3*cloud_idx + 2] = z_pcd;
+    }
+
     __global__ void depth_to_cloud(
         int32_t* depth, uint8_t* r_in, uint8_t* g_in, uint8_t* b_in, float* cloud, uint8_t* cloud_color, int cloud_rendered_cloud_point_num, int* mask, int width, int height, 
         float kCameraCX, float kCameraCY, float kCameraFX, float kCameraFY, float depth_factor,
@@ -127,6 +256,60 @@ namespace cuda_renderer {
         lab[1] = a;
         lab[2] = bb;
     }
+    __global__ void modified_insertion_sort_render(float * dist,
+                                        int     dist_pitch,
+                                        int *   index,
+                                        int     index_pitch,
+                                        int     width,
+                                        int     height,
+                                        int     k){
+
+        // Column position
+        unsigned int xIndex = blockIdx.x * blockDim.x + threadIdx.x;
+
+        // Do nothing if we are out of bounds
+        if (xIndex < width) {
+
+            // Pointer shift
+            float * p_dist  = dist  + xIndex;
+            int *   p_index = index + xIndex;
+
+            // Initialise the first index
+            p_index[0] = 0;
+
+            // Go through all points
+            for (int i=1; i<height; ++i) {
+
+                // Store current distance and associated index
+                float curr_dist = p_dist[i*dist_pitch];
+                int   curr_index  = i;
+
+                // Skip the current value if its index is >= k and if it's higher the k-th slready sorted mallest value
+                if (i >= k && curr_dist >= p_dist[(k-1)*dist_pitch]) {
+                    continue;
+                }
+
+                // Shift values (and indexes) higher that the current distance to the right
+                int j = min(i, k-1);
+                while (j > 0 && p_dist[(j-1)*dist_pitch] > curr_dist) {
+                    p_dist[j*dist_pitch]   = p_dist[(j-1)*dist_pitch];
+                    p_index[j*index_pitch] = p_index[(j-1)*index_pitch];
+                    --j;
+                }
+
+                // Write the current distance and index at their position
+                p_dist[j*dist_pitch]   = curr_dist;
+                p_index[j*index_pitch] = curr_index; 
+            }
+        }
+    }
+    __global__ void compute_sqrt_render(float * dist, int width, int pitch, int k){
+        unsigned int xIndex = blockIdx.x * blockDim.x + threadIdx.x;
+        unsigned int yIndex = blockIdx.y * blockDim.y + threadIdx.y;
+        if (xIndex<width && yIndex<k)
+            dist[yIndex*pitch + xIndex] = sqrt(dist[yIndex*pitch + xIndex]);
+    }
+
     __device__ double color_distance(float l1,float a1,float b1,
                         float l2,float a2,float b2){
         double eps = 1e-5;
@@ -197,6 +380,7 @@ namespace cuda_renderer {
         double cur_dist = sqrtf(SQR(deltaL / sl) + SQR(deltaC / sc) + SQR(deltaH / sh) + rt * deltaC / sc * deltaH / sh);
         return cur_dist;
     }
+    
     __global__ void compute_render_cost(
         float* cuda_knn_dist,
         int* cuda_knn_index,
@@ -229,6 +413,7 @@ namespace cuda_renderer {
         if(point_index >= rendered_cloud_point_num) return;
 
         int pose_index = cuda_cloud_pose_map[point_index];
+        // printf("pose index : %d\n", pose_index);
         int o_point_index = cuda_knn_index[point_index];
         if (cuda_poses_occluded[pose_index])
         {
@@ -283,6 +468,8 @@ namespace cuda_renderer {
                     cuda_observed_explained[o_point_index + pose_index * observed_cloud_point_num] = 1;
                 }
                 else if (type == 2) {
+                    // printf("pose_segmentation_label :%d, result_observed_cloud_label %d\n", 
+                    //     pose_segmentation_label[pose_index], result_observed_cloud_label[o_point_index]);
                     if (pose_segmentation_label[pose_index] != result_observed_cloud_label[o_point_index])
                     {
                         // the euclidean distance is fine, but segmentation labels dont match

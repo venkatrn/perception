@@ -314,6 +314,7 @@ bool compute_rgbd_cost(
     bool calculate_observed_cost);
 
 void render_cuda_multi_unified(
+        const std::string stage, 
         const std::vector<Model::Triangle>& tris,
         const std::vector<Model::mat4x4>& poses,
         const std::vector<int> pose_model_map,
@@ -332,13 +333,26 @@ void render_cuda_multi_unified(
         float kCameraCY,
         float kCameraFX,
         float kCameraFY,
+        float* observed_depth,
+        uint8_t* observed_color,
+        int observed_point_num,
+        // Cost calculation specific stuff
+        std::vector<float> pose_observed_points_total,
+        int* result_observed_cloud_label,
+        int cost_type,
+        bool calculate_observed_cost,
+        float sensor_resolution,
+        //// Outputs
         std::vector<int32_t>& result_depth, 
         std::vector<std::vector<uint8_t>>& result_color,
         float* &result_cloud,
         uint8_t* &result_cloud_color,
         int& result_cloud_point_num,
         int* &result_cloud_pose_map,
-        int* &result_dc_index);
+        int* &result_dc_index,
+        // Costs
+        float* &rendered_cost,
+        float* &observed_cost);
 
 #endif
 

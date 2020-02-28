@@ -604,6 +604,7 @@ namespace cuda_renderer {
         return device_depth_int;
     }
     void render_cuda_multi_unified(
+        const std::string stage,
         const std::vector<Model::Triangle>& tris,
         const std::vector<Model::mat4x4>& poses,
         const std::vector<int> pose_model_map,
@@ -622,15 +623,40 @@ namespace cuda_renderer {
         float kCameraCY,
         float kCameraFX,
         float kCameraFY,
+        float* observed_depth,
+        uint8_t* observed_color,
+        int observed_point_num,
+        std::vector<float> pose_observed_points_total,
+        int* result_observed_cloud_label,
+        int cost_type,
+        bool calculate_observed_cost,
+        float sensor_resolution,
         std::vector<int32_t>& result_depth, 
         std::vector<std::vector<uint8_t>>& result_color,
         float* &result_cloud,
         uint8_t* &result_cloud_color,
         int& result_cloud_point_num,
         int* &result_cloud_pose_map,
-        int* &result_dc_index) {
+        int* &result_dc_index,
+        float* &rendered_cost,
+        float* &observed_cost) {
+        /*
+         * - @source_mask_label - Label for every pixel in source image, used for segmentation specific occlusion checking
+         * - Currently doesnt support pose occlusion or pose occlusion other
+         */
         
-            // Create device inputs
+        // std::string stage = "DEBUG";
+        printf("---------------------------------------\n");
+        printf("Stage : %s\n", stage.c_str());
+        printf("USE_CLUTTER : %d\n", USE_CLUTTER);
+        printf("USE_TREE : %d\n", USE_TREE);
+        printf("sensor_resolution : %f\n", sensor_resolution);
+        printf("cost_type : %d\n", cost_type);
+        printf("point_dim : %d\n", point_dim);
+        printf("stride : %d\n", stride);
+        printf("depth_factor : %d\n", depth_factor);
+        printf("observed_point_num : %d\n", observed_point_num);
+        // Create device inputs
         int* device_single_result_image;
         cudaMalloc((void**)&device_single_result_image, sizeof(int));
         cudaMemcpy(device_single_result_image, &single_result_image, sizeof(int), cudaMemcpyHostToDevice);
@@ -709,7 +735,7 @@ namespace cuda_renderer {
         thrust::device_vector<float> device_pose_clutter_points(num_images, 0);
         thrust::device_vector<float> device_pose_total_points(num_images, 0);
 
-        thrust::device_vector<int32_t> device_depth_int(poses.size()*real_width*real_height, INT_MAX);
+        thrust::device_vector<int32_t> device_depth_int(num_images*real_width*real_height, INT_MAX);
         thrust::device_vector<int32_t> device_lock_int(num_images*real_width*real_height, 0);
         thrust::device_vector<uint8_t> device_red_int(num_images*real_width*real_height, 0);
         thrust::device_vector<uint8_t> device_green_int(num_images*real_width*real_height, 0);
@@ -719,10 +745,10 @@ namespace cuda_renderer {
         Model::Triangle* device_tris_ptr = thrust::raw_pointer_cast(device_tris.data());
         Model::mat4x4* device_poses_ptr = thrust::raw_pointer_cast(device_poses.data());
 
-        // Mapping each pose to model
+        //// Mapping each pose to model
         int* device_pose_model_map_ptr = thrust::raw_pointer_cast(device_pose_model_map.data());
 
-        // Mapping each model to triangle range
+        //// Mapping each model to triangle range
         int* device_tris_model_count_low_ptr = thrust::raw_pointer_cast(device_tris_model_count_low.data());
         int* device_tris_model_count_high_ptr = thrust::raw_pointer_cast(device_tris_model_count_high.data());
 
@@ -732,9 +758,13 @@ namespace cuda_renderer {
         float* device_pose_total_points_vec = thrust::raw_pointer_cast(device_pose_total_points.data());
         int* device_pose_segmentation_label_vec = thrust::raw_pointer_cast(device_pose_segmentation_label.data());
         bool use_segmentation_label = false;
-        if (device_pose_segmentation_label.size() > 0)
-            use_segmentation_label = true ;
+        printf("use_segmentation_label : %d\n", use_segmentation_label);
 
+        if (device_pose_segmentation_label.size() > 0)
+        {
+            //// 6-Dof case, segmentation label between pose and source image pixel would be compared for occlusion checking
+            use_segmentation_label = true ;
+        }
         int32_t* device_source_depth_vec = thrust::raw_pointer_cast(device_source_depth.data());
         uint8_t* device_source_red_vec = thrust::raw_pointer_cast(device_source_color_red.data());
         uint8_t* device_source_green_vec = thrust::raw_pointer_cast(device_source_color_green.data());
@@ -747,7 +777,7 @@ namespace cuda_renderer {
         uint8_t* green_image_vec = thrust::raw_pointer_cast(device_green_int.data());
         uint8_t* blue_image_vec = thrust::raw_pointer_cast(device_blue_int.data());
 
-        // Render all poses
+        //// Render all poses
         dim3 numBlocks((tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
         render_triangle_multi<<<numBlocks, threadsPerBlock>>>(device_tris_ptr, tris.size(),
                                                         device_poses_ptr, poses.size(),
@@ -800,6 +830,27 @@ namespace cuda_renderer {
                             device_green_int.begin(), max2zero_functor());
         thrust::transform(device_blue_int.begin(), device_blue_int.end(),
                             device_blue_int.begin(), max2zero_functor());
+        
+        if (stage.compare("DEBUG") == 0 || stage.compare("RENDER") == 0)
+        {
+            printf("Copying images to CPU\n");
+            //// Allocate CPU memory
+            std::vector<uint8_t> result_red(num_images*real_width*real_height);
+            std::vector<uint8_t> result_green(num_images*real_width*real_height);
+            std::vector<uint8_t> result_blue(num_images*real_width*real_height);
+            result_depth.resize(num_images*real_width*real_height);
+            
+            //// Copy from GPU to CPU
+            thrust::copy(device_depth_int.begin(), device_depth_int.end(), result_depth.begin());
+            thrust::copy(device_red_int.begin(), device_red_int.end(), result_red.begin());
+            thrust::copy(device_green_int.begin(), device_green_int.end(), result_green.begin());
+            thrust::copy(device_blue_int.begin(), device_blue_int.end(), result_blue.begin());
+            result_color.push_back(result_red);
+            result_color.push_back(result_green);
+            result_color.push_back(result_blue);
+
+            if (stage.compare("RENDER") == 0) return;
+        }
         ///////////////////////////////////////////////////////////////
 
         dim3 threadsPerBlock2D(16, 16);
@@ -819,7 +870,7 @@ namespace cuda_renderer {
             printf("ERROR: Unable to execute kernel depth_to_mask\n");
         }
 
-        // Create mapping from pixel to corresponding index in point cloud
+        //// Create mapping from pixel to corresponding index in point cloud
         int mask_back_temp = mask.back();
         thrust::exclusive_scan(mask.begin(), mask.end(), mask.begin(), 0); // in-place scan
         result_cloud_point_num = mask.back() + mask_back_temp;
@@ -828,35 +879,256 @@ namespace cuda_renderer {
         float* cuda_cloud;
         uint8_t* cuda_cloud_color;
         int* cuda_cloud_pose_map;
+        size_t query_pitch_in_bytes;
 
-        cudaMalloc(&cuda_cloud, point_dim * result_cloud_point_num * sizeof(float));
+        const unsigned int size_of_float = sizeof(float);
+        const unsigned int size_of_int   = sizeof(int);
+        const unsigned int size_of_uint   = sizeof(uint8_t);
+        int k = 1;
+
+        // cudaMalloc(&cuda_cloud, point_dim * result_cloud_point_num * sizeof(float));
+        //// Allocate memory for outputs
         cudaMalloc(&cuda_cloud_color, point_dim * result_cloud_point_num * sizeof(uint8_t));
         cudaMalloc(&cuda_cloud_pose_map, result_cloud_point_num * sizeof(int));
+        cudaMallocPitch(&cuda_cloud,   &query_pitch_in_bytes,   result_cloud_point_num * size_of_float, point_dim);
 
-
-        result_cloud = (float*) malloc(point_dim * result_cloud_point_num * sizeof(float));
-        result_cloud_color = (uint8_t*) malloc(point_dim * result_cloud_point_num * sizeof(uint8_t));
-        result_dc_index = (int*) malloc(num_images * width * height * sizeof(int));
-        result_cloud_pose_map = (int*) malloc(result_cloud_point_num * sizeof(int));
-
-
-        depth_to_cloud<<<numBlocks2D, threadsPerBlock2D>>>(
+        //// Use Mapping to convert images to point clouds
+        size_t query_pitch = query_pitch_in_bytes / size_of_float;
+        depth_to_2d_cloud<<<numBlocks2D, threadsPerBlock2D>>>(
                             depth_image_vec, red_image_vec, green_image_vec, blue_image_vec,
-                            cuda_cloud, cuda_cloud_color, result_cloud_point_num, mask_ptr, width, height, 
+                            cuda_cloud, query_pitch_in_bytes, cuda_cloud_color, result_cloud_point_num, mask_ptr, width, height, 
                             kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map,
                             NULL, NULL);
+        
+        // if (stage.compare("DEBUG") == 0 || stage.compare("CLOUD") == 0)
+        if (stage.compare("DEBUG") == 0 || stage.compare("CLOUD") == 0)
+        {
+            printf("Copying point clouds to CPU\n");
+            //// Allocate CPU memory
+            result_cloud = (float*) malloc(point_dim * result_cloud_point_num * sizeof(float));
+            result_cloud_color = (uint8_t*) malloc(point_dim * result_cloud_point_num * sizeof(uint8_t));
+            result_dc_index = (int*) malloc(num_images * width * height * sizeof(int));
+            result_cloud_pose_map = (int*) malloc(result_cloud_point_num * sizeof(int));
+
+            //// Copy to CPU if needed
+            cudaMemcpy2D(
+                result_cloud,  result_cloud_point_num * size_of_float, cuda_cloud,  query_pitch_in_bytes,  result_cloud_point_num * size_of_float, point_dim, cudaMemcpyDeviceToHost);
+            // cudaMemcpy(result_cloud, cuda_cloud, point_dim * result_cloud_point_num * sizeof(float), cudaMemcpyDeviceToHost);
+            cudaMemcpy(result_cloud_color, cuda_cloud_color, point_dim * result_cloud_point_num * sizeof(uint8_t), cudaMemcpyDeviceToHost);
+            cudaMemcpy(result_dc_index, mask_ptr, num_images * width * height * sizeof(int), cudaMemcpyDeviceToHost);
+            cudaMemcpy(result_cloud_pose_map, cuda_cloud_pose_map, result_cloud_point_num * sizeof(int), cudaMemcpyDeviceToHost);
             
-        // // cudaDeviceSynchronize();
-        cudaMemcpy(result_cloud, cuda_cloud, point_dim * result_cloud_point_num * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(result_cloud_color, cuda_cloud_color, point_dim * result_cloud_point_num * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-        cudaMemcpy(result_dc_index, mask_ptr, num_images * width * height * sizeof(int), cudaMemcpyDeviceToHost);
-        cudaMemcpy(result_cloud_pose_map, cuda_cloud_pose_map, result_cloud_point_num * sizeof(int), cudaMemcpyDeviceToHost);
+            /// Exit here if only point clouds are needed - for e.g. before ICP
+            if (stage.compare("CLOUD") == 0) return;
+        }
+        //// Free image memory
+        device_depth_int.clear(); device_depth_int.shrink_to_fit();
+        device_red_int.clear(); device_red_int.shrink_to_fit();
+        device_blue_int.clear(); device_blue_int.shrink_to_fit();
+        device_green_int.clear(); device_green_int.shrink_to_fit();
+        device_source_depth.clear(); device_source_depth.shrink_to_fit();
+        device_source_color_red.clear(); device_source_color_red.shrink_to_fit();
+        device_source_color_blue.clear(); device_source_color_blue.shrink_to_fit();
+        device_source_color_green.clear(); device_source_color_green.shrink_to_fit();
 
+        printf("************Point clouds created*************\n");
+        // Allocate memory for KNN
+        // Query is render and Ref is observed
+        float* ref_dev;
+        float* dist_dev;
+        int* index_dev;
+        size_t ref_pitch_in_bytes, dist_pitch_in_bytes, index_pitch_in_bytes;
+        // cudaMallocPitch(&cuda_cloud, &query_pitch_in_bytes, result_cloud_point_num * size_of_float, point_dim);
+        cudaMallocPitch(&ref_dev, &ref_pitch_in_bytes, observed_point_num * size_of_float, point_dim);
+        cudaMallocPitch(&dist_dev,  &dist_pitch_in_bytes,  result_cloud_point_num * size_of_float, observed_point_num);
+        cudaMallocPitch(&index_dev, &index_pitch_in_bytes, result_cloud_point_num * size_of_int,   k);
 
-        // printf("depth2cloud_global() Done\n");
+         // Deduce pitch values
+        size_t ref_pitch = ref_pitch_in_bytes / size_of_float;
+        size_t dist_pitch  = dist_pitch_in_bytes  / size_of_float;
+        size_t index_pitch = index_pitch_in_bytes / size_of_int;
+        if (query_pitch != dist_pitch || query_pitch != index_pitch) {
+            printf("ERROR: Invalid pitch value\n");
+            return;
+        }
+
+        //// Copy observed data
+        // cudaMemcpy2D(cuda_cloud, query_pitch_in_bytes, result_cloud, result_cloud_point_num * size_of_float, result_cloud_point_num * size_of_float, point_dim, cudaMemcpyHostToDevice);
+        cudaMemcpy2D(ref_dev, ref_pitch_in_bytes, observed_depth, observed_point_num * size_of_float, observed_point_num * size_of_float, point_dim, cudaMemcpyHostToDevice);
+
+        // Compute distances and nearest neighbours
+        dim3 block0(BLOCK_DIM, BLOCK_DIM, 1);
+        dim3 grid0(result_cloud_point_num / BLOCK_DIM, result_cloud_point_num / BLOCK_DIM, 1);
+        if (result_cloud_point_num % BLOCK_DIM != 0) grid0.x += 1;
+        if (result_cloud_point_num   % BLOCK_DIM != 0) grid0.y += 1;
+        compute_distances_render<<<grid0, block0>>>(ref_dev, observed_point_num, ref_pitch, cuda_cloud, result_cloud_point_num, query_pitch, point_dim, dist_dev);
+        if (cudaGetLastError() != cudaSuccess) {
+            printf("ERROR: Unable to execute kernel\n");
+            return;
+        }
+        dim3 block1(256, 1, 1);
+        dim3 grid1(result_cloud_point_num / 256, 1, 1);
+        if (result_cloud_point_num % 256 != 0) grid1.x += 1;
+        modified_insertion_sort_render<<<grid1, block1>>>(dist_dev, dist_pitch, index_dev, index_pitch, result_cloud_point_num, observed_point_num, k);    
+        if (cudaGetLastError() != cudaSuccess) {
+            printf("ERROR: Unable to execute kernel\n");
+            return;
+        }
+        dim3 block2(16, 16, 1);
+        dim3 grid2(result_cloud_point_num / 16, k / 16, 1);
+        if (result_cloud_point_num % 16 != 0) grid2.x += 1;
+        if (k % 16 != 0)        grid2.y += 1;
+        compute_sqrt_render<<<grid2, block2>>>(dist_dev, result_cloud_point_num, query_pitch, k);	
+        if (cudaGetLastError() != cudaSuccess) {
+            printf("ERROR: Unable to execute kernel\n");
+            return;
+        }
+        // float* knn_dist;
+        // int* knn_index;
+        // cudaMalloc(&knn_dist, result_cloud_point_num * k * size_of_float);
+        // cudaMalloc(&knn_index, result_cloud_point_num * k * size_of_int);
+
+        if (stage.compare("DEBUG") == 0)
+        {
+            float* knn_dist_cpu   = (float*) malloc(result_cloud_point_num * k * sizeof(float));
+            int* knn_index_cpu  = (int*)   malloc(result_cloud_point_num * k * sizeof(int));
+
+            cudaMemcpy2D(knn_dist_cpu,  result_cloud_point_num * size_of_float, dist_dev,  dist_pitch_in_bytes,  result_cloud_point_num * size_of_float, k, cudaMemcpyDeviceToHost);
+            cudaMemcpy2D(knn_index_cpu, result_cloud_point_num * size_of_int,   index_dev, index_pitch_in_bytes, result_cloud_point_num * size_of_int,   k, cudaMemcpyDeviceToHost);
+            
+            // cudaMemcpy(knn_dist, knn_dist_cpu, result_cloud_point_num * size_of_float, cudaMemcpyHostToDevice);
+            // cudaMemcpy(knn_index, knn_index_cpu, result_cloud_point_num * size_of_int, cudaMemcpyHostToDevice);
+            // for(int i = 0; i < result_cloud_point_num; i++){
+            //     printf("knn dist:%f\n", knn_dist_cpu[i]);
+            // }
+        }
+        printf("*************KNN distances computed**********\n");
+
+        //////////////////////////////////////////////////////////
+
+        // Allocate outputs
+        thrust::device_vector<float> cuda_rendered_cost_vec(num_images, 0);
+        float* cuda_rendered_cost = thrust::raw_pointer_cast(cuda_rendered_cost_vec.data());
+        thrust::device_vector<float> cuda_pose_point_num_vec(num_images, 0);
+        float* cuda_pose_point_num = thrust::raw_pointer_cast(cuda_pose_point_num_vec.data());
+
+        // Points in observed that get explained by render
+        thrust::device_vector<uint8_t> cuda_observed_explained_vec(num_images * observed_point_num, 0);
+        uint8_t* cuda_observed_explained = thrust::raw_pointer_cast(cuda_observed_explained_vec.data());
+        
+        int* cuda_observed_cloud_label;
+        uint8_t* cuda_observed_cloud_color;
+        cudaMalloc(&cuda_observed_cloud_label, observed_point_num * size_of_int);
+        cudaMalloc(&cuda_observed_cloud_color, point_dim * observed_point_num * size_of_uint);
+        
+        cudaMemcpy(cuda_observed_cloud_label, result_observed_cloud_label, observed_point_num * size_of_int, cudaMemcpyHostToDevice);
+        cudaMemcpy(cuda_observed_cloud_color, observed_color, point_dim * observed_point_num * size_of_uint, cudaMemcpyHostToDevice);
+
+        dim3 numBlocksR((result_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
+        compute_render_cost<<<numBlocksR, threadsPerBlock>>>(
+            dist_dev,
+            index_dev,
+            cuda_cloud_pose_map,
+            device_pose_occluded_vec,
+            cuda_rendered_cost,
+            sensor_resolution,
+            result_cloud_point_num,
+            observed_point_num,
+            cuda_pose_point_num,
+            cuda_cloud_color,
+            cuda_observed_cloud_color,
+            cuda_cloud,
+            cuda_observed_explained,
+            device_pose_segmentation_label_vec,
+            cuda_observed_cloud_label,
+            cost_type);
+        
+        thrust::device_vector<float> percentage_multiplier_val(num_images, 100);
+        if (stage.compare("DEBUG") == 0 || stage.compare("COST") == 0)
+        {
+            printf("Copying rendered cost to CPU\n");
+            thrust::transform(
+                cuda_rendered_cost_vec.begin(), cuda_rendered_cost_vec.end(), 
+                cuda_pose_point_num_vec.begin(), cuda_rendered_cost_vec.begin(), 
+                thrust::divides<float>()
+            );
+            thrust::transform(
+                cuda_rendered_cost_vec.begin(), cuda_rendered_cost_vec.end(), 
+                percentage_multiplier_val.begin(), cuda_rendered_cost_vec.begin(), 
+                thrust::multiplies<float>()
+            );
+            rendered_cost = (float*) malloc(num_images * size_of_float);
+            cudaMemcpy(rendered_cost, cuda_rendered_cost, num_images * size_of_float, cudaMemcpyDeviceToHost);
+        }
+        printf("*************Render Costs computed**********\n");
+        if (calculate_observed_cost)
+        {
+            thrust::device_vector<float> cuda_pose_observed_explained_vec(num_images, 0);
+            float* cuda_pose_observed_explained = thrust::raw_pointer_cast(cuda_pose_observed_explained_vec.data());
+
+            dim3 numBlocksO((num_images * observed_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
+            //// Calculate the number of explained points in every pose, by adding
+            compute_observed_cost<<<numBlocksO, threadsPerBlock>>>(
+                num_images,
+                observed_point_num,
+                cuda_observed_explained,
+                cuda_pose_observed_explained
+            );
+            
+            // Subtract total observed points for each pose with explained points for each pose
+            thrust::device_vector<float> cuda_pose_observed_points_total_vec = pose_observed_points_total;
+            thrust::device_vector<float> cuda_observed_cost_vec(num_images, 0);
+            thrust::transform(
+                cuda_pose_observed_points_total_vec.begin(), cuda_pose_observed_points_total_vec.end(), 
+                cuda_pose_observed_explained_vec.begin(), cuda_observed_cost_vec.begin(), 
+                thrust::minus<float>()
+            );
+
+            // printf("Observed explained\n");
+            // thrust::copy(
+            //     cuda_pose_observed_points_total_vec.begin(),
+            //     cuda_pose_observed_points_total_vec.end(), 
+            //     std::ostream_iterator<int>(std::cout, " ")
+            // );
+            // Divide by total points
+            thrust::transform(
+                cuda_observed_cost_vec.begin(), cuda_observed_cost_vec.end(), 
+                cuda_pose_observed_points_total_vec.begin(), cuda_observed_cost_vec.begin(), 
+                thrust::divides<float>()
+            );
+
+            // Multiply by 100
+            thrust::transform(
+                cuda_observed_cost_vec.begin(), cuda_observed_cost_vec.end(), 
+                percentage_multiplier_val.begin(), cuda_observed_cost_vec.begin(), 
+                thrust::multiplies<float>()
+            );
+
+            // printf("Observed cost\n");
+            // thrust::copy(
+            //     cuda_observed_cost_vec.begin(),
+            //     cuda_observed_cost_vec.end(), 
+            //     std::ostream_iterator<int>(std::cout, " ")
+            // );
+            if (stage.compare("DEBUG") == 0 || stage.compare("COST") == 0)
+            {
+                printf("Copying observed cost to CPU\n");
+                observed_cost = (float*) malloc(num_images * size_of_float);
+                float* cuda_observed_cost = thrust::raw_pointer_cast(cuda_observed_cost_vec.data());
+                cudaMemcpy(observed_cost, cuda_observed_cost, num_images * size_of_float, cudaMemcpyDeviceToHost);
+            }
+        }
+
         cudaFree(cuda_cloud);
         cudaFree(cuda_cloud_color);
         cudaFree(cuda_cloud_pose_map);
+        cudaFree(ref_dev);
+        cudaFree(index_dev);
+        cudaFree(dist_dev);
+        cudaFree(cuda_observed_cloud_label);
+        cudaFree(cuda_observed_cloud_color);
+        printf("---------------------------------------\n");
+
     }
 
     bool depth2cloud_global(int32_t* depth_data,
@@ -938,8 +1210,10 @@ namespace cuda_renderer {
         uint8_t* cuda_cloud_color;
         int* cuda_cloud_pose_map;
         int* cuda_cloud_mask_label;
+        size_t query_pitch_in_bytes;
 
-        cudaMalloc(&cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float));
+        // cudaMalloc(&cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float));
+        cudaMallocPitch(&cuda_cloud,   &query_pitch_in_bytes,   rendered_cloud_point_num * sizeof(float), point_dim);
         cudaMalloc(&cuda_cloud_color, point_dim * rendered_cloud_point_num * sizeof(uint8_t));
         cudaMalloc(&cuda_cloud_pose_map, rendered_cloud_point_num * sizeof(int));
         if (label_mask_data != NULL)
@@ -961,14 +1235,21 @@ namespace cuda_renderer {
         uint8_t* green_in = thrust::raw_pointer_cast(d_green_in.data());
         uint8_t* blue_in = thrust::raw_pointer_cast(d_blue_in.data());
 
-        depth_to_cloud<<<numBlocks, threadsPerBlock>>>(
+        depth_to_2d_cloud<<<numBlocks, threadsPerBlock>>>(
                             depth_data_cuda, red_in, green_in, blue_in,
-                            cuda_cloud, cuda_cloud_color, rendered_cloud_point_num, mask_ptr, width, height, 
+                            cuda_cloud, query_pitch_in_bytes, cuda_cloud_color, rendered_cloud_point_num, mask_ptr, width, height, 
                             kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map,
                             label_mask_data_cuda, cuda_cloud_mask_label);
+        // depth_to_cloud<<<numBlocks, threadsPerBlock>>>(
+        //                     depth_data_cuda, red_in, green_in, blue_in,
+        //                     cuda_cloud, cuda_cloud_color, rendered_cloud_point_num, mask_ptr, width, height, 
+        //                     kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map,
+        //                     label_mask_data_cuda, cuda_cloud_mask_label);
             
         // cudaDeviceSynchronize();
-        cudaMemcpy(result_cloud, cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float), cudaMemcpyDeviceToHost);
+        cudaMemcpy2D(
+                result_cloud,  rendered_cloud_point_num * sizeof(float), cuda_cloud,  query_pitch_in_bytes,  rendered_cloud_point_num * sizeof(float), point_dim, cudaMemcpyDeviceToHost);
+        // cudaMemcpy(result_cloud, cuda_cloud, point_dim * rendered_cloud_point_num * sizeof(float), cudaMemcpyDeviceToHost);
         cudaMemcpy(result_cloud_color, cuda_cloud_color, point_dim * rendered_cloud_point_num * sizeof(uint8_t), cudaMemcpyDeviceToHost);
         cudaMemcpy(dc_index, mask_ptr, num_poses * width * height * sizeof(int), cudaMemcpyDeviceToHost);
         cudaMemcpy(cloud_pose_map, cuda_cloud_pose_map, rendered_cloud_point_num * sizeof(int), cudaMemcpyDeviceToHost);
@@ -1047,6 +1328,12 @@ namespace cuda_renderer {
         bool calculate_observed_cost
     )
     {
+        /*
+         * @pose_observed_points_total - number of total points in observed scene corresponding to given object
+         * It is calculated using segmentation label
+         * @result_observed_cloud_label - label for every point in the observed cloud, used in calculating render cost,
+         * A point is penalized only if it belongs to same label (pose of point and closest observed point)
+         */
         // for (int i = 0; i < num_poses; i++)
         // {
         //     printf("%d ", poses_occluded[i]);

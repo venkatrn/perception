@@ -2408,8 +2408,8 @@ def run_sameshape_gpu(dataset_cfg=None):
     ## Running on PERCH only with synthetic color dataset - shape
 
     image_directory = dataset_cfg['image_dir']
-    annotation_file = image_directory + '/instances_newmap1_turbosquid_can_only_2018.json'
-    # annotation_file = image_directory + '/instances_newmap1_turbosquid_2018.json'
+    # annotation_file = image_directory + '/instances_newmap1_turbosquid_can_only_2018.json'
+    annotation_file = image_directory + '/instances_newmap1_turbosquid_2018.json'
     model_dir = dataset_cfg['model_dir']
 
 
@@ -2440,9 +2440,9 @@ def run_sameshape_gpu(dataset_cfg=None):
     # required_objects = ['coke_bottle']
     # required_objects = ['010_potted_meat_can', '008_pudding_box']
     # required_objects = ['010_potted_meat_can']
-    # required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
+    required_objects = ['coke_bottle', 'sprite_bottle', 'pepsi_can', 'coke_can']
     # required_objects = ['sprite_bottle']
-    required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
+    # required_objects = ['pepsi_can', 'coke_can', '7up_can', 'sprite_can']
     # required_objects = ['sprite_can']
     # required_objects = ['pepsi_can', 'sprite_bottle', 'coke_bottle']
 
@@ -2457,8 +2457,8 @@ def run_sameshape_gpu(dataset_cfg=None):
     # 5 in can only
     for img_i in range(0,50):
 
-        image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
-        # image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
+        # image_name = 'NewMap1_turbosquid_can_only/0000{}.left.png'.format(str(img_i).zfill(2))
+        image_name = 'NewMap1_turbosquid/0000{}.left.png'.format(str(img_i).zfill(2))
         image_data, annotations = fat_image.get_random_image(name=image_name, required_objects=required_objects)
         yaw_only_objects, max_min_dict, transformed_annotations, camera_pose_table = \
                 fat_image.visualize_pose_ros(image_data, annotations, frame='table', camera_optical_frame=False)
@@ -2699,7 +2699,7 @@ def run_ycb_6d(dataset_cfg=None):
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
     for scene_i in range(48, 60):
-        for img_i in range(1283,2500):
+        for img_i in range(1283,1284):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
@@ -2824,8 +2824,8 @@ if __name__ == '__main__':
     ROS_PYTHON2_PKG_PATH = config['python2_paths']
     ROS_PYTHON3_PKG_PATH = config['python3_paths'][0]
 
-    run_ycb_6d(dataset_cfg=config['dataset'])
-    # run_sameshape_gpu(dataset_cfg=config['dataset'])
+    # run_ycb_6d(dataset_cfg=config['dataset'])
+    run_sameshape_gpu(dataset_cfg=config['dataset'])
     # run_dope_sameshape()
 
     # coco_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/coco_results.pth')

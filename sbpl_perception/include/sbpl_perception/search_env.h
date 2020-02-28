@@ -364,6 +364,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, std::vector<std::vector<uint8_t>>> gpu_color_image_cache_;
   void ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
                               std::vector<CostComputationOutput> *output, bool lazy);
+  void ComputeGreedyCostsInParallelGPU(std::vector<CostComputationInput> &input,
+                                      std::vector<CostComputationOutput> *output);
   vector<int> tris_model_count;
   vector<cuda_renderer::Model::Triangle> tris;
   float gpu_depth_factor = 100.0;
@@ -424,7 +426,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
                         vector<float>& pose_clutter_cost,
                         const vector<int>& pose_segmentation_label = vector<int>());
 
-  void GetStateImagesUnifiedGPU(const vector<ObjectState>& objects,
+  void GetStateImagesUnifiedGPU(const string stage,
+                      const vector<ObjectState>& objects,
                       const vector<vector<uint8_t>>& source_result_color,
                       const vector<int32_t>& source_result_depth,
                       vector<vector<uint8_t>>& result_color,
@@ -436,7 +439,13 @@ class EnvObjectRecognition : public EnvironmentMHA {
                       int& result_cloud_point_num,
                       int* &dc_index,
                       int* &cloud_pose_map,
-                      const vector<int>& pose_segmentation_label = vector<int>());
+                      // Costs
+                      float* &rendered_cost,
+                      float* &observed_cost,
+                      const vector<int>& pose_segmentation_label = vector<int>(),
+                      const vector<float>& pose_observed_points_total = vector<float>(),
+                      int cost_type = 0,
+                      bool calculate_observed_cost = false);
 
   void GetICPAdjustedPosesGPU(float* result_rendered_clouds,
                               int* dc_index,

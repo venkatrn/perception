@@ -283,6 +283,7 @@ bool knn_cuda_global(const float * ref,
                      int *         knn_index) {
 
     // Constants
+    // ref is observed, query is rendered
     const unsigned int size_of_float = sizeof(float);
     const unsigned int size_of_int   = sizeof(int);
 
