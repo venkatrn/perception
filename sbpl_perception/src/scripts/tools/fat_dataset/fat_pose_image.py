@@ -1088,8 +1088,8 @@ class FATImage:
             "005_tomato_soup_can": [0,0], #half_0
             "006_mustard_bottle": [0,0], #whole_0-pi
             "007_tuna_fish_can": [0,0], #half_0
-            # "008_pudding_box": [0,1], #half_0-pi
-            # "009_gelatin_box": [0,1], #half_0-pi
+            "008_pudding_box": [0,0], #half_0-pi
+            "009_gelatin_box": [0,0], #half_0-pi
             "010_potted_meat_can": [0,0], #half_0-pi
             # "011_banana": [1,2], #whole_0-2pi
             "019_pitcher_base": [0,0], #whole_0-2pi
@@ -1098,7 +1098,7 @@ class FATImage:
             "025_mug": [0,1], #whole_0-2pi
             # "035_power_drill" : [1,0], #whole_0-2pi
             "036_wood_block": [0,1], #half_0-pi
-            # "037_scissors": [1,2], #whole_0-2pi
+            "037_scissors": [1,0], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
             # "051_large_clamp": [1,1], #whole_0-pi
             # "052_extra_large_clamp": [1,2], #whole_0-pi
@@ -2628,8 +2628,8 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
-    # required_objects = ['002_master_chef_can']
-    required_objects = ['004_sugar_box']
+    required_objects = ['024_bowl']
+    # required_objects = ['037_scissors']
     # required_objects = ['006_mustard_bottle', '019_pitcher_base']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
@@ -2699,7 +2699,7 @@ def run_ycb_6d(dataset_cfg=None):
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
     for scene_i in range(48, 60):
-        for img_i in range(1283,1284):
+        for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
@@ -2737,7 +2737,7 @@ def run_ycb_6d(dataset_cfg=None):
 
             # Visualize ground truth in ros
             # yaw_only_objects, max_min_dict_gt, transformed_annotations, _ = fat_image.visualize_pose_ros(
-            #     image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=1, write_poses=False, ros_publish=True
+            #     image_data, annotations, frame='camera', camera_optical_frame=False, num_publish=10, write_poses=False, ros_publish=False
             # )
             if True:
                 model_poses_file = None
@@ -2824,8 +2824,8 @@ if __name__ == '__main__':
     ROS_PYTHON2_PKG_PATH = config['python2_paths']
     ROS_PYTHON3_PKG_PATH = config['python3_paths'][0]
 
-    # run_ycb_6d(dataset_cfg=config['dataset'])
-    run_sameshape_gpu(dataset_cfg=config['dataset'])
+    run_ycb_6d(dataset_cfg=config['dataset'])
+    # run_sameshape_gpu(dataset_cfg=config['dataset'])
     # run_dope_sameshape()
 
     # coco_predictions = torch.load('/media/aditya/A69AFABA9AFA85D9/Cruzr/code/fb_mask_rcnn/maskrcnn-benchmark/inference/fat_pose_2018_val_cocostyle/coco_results.pth')

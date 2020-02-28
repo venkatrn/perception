@@ -200,9 +200,10 @@ namespace cuda_renderer {
                         wait = false;
                     }
                 }
+                // 1.0 is 1cm occlusion threshold
                 int32_t& new_depth = depth_entry[x_to_write+y_to_write*real_width];
                 if ((use_segmentation_label == false && abs(new_depth - source_depth) > 1.0) ||
-                    (use_segmentation_label == true && *pose_segmentation_label_entry != source_label))
+                    (use_segmentation_label == true && *pose_segmentation_label_entry != source_label && abs(new_depth - source_depth) > 0.5))
                 {
                     // printf("%d, %d\n", *pose_segmentation_label_entry, source_label);
                     // printf("%d, %d\n", source_depth, curr_depth);
