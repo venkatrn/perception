@@ -2479,7 +2479,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
   end = chrono::system_clock::now();
   chrono::duration<double> elapsed_seconds = end-start;
   env_stats_.time = elapsed_seconds.count();
-  env_stats_.icp_time /= num_batches;
+  // env_stats_.icp_time /= num_batches;
   string fname = debug_dir_ + "depth_greedy_state.png";
   string cname = debug_dir_ + "color_greedy_state.png";
   // PrintState(greedy_state, fname, cname);

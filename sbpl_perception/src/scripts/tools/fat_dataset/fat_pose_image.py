@@ -1091,7 +1091,7 @@ class FATImage:
             "008_pudding_box": [0,0], #half_0-pi
             "009_gelatin_box": [0,0], #half_0-pi
             "010_potted_meat_can": [0,0], #half_0-pi
-            # "011_banana": [1,2], #whole_0-2pi
+            "011_banana": [1,0], #whole_0-2pi #from psc
             "019_pitcher_base": [0,0], #whole_0-2pi
             "021_bleach_cleanser": [0,2], #whole_0-2pi
             "024_bowl": [1,0], #whole_0
@@ -2640,15 +2640,12 @@ def run_ycb_6d(dataset_cfg=None):
         "005_tomato_soup_can",
         "006_mustard_bottle",
         "007_tuna_fish_can",
-        "008_pudding_box",
         "009_gelatin_box",
         "010_potted_meat_can",
+        "011_banana",
         "019_pitcher_base",
-        "021_bleach_cleanser",
         "024_bowl",
         "025_mug",
-        "036_wood_block",
-        "037_scissors",
         "040_large_marker",
         "061_foam_brick"
     ]
@@ -2675,7 +2672,7 @@ def run_ycb_6d(dataset_cfg=None):
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
     for scene_i in range(48, 60):
-        for img_i in range(1,500):
+        for img_i in range(1,2):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:

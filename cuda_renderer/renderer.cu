@@ -762,13 +762,13 @@ namespace cuda_renderer {
         float* device_pose_total_points_vec = thrust::raw_pointer_cast(device_pose_total_points.data());
         int* device_pose_segmentation_label_vec = thrust::raw_pointer_cast(device_pose_segmentation_label.data());
         bool use_segmentation_label = false;
-        printf("use_segmentation_label : %d\n", use_segmentation_label);
 
         if (device_pose_segmentation_label.size() > 0)
         {
             //// 6-Dof case, segmentation label between pose and source image pixel would be compared for occlusion checking
             use_segmentation_label = true ;
         }
+        printf("use_segmentation_label : %d\n", use_segmentation_label);
         int32_t* device_source_depth_vec = thrust::raw_pointer_cast(device_source_depth.data());
         uint8_t* device_source_red_vec = thrust::raw_pointer_cast(device_source_color_red.data());
         uint8_t* device_source_green_vec = thrust::raw_pointer_cast(device_source_color_green.data());
@@ -836,6 +836,17 @@ namespace cuda_renderer {
         thrust::transform(device_blue_int.begin(), device_blue_int.end(),
                             device_blue_int.begin(), max2zero_functor());
         
+        // Free memory for stuff not needed by cloud construction
+        device_tris.clear(); device_tris.shrink_to_fit();
+        device_tris_model_count_low.clear(); device_tris_model_count_low.shrink_to_fit();
+        device_tris_model_count_high.clear(); device_tris_model_count_high.shrink_to_fit();
+        device_pose_model_map.clear(); device_pose_model_map.shrink_to_fit();
+        device_poses.clear(); device_poses.shrink_to_fit();
+        device_source_depth.clear(); device_source_depth.shrink_to_fit();
+        device_source_color_blue.clear(); device_source_color_blue.shrink_to_fit();
+        device_source_color_green.clear(); device_source_color_green.shrink_to_fit();
+        device_source_color_red.clear(); device_source_color_red.shrink_to_fit();
+
         if (stage.compare("DEBUG") == 0 || stage.compare("RENDER") == 0)
         {
             printf("Copying images to CPU\n");
@@ -854,17 +865,11 @@ namespace cuda_renderer {
             result_color.push_back(result_green);
             result_color.push_back(result_blue);
 
+            /// Vectors will be free automatically on return
+
             if (stage.compare("RENDER") == 0) return;
         }
-        device_tris.clear(); device_tris.shrink_to_fit();
-        device_tris_model_count_low.clear(); device_tris_model_count_low.shrink_to_fit();
-        device_tris_model_count_high.clear(); device_tris_model_count_high.shrink_to_fit();
-        device_pose_model_map.clear(); device_pose_model_map.shrink_to_fit();
-        device_poses.clear(); device_poses.shrink_to_fit();
-        device_source_depth.clear(); device_source_depth.shrink_to_fit();
-        device_source_color_blue.clear(); device_source_color_blue.shrink_to_fit();
-        device_source_color_green.clear(); device_source_color_green.shrink_to_fit();
-        device_source_color_red.clear(); device_source_color_red.shrink_to_fit();
+        
         ///////////////////////////////////////////////////////////////
 
         dim3 threadsPerBlock2D(16, 16);
@@ -915,7 +920,11 @@ namespace cuda_renderer {
                             kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map,
                             NULL, NULL);
         
-        // if (stage.compare("DEBUG") == 0 || stage.compare("CLOUD") == 0)
+        //// Free image memory used during point cloud construction
+        device_depth_int.clear(); device_depth_int.shrink_to_fit();
+        device_red_int.clear(); device_red_int.shrink_to_fit();
+        device_blue_int.clear(); device_blue_int.shrink_to_fit();
+        device_green_int.clear(); device_green_int.shrink_to_fit();
         if (stage.compare("DEBUG") == 0 || stage.compare("CLOUD") == 0)
         {
             printf("Copying point clouds to CPU\n");
@@ -934,20 +943,21 @@ namespace cuda_renderer {
             cudaMemcpy(result_cloud_pose_map, cuda_cloud_pose_map, result_cloud_point_num * sizeof(int), cudaMemcpyDeviceToHost);
             
             /// Exit here if only point clouds are needed - for e.g. before ICP
-            if (stage.compare("CLOUD") == 0) return;
+            /// Free copied stuff
+            
+            if (stage.compare("CLOUD") == 0) {
+                cudaFree(cuda_cloud);
+                cudaFree(cuda_cloud_color);
+                cudaFree(cuda_cloud_pose_map);
+                return;
+            }
         }
-        //// Free image memory
-        device_depth_int.clear(); device_depth_int.shrink_to_fit();
-        device_red_int.clear(); device_red_int.shrink_to_fit();
-        device_blue_int.clear(); device_blue_int.shrink_to_fit();
-        device_green_int.clear(); device_green_int.shrink_to_fit();
-        device_source_depth.clear(); device_source_depth.shrink_to_fit();
-        device_source_color_red.clear(); device_source_color_red.shrink_to_fit();
-        device_source_color_blue.clear(); device_source_color_blue.shrink_to_fit();
-        device_source_color_green.clear(); device_source_color_green.shrink_to_fit();
-
-
+        // Free any vectors not needed later
+        mask.clear(); mask.shrink_to_fit();
         printf("************Point clouds created*************\n");
+
+        /////////////////////////////////////////////////////////////////////////////
+
         // Allocate memory for KNN
         // Query is render and Ref is observed
         float* ref_dev;
@@ -955,10 +965,13 @@ namespace cuda_renderer {
         int* index_dev;
         size_t ref_pitch_in_bytes, dist_pitch_in_bytes, index_pitch_in_bytes;
         // cudaMallocPitch(&cuda_cloud, &query_pitch_in_bytes, result_cloud_point_num * size_of_float, point_dim);
-        cudaMallocPitch(&ref_dev, &ref_pitch_in_bytes, observed_point_num * size_of_float, point_dim);
-        cudaMallocPitch(&dist_dev,  &dist_pitch_in_bytes,  result_cloud_point_num * size_of_float, observed_point_num);
-        cudaMallocPitch(&index_dev, &index_pitch_in_bytes, result_cloud_point_num * size_of_int,   k);
-
+        cudaError_t err0, err1, err2;
+        err0 = cudaMallocPitch(&ref_dev, &ref_pitch_in_bytes, observed_point_num * size_of_float, point_dim);
+        err1 = cudaMallocPitch(&dist_dev,  &dist_pitch_in_bytes,  result_cloud_point_num * size_of_float, observed_point_num);
+        err2 = cudaMallocPitch(&index_dev, &index_pitch_in_bytes, result_cloud_point_num * size_of_int,   k);
+        if (err0 != cudaSuccess || err1 != cudaSuccess || err2 != cudaSuccess) {
+            printf("ERROR: Memory allocation error (cudaMallocPitch)\n");
+        }
          // Deduce pitch values
         size_t ref_pitch = ref_pitch_in_bytes / size_of_float;
         size_t dist_pitch  = dist_pitch_in_bytes  / size_of_float;
@@ -980,7 +993,7 @@ namespace cuda_renderer {
         if (result_cloud_point_num   % BLOCK_DIM != 0) grid0.y += 1;
         compute_distances_render<<<grid0, block0>>>(ref_dev, observed_point_num, ref_pitch, cuda_cloud, result_cloud_point_num, query_pitch, point_dim, dist_dev);
         if (cudaGetLastError() != cudaSuccess) {
-            printf("ERROR: Unable to execute kernel\n");
+            printf("ERROR: Unable to execute kernel compute_distances_render\n");
             return;
         }
         dim3 block1(256, 1, 1);
@@ -988,7 +1001,7 @@ namespace cuda_renderer {
         if (result_cloud_point_num % 256 != 0) grid1.x += 1;
         modified_insertion_sort_render<<<grid1, block1>>>(dist_dev, dist_pitch, index_dev, index_pitch, result_cloud_point_num, observed_point_num, k);    
         if (cudaGetLastError() != cudaSuccess) {
-            printf("ERROR: Unable to execute kernel\n");
+            printf("ERROR: Unable to execute kernel modified_insertion_sort_render\n");
             return;
         }
         dim3 block2(16, 16, 1);
@@ -997,7 +1010,7 @@ namespace cuda_renderer {
         if (k % 16 != 0)        grid2.y += 1;
         compute_sqrt_render<<<grid2, block2>>>(dist_dev, result_cloud_point_num, query_pitch, k);	
         if (cudaGetLastError() != cudaSuccess) {
-            printf("ERROR: Unable to execute kernel\n");
+            printf("ERROR: Unable to execute kernel compute_sqrt_render\n");
             return;
         }
         // float* knn_dist;
@@ -1018,12 +1031,15 @@ namespace cuda_renderer {
             // for(int i = 0; i < result_cloud_point_num; i++){
             //     printf("knn dist:%f\n", knn_dist_cpu[i]);
             // }
+
+            /// Not returning so need to free anything
         }
+        //// Free depth point cloud and reference cloud since not needed for cost computation 
         cudaFree(cuda_cloud);
         cudaFree(ref_dev);
         printf("*************KNN distances computed**********\n");
 
-        //////////////////////////////////////////////////////////
+        ///////////////////////////////////////////////////////////////////
 
         // Allocate outputs
         thrust::device_vector<float> cuda_rendered_cost_vec(num_images, 0);
@@ -1080,6 +1096,8 @@ namespace cuda_renderer {
             );
             rendered_cost = (float*) malloc(num_images * size_of_float);
             cudaMemcpy(rendered_cost, cuda_rendered_cost, num_images * size_of_float, cudaMemcpyDeviceToHost);
+
+            /// Not returning so need to free anything
         }
         printf("*************Render Costs computed**********\n");
         if (calculate_observed_cost)
@@ -1139,6 +1157,8 @@ namespace cuda_renderer {
                 observed_cost = (float*) malloc(num_images * size_of_float);
                 float* cuda_observed_cost = thrust::raw_pointer_cast(cuda_observed_cost_vec.data());
                 cudaMemcpy(observed_cost, cuda_observed_cost, num_images * size_of_float, cudaMemcpyDeviceToHost);
+
+                /// Not returning so need to free anything
             }
         }
 
