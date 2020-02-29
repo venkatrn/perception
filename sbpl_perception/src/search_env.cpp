@@ -81,7 +81,7 @@ namespace {
 
   bool kUseOctomapPruning = false;
 
-  bool cost_debug_msgs = true;
+  bool cost_debug_msgs = false;
 
   bool kUseGPU = true;
 
@@ -94,7 +94,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
                                            std::shared_ptr<boost::mpi::communicator> &comm) :
   mpi_comm_(comm),
   image_debug_(false), debug_dir_(ros::package::getPath("sbpl_perception") +
-                                  "/visualization/"), env_stats_ {0, 0} {
+                                  "/visualization/"), env_stats_ {0, 0, 0, 0, 0} {
 
   // OpenGL requires argc and argv
   char **argv;
@@ -185,6 +185,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
                      false);
     private_nh.param("/perch_params/debug_verbose", perch_params_.debug_verbose, false);
     // private_nh.param("/perch_params/use_color_cost", kUseColorCost, false);
+    private_nh.param("/perch_params/gpu_batch_size", perch_params_.gpu_batch_size, 1000);
     perch_params_.initialized = true;
 
     printf("----------PERCH Config-------------\n");
@@ -207,6 +208,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
     printf("Print Expansions: %d\n", perch_params_.print_expanded_states);
     printf("Debug Verbose: %d\n", perch_params_.debug_verbose);
     printf("Use Color Cost: %d\n", kUseColorCost);
+    printf("GPU batch size: %d\n", perch_params_.gpu_batch_size);
     printf("\n");
     printf("----------Camera Config-------------\n");
     printf("Camera Width: %d\n", kCameraWidth);
@@ -1080,9 +1082,12 @@ void EnvObjectRecognition::GetICPAdjustedPosesCPU(const vector<ObjectState>& obj
                                                   ros::Publisher render_point_cloud_topic,
                                                   bool print_cloud)
 {
-  using milli = std::chrono::milliseconds;
-  auto start = std::chrono::high_resolution_clock::now();
+  // using milli = std::chrono::milliseconds;
+  // auto start = std::chrono::high_resolution_clock::now();
+  printf("GetICPAdjustedPosesCPU()\n");
   vector<int> parent_counted_pixels;
+  chrono::time_point<chrono::system_clock> start, end;
+  start = chrono::system_clock::now();
 
   uint8_t rgb[3] = {0,0,0};
   Eigen::Isometry3d transform;
@@ -1129,7 +1134,8 @@ void EnvObjectRecognition::GetICPAdjustedPosesCPU(const vector<ObjectState>& obj
   #pragma omp parallel for if (do_icp)
   for (int n = 0; n < num_poses; n++)
   {
-    printf("ICP for Pose index : %d\n", n);
+    if (cost_debug_msgs)
+      printf("ICP for Pose index : %d\n", n);
     PointCloudPtr cloud_in = cloud[n];
     cloud_in->width = 1;
     cloud_in->height = cloud_in->points.size();
@@ -1174,7 +1180,7 @@ void EnvObjectRecognition::GetICPAdjustedPosesCPU(const vector<ObjectState>& obj
           std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
         ObjectState modified_object_state(objects[n].id(),
-                                              objects[n].symmetric(), pose_out);
+                                              objects[n].symmetric(), pose_out, objects[n].segmentation_label_id());
         modified_objects[n] = modified_object_state;
       }
       else
@@ -1184,8 +1190,12 @@ void EnvObjectRecognition::GetICPAdjustedPosesCPU(const vector<ObjectState>& obj
     }
   }
   auto finish = std::chrono::high_resolution_clock::now();
+  end = chrono::system_clock::now();
+  chrono::duration<double> elapsed_seconds = end-start;
+  env_stats_.icp_time += elapsed_seconds.count();
+
   std::cout << "GetICPAdjustedPosesCPU() took "
-          << std::chrono::duration_cast<milli>(finish - start).count()
+          << elapsed_seconds.count()
           << " milliseconds\n";
 }
 void EnvObjectRecognition::PrintGPUClouds(const vector<ObjectState>& objects,
@@ -1437,8 +1447,6 @@ void EnvObjectRecognition::GetStateImagesUnifiedGPU(const string stage,
                     int* &result_cloud_pose_map,
                     float* &rendered_cost,
                     float* &observed_cost,
-                    const vector<int>& pose_segmentation_label,
-                    const vector<float>& pose_observed_points_total,
                     int cost_type,
                     bool calculate_observed_cost)
 {
@@ -1459,6 +1467,9 @@ void EnvObjectRecognition::GetStateImagesUnifiedGPU(const string stage,
 
   vector<cuda_renderer::Model::mat4x4> mat4_v;
   vector<int> pose_model_map;
+  vector<int> pose_segmen_label;
+  vector<float> pose_obs_points_total;
+
   // vector<int> tris_model_count;
   // vector<cuda_renderer::Model::Triangle> tris;
 
@@ -1488,7 +1499,15 @@ void EnvObjectRecognition::GetStateImagesUnifiedGPU(const string stage,
 
     pose_model_map.push_back(model_id);
     model_id_prev = model_id;
+
+    if (env_params_.use_external_pose_list == 1)
+    {
+      int required_object_id = objects[i].segmentation_label_id() - 1; 
+      pose_segmen_label.push_back(objects[i].segmentation_label_id());
+      pose_obs_points_total.push_back(segmented_observed_point_count[required_object_id]);
+    }
   }
+  double peak_memory_usage;
   cuda_renderer::render_cuda_multi_unified(
                           stage,
                           tris,
@@ -1502,7 +1521,7 @@ void EnvObjectRecognition::GetStateImagesUnifiedGPU(const string stage,
                           single_result_image,
                           pose_clutter_cost,
                           predicted_mask_image,
-                          pose_segmentation_label,
+                          pose_segmen_label,
                           gpu_stride,
                           gpu_point_dim,
                           gpu_depth_factor,
@@ -1513,7 +1532,7 @@ void EnvObjectRecognition::GetStateImagesUnifiedGPU(const string stage,
                           result_observed_cloud,
                           result_observed_cloud_color,
                           observed_point_num,
-                          pose_observed_points_total,
+                          pose_obs_points_total,
                           result_observed_cloud_label,
                           cost_type,
                           calculate_observed_cost,
@@ -1526,7 +1545,9 @@ void EnvObjectRecognition::GetStateImagesUnifiedGPU(const string stage,
                           result_cloud_pose_map,
                           result_dc_index,
                           rendered_cost,
-                          observed_cost);
+                          observed_cost,
+                          peak_memory_usage);
+  env_stats_.peak_gpu_mem = std::max(env_stats_.peak_gpu_mem, peak_memory_usage);
 }
 void EnvObjectRecognition::PrintStateGPU(GraphState state)
 {
@@ -1559,12 +1580,14 @@ void EnvObjectRecognition::PrintStateGPU(GraphState state)
   );
   PrintGPUImages(source_result_depth, source_result_color, 1, "graph_state", random_poses_occluded);
 }
-void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(std::vector<CostComputationInput> &input,
-                                                  std::vector<CostComputationOutput> *output) {
+void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int32_t> &source_result_depth,
+                                                          const std::vector<ObjectState> &last_object_states,
+                                                          std::vector<CostComputationOutput> &output,
+                                                          int batch_index) {
     std::cout << "Computing costs in parallel GPU" << endl;
 
-    std::vector<ObjectState> source_last_object_states;
-    std::vector<ObjectState> objects = input[0].source_state.object_states();
+    // std::vector<ObjectState> source_last_object_states;
+    // std::vector<ObjectState> objects = input[0].source_state.object_states();
     
     // Random is used as source for merging when rendering the source itself
     std::vector<std::vector<uint8_t>> random_color(3);
@@ -1587,26 +1610,26 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(std::vector<CostCompu
     source_result_color[1] = random_green;
     source_result_color[2] = random_blue;
     // By default source is set to max depth so that nothing happens when we merge with rendered
-    std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, 0);
+    // std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, 0);
     
-    int source_id = input[0].source_id;
+    int source_id = 0;
 
     // source_result_depth.assign(observed_depth_data, observed_depth_data + kCameraWidth * kCameraHeight-1);
-    source_result_depth.assign(unfiltered_depth_data, unfiltered_depth_data + kCameraWidth * kCameraHeight-1);
-    if (env_params_.use_external_pose_list == 1)
-    {    
-      for (int i = 0; i < source_result_depth.size(); i++)
-      {
-        // TODO : fix this hardcode
-        // ycb has depth factor of 10000, and gpu is using 100, divide by 100 to get it to gpu's depth factor
-        source_result_depth[i] /= 100;
-      }
-    }
+    // source_result_depth.assign(unfiltered_depth_data, unfiltered_depth_data + kCameraWidth * kCameraHeight-1);
+    // if (env_params_.use_external_pose_list == 1)
+    // {    
+    //   for (int i = 0; i < source_result_depth.size(); i++)
+    //   {
+    //     // TODO : fix this hardcode
+    //     // ycb has depth factor of 10000, and gpu is using 100, divide by 100 to get it to gpu's depth factor
+    //     source_result_depth[i] /= 100;
+    //   }
+    // }
 
-    std::vector<ObjectState> last_object_states;
+    // std::vector<ObjectState> last_object_states;
     vector<ObjectState> modified_last_object_states;
 
-    int num_poses = input.size();
+    int num_poses = last_object_states.size();
     std::vector<int> rendered_cost(num_poses, 0);
     std::vector<float> rendered_cost_gpu_vec(num_poses, -1);
     float* rendered_cost_gpu = rendered_cost_gpu_vec.data();
@@ -1620,37 +1643,19 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(std::vector<CostCompu
     std::vector<int> poses_occluded_other(num_poses, 1);
     std::vector<int> adjusted_poses_occluded(num_poses, 0);
     std::vector<int> adjusted_poses_occluded_other(num_poses, 0);
-    std::vector<int> pose_segmentation_label(num_poses, 0);
-    std::vector<float> pose_observed_points_total(num_poses, 0.0);
     std::vector<float> pose_clutter_cost(num_poses, 0.0);
 
     // Collect all required things 
-    for(int i = 0; i < num_poses; i ++) {
-      // For non-root level, this should be adjusted state
-      std::vector<ObjectState> objects = input[i].child_state.object_states();
-      const ObjectState &last_object_state = objects[objects.size() - 1];
-      int model_id = last_object_state.id();
-      if (env_params_.use_external_pose_list == 1)
-      {
-        // Store total observed points per pose using segmentation
-        string model_name = obj_models_[model_id].name();
-        // TODO : store this mapping in a map
-        int required_object_id = distance(segmented_object_names.begin(), 
-        find(segmented_object_names.begin(), segmented_object_names.end(), model_name)); 
-        pose_segmentation_label[i] = required_object_id + 1;
-        pose_observed_points_total[i] = segmented_observed_point_count[required_object_id];
-      }
-      last_object_states.push_back(last_object_state);
-    }
+    // for(int i = 0; i < num_poses; i ++) {
+    //   std::vector<ObjectState> objects = input[i].child_state.object_states();
+    //   const ObjectState &last_object_state = objects[objects.size() - 1];
+    //   int model_id = last_object_state.id();
+    //   last_object_states.push_back(last_object_state);
+    // }
 
     std::vector<std::vector<uint8_t>> result_color, adjusted_result_color;
     std::vector<int32_t> result_depth, adjusted_result_depth;
 
-    if (env_params_.use_external_pose_list == 0)
-    {
-      // Make it 0 length so that its not checked in render
-      pose_segmentation_label.clear();
-    }
 
     float* result_cloud;
     uint8_t* result_cloud_color;
@@ -1673,8 +1678,7 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(std::vector<CostCompu
       dc_index,
       cloud_pose_map,
       rendered_cost_gpu,
-      observed_cost_gpu,
-      pose_segmentation_label
+      observed_cost_gpu
     );
 
     //// Do ICP for occluded stuff, poses which are not occluded by other would be same as original
@@ -1738,8 +1742,6 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(std::vector<CostCompu
       cloud_pose_map,
       rendered_cost_gpu,
       observed_cost_gpu,
-      pose_segmentation_label,
-      pose_observed_points_total,
       cost_type,
       calc_obs_cost
     );
@@ -1752,14 +1754,14 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(std::vector<CostCompu
     }
 
 
-    assert(output != nullptr);
-    output->clear();
-    output->resize(num_poses);
-    std::vector<CostComputationOutput> output_gpu;
+    // assert(output != nullptr);
+    // output->clear();
+    // output->resize(num_poses);
+    // std::vector<CostComputationOutput> output_gpu;
     vector<unsigned short> source_depth_image;
     source_depth_image.push_back(1);
 
-
+    // cout << "batch i " << batch_index << endl;
     for(int i = 0; i < num_poses; i++){
       CostComputationOutput cur_unit;
       // cur_unit.cost = total_result_cost[i];
@@ -1773,9 +1775,11 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(std::vector<CostCompu
       {
         cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i]);
       }
-      cur_unit.adjusted_state = input[i].child_state;
-      cur_unit.adjusted_state.mutable_object_states()[input[i].child_state.object_states().size()-1]
-        = modified_last_object_states[i];
+      GraphState greedy_state;
+      greedy_state.AppendObject(modified_last_object_states[i]);
+      cur_unit.adjusted_state = greedy_state;
+      // cur_unit.adjusted_state.mutable_object_states()[input[i].child_state.object_states().size()-1]
+      //   = modified_last_object_states[i];
       cur_unit.state_properties.last_max_depth = 0;
       cur_unit.state_properties.last_min_depth = 0;
       // cur_unit.state_properties.target_cost =  total_result_cost[i];
@@ -1789,12 +1793,13 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(std::vector<CostCompu
       // std::vector<int32_t>::const_iterator finish = start + env_params_.width*env_params_.height;
       // std::vector<int32_t> curr_depth_image(start,finish);
       // cur_unit.gpu_depth_image = curr_depth_image;
-      output_gpu.push_back(cur_unit);
+      // output_gpu.push_back(cur_unit);
+      output[i + batch_index] = cur_unit;
       // output_gpu[i].color_image = ,
       // output_gpu[i].unadjusted_depth_image,
       // output_gpu[i].unadjusted_color_image
     }
-    *output = output_gpu;
+    // *output = output_gpu;
 }
 
 void EnvObjectRecognition::ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
@@ -2365,25 +2370,53 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
   candidate_costs.resize(candidate_succ_ids.size());
 
   // Prepare the cost computation input vector.
-  vector<CostComputationInput> cost_computation_input(candidate_succ_ids.size());
+  vector<ObjectState> last_object_states(candidate_succ_ids.size());
+  vector<CostComputationOutput> cost_computation_output(candidate_succ_ids.size());
 
-  vector<unsigned short> source_depth_image;
-  vector<vector<unsigned char>> source_color_image;
-
-  for (size_t ii = 0; ii < cost_computation_input.size(); ++ii) {
-    auto &input_unit = cost_computation_input[ii];
-    input_unit.source_state = source_state;
-    input_unit.child_state = candidate_succs[ii];
-    input_unit.source_id = 0;
-    input_unit.child_id = candidate_succ_ids[ii];
-    input_unit.source_depth_image = source_depth_image;
-    input_unit.source_color_image = source_color_image;
+  // Initialize source image with observed depth image for occlusion handling
+  std::vector<int32_t> source_result_depth(kCameraWidth * kCameraHeight, 0);
+  source_result_depth.assign(unfiltered_depth_data, unfiltered_depth_data + kCameraWidth * kCameraHeight-1);
+  if (env_params_.use_external_pose_list == 1)
+  {    
+    for (int i = 0; i < source_result_depth.size(); i++)
+    {
+      // TODO : fix this hardcode
+      // ycb has depth factor of 10000, and gpu is using 100, divide by 100 to get it to gpu's depth factor
+      source_result_depth[i] /= 100;
+    }
   }
-  vector<CostComputationOutput> cost_computation_output;
+  for (size_t ii = 0; ii < last_object_states.size(); ++ii) {
+    last_object_states[ii] =
+       candidate_succs[ii].object_states()[candidate_succs[ii].object_states().size() - 1];
+  }
+  // int gpu_batch_size = 2000;
+  int num_batches = candidate_succ_ids.size()/perch_params_.gpu_batch_size + 1;
+  printf("Num GPU batches for given batch size : %d\n", num_batches);
+  for (int bi = 0; bi < num_batches; bi++)
+  {
+    int start_index = bi * perch_params_.gpu_batch_size;
+    vector<ObjectState>::const_iterator batch_start = last_object_states.begin() + start_index;
+    int end_index = std::min((bi + 1) * perch_params_.gpu_batch_size, (int) candidate_succ_ids.size());
+    if (end_index > candidate_succ_ids.size() || start_index >= candidate_succ_ids.size()) break;
+
+    vector<ObjectState>::const_iterator batch_end = last_object_states.begin() + end_index;
+    vector<ObjectState> batch_last_object_states(batch_start, batch_end);
+    printf("\n\nGetting costs for GPU batch : %d, num poses : %d\n", bi, batch_last_object_states.size());
+
+    // vector<ObjectState>::iterator batch_start_cost_comp = cost_computation_output.begin() + bi * 10;
+    // vector<ObjectState>::iterator batch_end_cost_comp = batch_start_cost_comp + (bi + 1) * 10;
+    // vector<CostComputationOutput> batch_cost_computation_output(batch_start_cost_comp, batch_end_cost_comp);
+
+    ComputeGreedyCostsInParallelGPU(source_result_depth, batch_last_object_states, cost_computation_output, start_index);
+    batch_last_object_states.clear();
+  }
+
+
+  // vector<CostComputationOutput> cost_computation_output;
+  // ComputeGreedyCostsInParallelGPU(source_result_depth, last_object_states, &cost_computation_output);
+
 
   // ComputeCostsInParallelGPU(cost_computation_input, &cost_computation_output, false);
-  ComputeGreedyCostsInParallelGPU(cost_computation_input, &cost_computation_output);
-
   ObjectState temp(-1, false, DiscPose(0, 0, 0, 0, 0, 0));
   vector<int> lowest_cost_per_object(env_params_.num_models, INT_MAX);
   vector<ObjectState> lowest_cost_state_per_object(env_params_.num_models, temp);
@@ -2392,12 +2425,12 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
       const auto &output_unit = cost_computation_output[ii];
       const auto &adjusted_state = cost_computation_output[ii].adjusted_state;
       const auto &adjusted_object_state = adjusted_state.object_states().back();
-      const auto &input_unit = cost_computation_input[ii];
+      // const auto &input_unit = last_object_states[ii];
       int model_id = adjusted_object_state.id();
       string model_name = obj_models_[model_id].name();
 
-      candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
-                            input_unit.child_state);
+      // candidate_succ_ids[ii] = hash_manager_.GetStateIDForceful(
+      //                       input_unit);
 
       if (output_unit.cost== -1 || output_unit.cost== -2) {
         continue;  // Invalid successor
@@ -2446,6 +2479,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
   end = chrono::system_clock::now();
   chrono::duration<double> elapsed_seconds = end-start;
   env_stats_.time = elapsed_seconds.count();
+  env_stats_.icp_time /= num_batches;
   string fname = debug_dir_ + "depth_greedy_state.png";
   string cname = debug_dir_ + "color_greedy_state.png";
   // PrintState(greedy_state, fname, cname);
@@ -5869,7 +5903,8 @@ double EnvObjectRecognition::GetICPAdjustedPose(const PointCloudPtr cloud_in,
   {
     if (object_name.compare("007_tuna_fish_can") == 0)
     {
-      printf("Resetting ICP max correspondence\n");
+      if (cost_debug_msgs)
+        printf("Resetting ICP max correspondence\n");
       max_correspondence = 0.08;
     }
   }
@@ -6419,16 +6454,16 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   vector<int> pose_segmentation_label;
   vector<float> pose_observed_points_total;
 
-  if (env_params_.use_external_pose_list == 1)
-  {
-    for (ObjectState state : objects)
-    {
-      // TODO : observed points total should be calculated in setinput()
-      pose_segmentation_label.push_back(state.segmentation_label_id());
-      int required_object_id = state.segmentation_label_id() - 1; 
-      pose_observed_points_total.push_back(segmented_observed_point_count[required_object_id]);
-    }
-  }
+  // if (env_params_.use_external_pose_list == 1)
+  // {
+  //   for (ObjectState state : objects)
+  //   {
+  //     // TODO : observed points total should be calculated in setinput()
+  //     pose_segmentation_label.push_back(state.segmentation_label_id());
+  //     int required_object_id = state.segmentation_label_id() - 1; 
+  //     pose_observed_points_total.push_back(segmented_observed_point_count[required_object_id]);
+  //   }
+  // }
 
   // GetStateImagesGPU(
   //   objects, random_color, source_result_depth, 
@@ -6471,8 +6506,7 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
     dc_index,
     cloud_pose_map,
     rendered_cost,
-    observed_cost,
-    pose_segmentation_label
+    observed_cost
   );
 
   vector<float> pose_centroid_x(num_poses, 0.0);
@@ -6518,7 +6552,7 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
     ContPose pose_out = 
       ContPose(pose_in.x() + x_diff, pose_in.y() + y_diff, pose_in.z() + z_diff, pose_in.qx(), pose_in.qy(), pose_in.qz(), pose_in.qw());
 
-    ObjectState modified_object_state(objects[i].id(), objects[i].symmetric(), pose_out);
+    ObjectState modified_object_state(objects[i].id(), objects[i].symmetric(), pose_out, objects[i].segmentation_label_id());
 
     modified_objects.push_back(modified_object_state);
 

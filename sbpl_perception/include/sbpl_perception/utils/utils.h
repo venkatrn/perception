@@ -115,6 +115,8 @@ struct EnvStats {
   int scenes_rendered;
   int scenes_valid;
   double time;
+  double icp_time;
+  double peak_gpu_mem;
 };
 
 typedef std::function<int(const GraphState &state)> Heuristic;

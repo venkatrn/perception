@@ -306,11 +306,12 @@ int main(int argc, char **argv) {
 
     fs_stats << "[[[[[[[[  Stats  ]]]]]]]]:" << endl;
     fs_stats << "#Rendered " << "#Valid Rendered " <<  "#Expands " << "Time "
-             << "Cost" << endl;
+             << "Cost " << "ICP-Time " << "Peak-GPU-Mem" << endl;
     fs_stats << env_stats.scenes_rendered << " " << env_stats.scenes_valid << " "
              <<
              stats_vector[0].expands
-             << " " << stats_vector[0].time << " " << stats_vector[0].cost << endl;
+             << " " << stats_vector[0].time << " " << stats_vector[0].cost 
+             << " " << env_stats.icp_time << " " << env_stats.peak_gpu_mem << endl;
 
     // for (const auto &pose : detected_poses) {
     //   fs_poses << pose.x() << " " << pose.y() << " " << input.table_height <<

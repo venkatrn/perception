@@ -211,6 +211,8 @@ class FATPerch():
         stats_from_file = list(map(float, lines[2].rstrip().split()))
         stats['expands'] = stats_from_file[2]
         stats['runtime'] = stats_from_file[3]
+        stats['icp_runtime'] = stats_from_file[5]
+        stats['peak_gpu_mem'] = stats_from_file[6]
         f.close()
 
         if model_poses_file is not None:

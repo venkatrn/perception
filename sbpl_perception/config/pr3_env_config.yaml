@@ -32,6 +32,9 @@ perch_params:
   # Should be in [0,1]
   clutter_regularizer: 0.1
 
+  ## GPU stuff
+  gpu_batch_size: 800
+
   ## Visualization and Debugging
   visualize_expanded_states: false
   visualize_successors: false

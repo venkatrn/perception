@@ -60,6 +60,7 @@
 #include <chrono>
 #include <thread>
 #include <fstream>
+#include <algorithm> 
 // #include <cuda_icp_custom/kernel.h>
 // #include <cuda_icp_custom/kdtree.hpp>
 // #include <cuda_icp_custom/pointcloud.h>
@@ -137,6 +138,8 @@ struct PERCHParams {
 
   bool use_color_cost;
 
+  int gpu_batch_size;
+
   PERCHParams() : initialized(false) {}
 
   friend class boost::serialization::access;
@@ -159,6 +162,7 @@ struct PERCHParams {
     ar &use_downsampling;
     ar &downsampling_leaf_size;
     ar &use_color_cost;
+    ar &gpu_batch_size;
   }
 };
 // BOOST_IS_MPI_DATATYPE(PERCHParams);
@@ -364,8 +368,10 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::unordered_map<int, std::vector<std::vector<uint8_t>>> gpu_color_image_cache_;
   void ComputeCostsInParallelGPU(std::vector<CostComputationInput> &input,
                               std::vector<CostComputationOutput> *output, bool lazy);
-  void ComputeGreedyCostsInParallelGPU(std::vector<CostComputationInput> &input,
-                                      std::vector<CostComputationOutput> *output);
+  void ComputeGreedyCostsInParallelGPU(const std::vector<int32_t> &source_result_depth,
+                                      const std::vector<ObjectState> &last_object_states,
+                                      std::vector<CostComputationOutput> &output,
+                                      int batch_index);
   vector<int> tris_model_count;
   vector<cuda_renderer::Model::Triangle> tris;
   float gpu_depth_factor = 100.0;
@@ -442,8 +448,6 @@ class EnvObjectRecognition : public EnvironmentMHA {
                       // Costs
                       float* &rendered_cost,
                       float* &observed_cost,
-                      const vector<int>& pose_segmentation_label = vector<int>(),
-                      const vector<float>& pose_observed_points_total = vector<float>(),
                       int cost_type = 0,
                       bool calculate_observed_cost = false);
 

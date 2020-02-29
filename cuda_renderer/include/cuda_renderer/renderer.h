@@ -29,7 +29,7 @@
 // #include <opencv2/core/core.hpp>
 #include <iostream>
 #include <Eigen/Dense>
-
+#include <algorithm>
 
 namespace cuda_renderer {
 
@@ -352,7 +352,8 @@ void render_cuda_multi_unified(
         int* &result_dc_index,
         // Costs
         float* &rendered_cost,
-        float* &observed_cost);
+        float* &observed_cost,
+        double& peak_memory_usage);
 
 #endif
 

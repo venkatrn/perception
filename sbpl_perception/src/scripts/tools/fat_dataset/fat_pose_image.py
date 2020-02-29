@@ -1098,7 +1098,7 @@ class FATImage:
             "025_mug": [0,1], #whole_0-2pi
             # "035_power_drill" : [1,0], #whole_0-2pi
             "036_wood_block": [0,1], #half_0-pi
-            "037_scissors": [1,0], #whole_0-2pi
+            "037_scissors": [0,0], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
             # "051_large_clamp": [1,1], #whole_0-pi
             # "052_extra_large_clamp": [1,2], #whole_0-pi
@@ -1330,6 +1330,7 @@ class FATImage:
             if label != "021_bleach_cleanser":
                 # bbox in bleach is inaccurate
                 centroid = centroids_2d[box_id]
+            # centroid[0] += 40
             for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                 ## Vary depth only
                 centre_world_point = self.get_world_point(centroid.tolist() + [depth])
@@ -2620,7 +2621,7 @@ def run_ycb_6d(dataset_cfg=None):
     ts = calendar.timegm(time.gmtime())
     f_accuracy = open('{}/accuracy_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w", 1)
     f_runtime = open('{}/runtime_6d_{}.txt'.format(fat_image.python_debug_dir, ts), "w", 1)
-    f_runtime.write("{} {} {}\n".format('name', 'expands', 'runtime'))
+    f_runtime.write("{} {} {} {} {}\n".format('name', 'expands', 'runtime', 'icp_runtime', 'peak_gpu_mem'))
 
     #filter_objects = ['010_potted_meat_can'] - 49, 59, 53
     filter_objects = None
@@ -2628,11 +2629,29 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
-    required_objects = ['024_bowl']
+    # required_objects = ['002_master_chef_can']
     # required_objects = ['037_scissors']
     # required_objects = ['006_mustard_bottle', '019_pitcher_base']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
+    required_objects = [
+        "002_master_chef_can",
+        "004_sugar_box",
+        "005_tomato_soup_can",
+        "006_mustard_bottle",
+        "007_tuna_fish_can",
+        "008_pudding_box",
+        "009_gelatin_box",
+        "010_potted_meat_can",
+        "019_pitcher_base",
+        "021_bleach_cleanser",
+        "024_bowl",
+        "025_mug",
+        "036_wood_block",
+        "037_scissors",
+        "040_large_marker",
+        "061_foam_brick"
+    ]
     if mask_type != "posecnn" or print_poses:
         fat_image.init_model(cfg_file, print_poses=print_poses, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
@@ -2652,54 +2671,11 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [0]:
     # Used 60 samples sphere for all
     # Trying 80 for sugar
-    sugar_list = [
-        'data/0058/000061-color.png',
-        'data/0058/000086-color.png',
-        'data/0051/001927-color.png',
-        'data/0051/001914-color.png',
-        'data/0051/001932-color.png',
-        'data/0058/000553-color.png',
-        'data/0058/000445-color.png',
-        'data/0058/000469-color.png',
-        'data/0058/000516-color.png',
-        'data/0058/000472-color.png',
-        'data/0058/000519-color.png',
-        'data/0058/000498-color.png',
-        'data/0058/000495-color.png',
-        'data/0058/000476-color.png',
-        'data/0058/000531-color.png',
-    ]    
-    bleach_list = [
-        'data/0055/000049-color.png',
-        'data/0055/000011-color.png',
-        'data/0055/000411-color.png',
-        'data/0055/000363-color.png',
-        'data/0055/000271-color.png',
-        'data/0055/000219-color.png',
-        'data/0055/000415-color.png',
-        'data/0055/000385-color.png',
-        'data/0055/000022-color.png',
-        'data/0055/000346-color.png',
-        'data/0055/000352-color.png',
-        'data/0055/000078-color.png',
-        'data/0055/000155-color.png',
-        'data/0055/000407-color.png',
-        'data/0055/000122-color.png',
-        'data/0055/000359-color.png',
-        'data/0055/000179-color.png',
-        'data/0055/000273-color.png',
-        'data/0055/000348-color.png',
-        'data/0055/000128-color.png',
-        'data/0055/000094-color.png',
-        'data/0055/000358-color.png',
-        'data/0055/000479-color.png',
-        'data/0055/000255-color.png',
-        'data/0055/000107-color.png',
-    ]
+
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
     for scene_i in range(48, 60):
-        for img_i in range(1,2500):
+        for img_i in range(1,500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
@@ -2748,7 +2724,7 @@ def run_ycb_6d(dataset_cfg=None):
                     mask_image_index = IMG_LIST.index(keylist_name)
                 labels, model_annotations, predicted_mask_path = \
                     fat_image.visualize_sphere_sampling(
-                        image_data, print_poses=print_poses, required_objects=required_objects, num_samples=80,
+                        image_data, print_poses=print_poses, required_objects=required_objects, num_samples=60,
                         mask_type=mask_type, mask_image_id=mask_image_index
                     )
                 # # Run model to get multiple poses for each object
@@ -2803,7 +2779,7 @@ def run_ycb_6d(dataset_cfg=None):
                         else:
                             f_accuracy.write(" , ,") 
             if stats is not None:
-                f_runtime.write("{} {} {}".format(image_data['file_name'], stats['expands'], stats['runtime']))
+                f_runtime.write("{} {} {} {} {}".format(image_data['file_name'], stats['expands'], stats['runtime'], stats['icp_runtime'], stats['peak_gpu_mem']))
             f_accuracy.write("\n")
             f_runtime.write("\n")
 

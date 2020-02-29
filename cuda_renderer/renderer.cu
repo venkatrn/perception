@@ -73,7 +73,7 @@ namespace cuda_renderer {
 
     template class device_vector_holder<int>;
 
-    void print_cuda_memory_usage(){
+    double print_cuda_memory_usage(){
         // show memory usage of GPU
 
         size_t free_byte ;
@@ -90,6 +90,7 @@ namespace cuda_renderer {
         double used_db = total_db - free_db ;
         printf("GPU memory usage: used = %f, free = %f MB, total = %f MB\n",
             used_db/1024.0/1024.0, free_db/1024.0/1024.0, total_db/1024.0/1024.0);
+        return used_db/1024.0/1024.0;
     }
 
     struct max2zero_functor{
@@ -640,7 +641,8 @@ namespace cuda_renderer {
         int* &result_cloud_pose_map,
         int* &result_dc_index,
         float* &rendered_cost,
-        float* &observed_cost) {
+        float* &observed_cost,
+        double &peak_memory_usage) {
         /*
          * - @source_mask_label - Label for every pixel in source image, used for segmentation specific occlusion checking
          * - Currently doesnt support pose occlusion or pose occlusion other
@@ -675,6 +677,7 @@ namespace cuda_renderer {
         // std::cout <<tris[0].color.v1;
         thrust::device_vector<Model::Triangle> device_tris = tris;
         thrust::device_vector<Model::mat4x4> device_poses = poses;
+        //// Every index maps a model id to a range of triangles in the triangle vector 
         thrust::device_vector<int> device_tris_model_count_low = tris_model_count;
         thrust::device_vector<int> device_tris_model_count_high = tris_model_count;
         thrust::device_vector<int> device_pose_model_map = pose_model_map;
@@ -691,12 +694,12 @@ namespace cuda_renderer {
         //     device_tris_model_count.end(), 
         //     std::ostream_iterator<int>(std::cout, " ")
         // );
-        printf("\nPose segmentation label : \n");
-        thrust::copy(
-            device_pose_segmentation_label.begin(),
-            device_pose_segmentation_label.end(), 
-            std::ostream_iterator<int>(std::cout, " ")
-        );
+        // printf("\nPose segmentation label : \n");
+        // thrust::copy(
+        //     device_pose_segmentation_label.begin(),
+        //     device_pose_segmentation_label.end(), 
+        //     std::ostream_iterator<int>(std::cout, " ")
+        // );
         thrust::exclusive_scan(
             device_tris_model_count_low.begin(), device_tris_model_count_low.end(), 
             device_tris_model_count_low.begin(), 0
@@ -777,7 +780,8 @@ namespace cuda_renderer {
         uint8_t* red_image_vec = thrust::raw_pointer_cast(device_red_int.data());
         uint8_t* green_image_vec = thrust::raw_pointer_cast(device_green_int.data());
         uint8_t* blue_image_vec = thrust::raw_pointer_cast(device_blue_int.data());
-
+        
+        peak_memory_usage = std::max(print_cuda_memory_usage(), peak_memory_usage);
         //// Render all poses
         dim3 numBlocks((tris.size() + threadsPerBlock - 1) / threadsPerBlock, poses.size());
         render_triangle_multi<<<numBlocks, threadsPerBlock>>>(device_tris_ptr, tris.size(),
@@ -852,6 +856,15 @@ namespace cuda_renderer {
 
             if (stage.compare("RENDER") == 0) return;
         }
+        device_tris.clear(); device_tris.shrink_to_fit();
+        device_tris_model_count_low.clear(); device_tris_model_count_low.shrink_to_fit();
+        device_tris_model_count_high.clear(); device_tris_model_count_high.shrink_to_fit();
+        device_pose_model_map.clear(); device_pose_model_map.shrink_to_fit();
+        device_poses.clear(); device_poses.shrink_to_fit();
+        device_source_depth.clear(); device_source_depth.shrink_to_fit();
+        device_source_color_blue.clear(); device_source_color_blue.shrink_to_fit();
+        device_source_color_green.clear(); device_source_color_green.shrink_to_fit();
+        device_source_color_red.clear(); device_source_color_red.shrink_to_fit();
         ///////////////////////////////////////////////////////////////
 
         dim3 threadsPerBlock2D(16, 16);
@@ -893,6 +906,7 @@ namespace cuda_renderer {
         cudaMalloc(&cuda_cloud_pose_map, result_cloud_point_num * sizeof(int));
         cudaMallocPitch(&cuda_cloud,   &query_pitch_in_bytes,   result_cloud_point_num * size_of_float, point_dim);
 
+        peak_memory_usage = std::max(print_cuda_memory_usage(), peak_memory_usage);
         //// Use Mapping to convert images to point clouds
         size_t query_pitch = query_pitch_in_bytes / size_of_float;
         depth_to_2d_cloud<<<numBlocks2D, threadsPerBlock2D>>>(
@@ -932,6 +946,7 @@ namespace cuda_renderer {
         device_source_color_blue.clear(); device_source_color_blue.shrink_to_fit();
         device_source_color_green.clear(); device_source_color_green.shrink_to_fit();
 
+
         printf("************Point clouds created*************\n");
         // Allocate memory for KNN
         // Query is render and Ref is observed
@@ -957,6 +972,7 @@ namespace cuda_renderer {
         // cudaMemcpy2D(cuda_cloud, query_pitch_in_bytes, result_cloud, result_cloud_point_num * size_of_float, result_cloud_point_num * size_of_float, point_dim, cudaMemcpyHostToDevice);
         cudaMemcpy2D(ref_dev, ref_pitch_in_bytes, observed_depth, observed_point_num * size_of_float, observed_point_num * size_of_float, point_dim, cudaMemcpyHostToDevice);
 
+        peak_memory_usage = std::max(print_cuda_memory_usage(), peak_memory_usage);
         // Compute distances and nearest neighbours
         dim3 block0(BLOCK_DIM, BLOCK_DIM, 1);
         dim3 grid0(result_cloud_point_num / BLOCK_DIM, result_cloud_point_num / BLOCK_DIM, 1);
@@ -1003,6 +1019,8 @@ namespace cuda_renderer {
             //     printf("knn dist:%f\n", knn_dist_cpu[i]);
             // }
         }
+        cudaFree(cuda_cloud);
+        cudaFree(ref_dev);
         printf("*************KNN distances computed**********\n");
 
         //////////////////////////////////////////////////////////
@@ -1024,6 +1042,8 @@ namespace cuda_renderer {
         
         cudaMemcpy(cuda_observed_cloud_label, result_observed_cloud_label, observed_point_num * size_of_int, cudaMemcpyHostToDevice);
         cudaMemcpy(cuda_observed_cloud_color, observed_color, point_dim * observed_point_num * size_of_uint, cudaMemcpyHostToDevice);
+
+        peak_memory_usage = std::max(print_cuda_memory_usage(), peak_memory_usage);
 
         dim3 numBlocksR((result_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
         compute_render_cost<<<numBlocksR, threadsPerBlock>>>(
@@ -1067,6 +1087,8 @@ namespace cuda_renderer {
             thrust::device_vector<float> cuda_pose_observed_explained_vec(num_images, 0);
             float* cuda_pose_observed_explained = thrust::raw_pointer_cast(cuda_pose_observed_explained_vec.data());
 
+            peak_memory_usage = std::max(print_cuda_memory_usage(), peak_memory_usage);
+        
             dim3 numBlocksO((num_images * observed_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);
             //// Calculate the number of explained points in every pose, by adding
             compute_observed_cost<<<numBlocksO, threadsPerBlock>>>(
@@ -1120,10 +1142,9 @@ namespace cuda_renderer {
             }
         }
 
-        cudaFree(cuda_cloud);
+        
         cudaFree(cuda_cloud_color);
         cudaFree(cuda_cloud_pose_map);
-        cudaFree(ref_dev);
         cudaFree(index_dev);
         cudaFree(dist_dev);
         cudaFree(cuda_observed_cloud_label);
