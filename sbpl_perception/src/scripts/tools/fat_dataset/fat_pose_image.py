@@ -1093,7 +1093,7 @@ class FATImage:
             "010_potted_meat_can": [0,0], #half_0-pi
             "011_banana": [1,0], #whole_0-2pi #from psc
             "019_pitcher_base": [0,0], #whole_0-2pi
-            "021_bleach_cleanser": [0,0], #whole_0-2pi
+            "021_bleach_cleanser": [0,0], #whole_0-2pi, 55 and 
             "024_bowl": [1,0], #whole_0
             "025_mug": [0,1], #whole_0-2pi
             # "035_power_drill" : [1,0], #whole_0-2pi
@@ -1334,7 +1334,7 @@ class FATImage:
                         'id' : grid_i
                     })
                     grid_i += 1
-            if label != "021_bleach_cleanser":
+            if label == "021_bleach_cleanser":
                 centroid[1] += 150
                 print("Second centroid from mask : {}".format(centroid))
                 for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
@@ -2678,8 +2678,8 @@ def run_ycb_6d(dataset_cfg=None):
 
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
-    for scene_i in range(55, 56):
-        for img_i in range(1000,2500):
+    for scene_i in range(56, 60):
+        for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
