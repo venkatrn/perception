@@ -1323,9 +1323,14 @@ class FATImage:
             # #     # bbox in bleach is inaccurate
             centroid = centroids_2d[box_id]
             # centroid[0] += 40
+            centroid_max = np.flip(np.max(np.argwhere(mask_list[box_id] > 0), axis=0))
+            centroid_min = np.flip(np.min(np.argwhere(mask_list[box_id] > 0), axis=0))
+            # yp_centroid = [centroid_max[0]0.5 + centroid_min[0]0.5, centroid_max[1]0.5 + centroid_min[1]0.5]
+            yp_centroid = [centroid_max[0]*0.5+centroid_min[0]*0.5, centroid_max[1]*0.6+centroid_min[1]*    0.4]
             for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                 ## Vary depth only
-                centre_world_point = self.get_world_point(centroid.tolist() + [depth])
+                # centre_world_point = self.get_world_point(centroid.tolist() + [depth])
+                centre_world_point = self.get_world_point(yp_centroid + [depth])
                 for quaternion in object_rotation_list:
                     annotations.append({
                         'location' : (centre_world_point*100).tolist(),
@@ -1334,20 +1339,20 @@ class FATImage:
                         'id' : grid_i
                     })
                     grid_i += 1
-            if label == "021_bleach_cleanser":
-                centroid[1] += 150
-                print("Second centroid from mask : {}".format(centroid))
-                for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
-                    ## Vary depth only
-                    centre_world_point = self.get_world_point(centroid.tolist() + [depth])
-                    for quaternion in object_rotation_list:
-                        annotations.append({
-                            'location' : (centre_world_point*100).tolist(),
-                            'quaternion_xyzw' : quaternion,
-                            'category_id' : self.category_names_to_id[label],
-                            'id' : grid_i
-                        })
-                        grid_i += 1
+            # if label == "021_bleach_cleanser":
+            #     centroid[1] += 150
+            #     print("Second centroid from mask : {}".format(centroid))
+            #     for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
+            #         ## Vary depth only
+            #         centre_world_point = self.get_world_point(centroid.tolist() + [depth])
+            #         for quaternion in object_rotation_list:
+            #             annotations.append({
+            #                 'location' : (centre_world_point*100).tolist(),
+            #                 'quaternion_xyzw' : quaternion,
+            #                 'category_id' : self.category_names_to_id[label],
+            #                 'id' : grid_i
+            #             })
+            #             grid_i += 1
 
         return labels, annotations, predicted_mask_path
 
@@ -2620,7 +2625,7 @@ def run_ycb_6d(dataset_cfg=None):
     )
 
     mask_type = 'posecnn'
-    print_poses = False
+    print_poses = True
     # Running on model and PERCH
     cfg_file = dataset_cfg['maskrcnn_config']
 
@@ -2675,11 +2680,32 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [0]:
     # Used 60 samples sphere for all
     # Trying 80 for sugar
+    bleach_list = [
+        'data/0055/000107-color.png',
+        'data/0055/000122-color.png',
+        'data/0051/001687-color.png',
+        'data/0051/001914-color.png',
+        'data/0051/001611-color.png',
+        'data/0051/001932-color.png',
+        'data/0051/001788-color.png',
+        'data/0051/001780-color.png',
+        'data/0051/001883-color.png',
+        'data/0055/000089-color.png',
+        'data/0055/000078-color.png',
+        'data/0051/001924-color.png',
+        'data/0051/001617-color.png',
+        'data/0051/001867-color.png',
+        'data/0051/001968-color.png',
+        'data/0055/001367-color.png',
+        'data/0055/000352-color.png',
+        'data/0055/001372-color.png',
+        'data/0051/001927-color.png',
+    ]
 
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
-    for scene_i in range(56, 60):
-        for img_i in range(1,2500):
+    for scene_i in range(52, 56):
+        for img_i in reversed(range(1,2500)):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
