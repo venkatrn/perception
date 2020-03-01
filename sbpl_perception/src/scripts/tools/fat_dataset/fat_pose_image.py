@@ -1093,12 +1093,12 @@ class FATImage:
             "010_potted_meat_can": [0,0], #half_0-pi
             "011_banana": [1,0], #whole_0-2pi #from psc
             "019_pitcher_base": [0,0], #whole_0-2pi
-            "021_bleach_cleanser": [0,2], #whole_0-2pi
+            "021_bleach_cleanser": [0,0], #whole_0-2pi
             "024_bowl": [1,0], #whole_0
             "025_mug": [0,1], #whole_0-2pi
             # "035_power_drill" : [1,0], #whole_0-2pi
             "036_wood_block": [0,1], #half_0-pi
-            "037_scissors": [0,0], #whole_0-2pi
+            "037_scissors": [0,5], #whole_0-2pi
             "040_large_marker" : [1,0], #whole_0
             # "051_large_clamp": [1,1], #whole_0-pi
             # "052_extra_large_clamp": [1,2], #whole_0-pi
@@ -1131,25 +1131,14 @@ class FATImage:
                 all_rots.append(xyz_rotation_angles)
                 xyz_rotation_angles = [-phi, math.pi/2, theta]
                 all_rots.append(xyz_rotation_angles)
-        # if name_sym_dict[label][1] == 1:
-        #     for viewpoint in viewpoints_xyz:
-        #         r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
-        #         theta, phi = sphere2euler(theta, phi)
-        #         step_size = math.pi/5
-        #         for yaw_temp in np.arange(0,math.pi, step_size):
-        #             xyz_rotation_angles = [phi, theta, yaw_temp]
-        #             # cn+=1
-        #             all_rots.append(xyz_rotation_angles)
-        # if name_sym_dict[label][1] == 2:
-        #     for viewpoint in viewpoints_xyz:
-        #         r, theta, phi = cart2sphere(viewpoint[0], viewpoint[1], viewpoint[2])
-        #         theta, phi = sphere2euler(theta, phi)
-        #         step_size = math.pi/5
-        #         for yaw_temp in np.arange(-math.pi,math.pi, step_size):
-        #             xyz_rotation_angles = [phi, theta, yaw_temp]
-        #             # cn+=1
-        #             all_rots.append(xyz_rotation_angles)
-        # print("cn: {}".format(cn))
+            elif name_sym_dict[label][1] == 4:
+                # For upright sugar box
+                xyz_rotation_angles = [-phi, math.pi+theta, 0]
+                all_rots.append(xyz_rotation_angles)
+            elif name_sym_dict[label][1] == 5:
+                xyz_rotation_angles = [phi, theta, 0]
+                all_rots.append(xyz_rotation_angles)
+
         return all_rots
 
     def get_posecnn_bbox(self, idx, posecnn_rois):
@@ -1323,13 +1312,16 @@ class FATImage:
                 
             resolution = 0.02
             # Sample rotation across depth
-            centroid = np.flip(np.mean(np.argwhere(mask_list[box_id] > 0), axis=0))
+            mask = np.argwhere(mask_list[box_id] > 0)
+            centroid = [(np.max(mask[:,0])+np.min(mask[:,0]))/2, (np.max(mask[:,1])+np.min(mask[:,1]))/2]
+            centroid = np.flip(centroid)
+            # centroid = np.flip(np.mean(np.argwhere(mask_list[box_id] > 0), axis=0))
             print("Centroid from mask : {}".format(centroid))
             print("Centroid from box : {}".format(centroids_2d[box_id]))
             # centroid[1] -= 60
-            if label != "021_bleach_cleanser":
-                # bbox in bleach is inaccurate
-                centroid = centroids_2d[box_id]
+            # if label != "021_bleach_cleanser":
+            # #     # bbox in bleach is inaccurate
+            centroid = centroids_2d[box_id]
             # centroid[0] += 40
             for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                 ## Vary depth only
@@ -1342,6 +1334,20 @@ class FATImage:
                         'id' : grid_i
                     })
                     grid_i += 1
+            if label != "021_bleach_cleanser":
+                centroid[1] += 150
+                print("Second centroid from mask : {}".format(centroid))
+                for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
+                    ## Vary depth only
+                    centre_world_point = self.get_world_point(centroid.tolist() + [depth])
+                    for quaternion in object_rotation_list:
+                        annotations.append({
+                            'location' : (centre_world_point*100).tolist(),
+                            'quaternion_xyzw' : quaternion,
+                            'category_id' : self.category_names_to_id[label],
+                            'id' : grid_i
+                        })
+                        grid_i += 1
 
         return labels, annotations, predicted_mask_path
 
@@ -2630,25 +2636,26 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
     # required_objects = ['002_master_chef_can']
-    # required_objects = ['037_scissors']
+    required_objects = ['021_bleach_cleanser']
+    # required_objects = ['004_sugar_box']
     # required_objects = ['006_mustard_bottle', '019_pitcher_base']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
-    required_objects = [
-        "002_master_chef_can",
-        "004_sugar_box",
-        "005_tomato_soup_can",
-        "006_mustard_bottle",
-        "007_tuna_fish_can",
-        "009_gelatin_box",
-        "010_potted_meat_can",
-        "011_banana",
-        "019_pitcher_base",
-        "024_bowl",
-        "025_mug",
-        "040_large_marker",
-        "061_foam_brick"
-    ]
+    # required_objects = [
+    #     "002_master_chef_can",
+    #     "004_sugar_box",
+    #     "005_tomato_soup_can",
+    #     "006_mustard_bottle",
+    #     "007_tuna_fish_can",
+    #     "009_gelatin_box",
+    #     "010_potted_meat_can",
+    #     "011_banana",
+    #     "019_pitcher_base",
+    #     "024_bowl",
+    #     "025_mug",
+    #     "040_large_marker",
+    #     "061_foam_brick"
+    # ]
     if mask_type != "posecnn" or print_poses:
         fat_image.init_model(cfg_file, print_poses=print_poses, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
@@ -2671,8 +2678,8 @@ def run_ycb_6d(dataset_cfg=None):
 
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
-    for scene_i in range(48, 60):
-        for img_i in range(1,2):
+    for scene_i in range(55, 56):
+        for img_i in range(1000,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:

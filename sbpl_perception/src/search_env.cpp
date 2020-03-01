@@ -1447,6 +1447,7 @@ void EnvObjectRecognition::GetStateImagesUnifiedGPU(const string stage,
                     int* &result_cloud_pose_map,
                     float* &rendered_cost,
                     float* &observed_cost,
+                    float* &points_diff_cost,
                     int cost_type,
                     bool calculate_observed_cost)
 {
@@ -1546,6 +1547,7 @@ void EnvObjectRecognition::GetStateImagesUnifiedGPU(const string stage,
                           result_dc_index,
                           rendered_cost,
                           observed_cost,
+                          points_diff_cost,
                           peak_memory_usage);
   env_stats_.peak_gpu_mem = std::max(env_stats_.peak_gpu_mem, peak_memory_usage);
 }
@@ -1638,6 +1640,7 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
     std::vector<float> observed_cost_gpu_vec(num_poses, 0);
     float* observed_cost_gpu = observed_cost_gpu_vec.data();
     std::vector<int> total_cost(num_poses, 0);
+    float* points_diff_cost_gpu;
 
     std::vector<int> poses_occluded(num_poses, 0);
     std::vector<int> poses_occluded_other(num_poses, 1);
@@ -1678,7 +1681,8 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
       dc_index,
       cloud_pose_map,
       rendered_cost_gpu,
-      observed_cost_gpu
+      observed_cost_gpu,
+      points_diff_cost_gpu
     );
 
     //// Do ICP for occluded stuff, poses which are not occluded by other would be same as original
@@ -1742,6 +1746,7 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
       cloud_pose_map,
       rendered_cost_gpu,
       observed_cost_gpu,
+      points_diff_cost_gpu,
       cost_type,
       calc_obs_cost
     );
@@ -1773,6 +1778,7 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
       }
       else
       {
+        // cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i] + abs(points_diff_cost_gpu[i]));
         cur_unit.cost = (int) (rendered_cost_gpu[i] + observed_cost_gpu[i]);
       }
       GraphState greedy_state;
@@ -1787,7 +1793,7 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
       cur_unit.state_properties.target_cost =  (int) rendered_cost_gpu[i];
       cur_unit.state_properties.source_cost = (int) observed_cost_gpu[i];
       // cur_unit.state_properties.last_level_cost = last_level_cost[i];
-      cur_unit.state_properties.last_level_cost = (int) pose_clutter_cost[i];
+      cur_unit.state_properties.last_level_cost = (int) points_diff_cost_gpu[i];
       cur_unit.depth_image = source_depth_image;
       // std::vector<int32_t>::const_iterator start = result_depth.begin() + i*env_params_.width*env_params_.height;
       // std::vector<int32_t>::const_iterator finish = start + env_params_.width*env_params_.height;
@@ -2438,7 +2444,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
 
       if (env_params_.use_external_pose_list == 1)
       {
-        if (output_unit.cost < lowest_cost_per_object[model_id] 
+        if (output_unit.cost < lowest_cost_per_object[model_id]
         && abs(output_unit.state_properties.target_cost - output_unit.state_properties.source_cost) < 30)
         {
           lowest_cost_per_object[model_id] = output_unit.cost;
@@ -6490,6 +6496,7 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   
   float* rendered_cost;
   float* observed_cost;
+  float* points_diff_cost_gpu;
 
   GetStateImagesUnifiedGPU(
     "CLOUD",
@@ -6506,7 +6513,8 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
     dc_index,
     cloud_pose_map,
     rendered_cost,
-    observed_cost
+    observed_cost,
+    points_diff_cost_gpu
   );
 
   vector<float> pose_centroid_x(num_poses, 0.0);

@@ -642,6 +642,7 @@ namespace cuda_renderer {
         int* &result_dc_index,
         float* &rendered_cost,
         float* &observed_cost,
+        float* &points_diff_cost,
         double &peak_memory_usage) {
         /*
          * - @source_mask_label - Label for every pixel in source image, used for segmentation specific occlusion checking
@@ -1046,6 +1047,7 @@ namespace cuda_renderer {
         float* cuda_rendered_cost = thrust::raw_pointer_cast(cuda_rendered_cost_vec.data());
         thrust::device_vector<float> cuda_pose_point_num_vec(num_images, 0);
         float* cuda_pose_point_num = thrust::raw_pointer_cast(cuda_pose_point_num_vec.data());
+        thrust::device_vector<float> cuda_rendered_explained_vec(num_images, 0);
 
         // Points in observed that get explained by render
         thrust::device_vector<uint8_t> cuda_observed_explained_vec(num_images * observed_point_num, 0);
@@ -1084,6 +1086,12 @@ namespace cuda_renderer {
         if (stage.compare("DEBUG") == 0 || stage.compare("COST") == 0)
         {
             printf("Copying rendered cost to CPU\n");
+            // Trying to get number of points explained in rendered
+            thrust::transform(
+                cuda_pose_point_num_vec.begin(), cuda_pose_point_num_vec.end(), 
+                cuda_rendered_cost_vec.begin(), cuda_rendered_explained_vec.begin(), 
+                thrust::minus<float>()
+            );
             thrust::transform(
                 cuda_rendered_cost_vec.begin(), cuda_rendered_cost_vec.end(), 
                 cuda_pose_point_num_vec.begin(), cuda_rendered_cost_vec.begin(), 
@@ -1104,6 +1112,7 @@ namespace cuda_renderer {
         {
             thrust::device_vector<float> cuda_pose_observed_explained_vec(num_images, 0);
             float* cuda_pose_observed_explained = thrust::raw_pointer_cast(cuda_pose_observed_explained_vec.data());
+            thrust::device_vector<float> cuda_pose_points_diff_cost_vec(num_images, 0);
 
             peak_memory_usage = std::max(print_cuda_memory_usage(), peak_memory_usage);
         
@@ -1114,6 +1123,19 @@ namespace cuda_renderer {
                 observed_point_num,
                 cuda_observed_explained,
                 cuda_pose_observed_explained
+            );
+            
+            //// Get difference of explained points between rendered and observed
+            thrust::transform(
+                cuda_rendered_explained_vec.begin(), cuda_rendered_explained_vec.end(), 
+                cuda_pose_observed_explained_vec.begin(), cuda_pose_points_diff_cost_vec.begin(), 
+                thrust::minus<float>()
+            );
+            printf("Point diff\n");
+            thrust::copy(
+                cuda_pose_points_diff_cost_vec.begin(),
+                cuda_pose_points_diff_cost_vec.end(), 
+                std::ostream_iterator<int>(std::cout, " ")
             );
             
             // Subtract total observed points for each pose with explained points for each pose
@@ -1155,8 +1177,13 @@ namespace cuda_renderer {
             {
                 printf("Copying observed cost to CPU\n");
                 observed_cost = (float*) malloc(num_images * size_of_float);
+                points_diff_cost = (float*) malloc(num_images * size_of_float);
+
                 float* cuda_observed_cost = thrust::raw_pointer_cast(cuda_observed_cost_vec.data());
+                float* cuda_pose_points_diff_cost = thrust::raw_pointer_cast(cuda_pose_points_diff_cost_vec.data());
+               
                 cudaMemcpy(observed_cost, cuda_observed_cost, num_images * size_of_float, cudaMemcpyDeviceToHost);
+                cudaMemcpy(points_diff_cost, cuda_pose_points_diff_cost, num_images * size_of_float, cudaMemcpyDeviceToHost);
 
                 /// Not returning so need to free anything
             }

@@ -448,6 +448,7 @@ class EnvObjectRecognition : public EnvironmentMHA {
                       // Costs
                       float* &rendered_cost,
                       float* &observed_cost,
+                      float* &points_diff_cost,
                       int cost_type = 0,
                       bool calculate_observed_cost = false);
 

@@ -353,6 +353,7 @@ void render_cuda_multi_unified(
         // Costs
         float* &rendered_cost,
         float* &observed_cost,
+        float* &points_diff_cost,
         double& peak_memory_usage);
 
 #endif
