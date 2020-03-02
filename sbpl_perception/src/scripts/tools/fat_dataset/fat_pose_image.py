@@ -1136,7 +1136,7 @@ class FATImage:
                 xyz_rotation_angles = [-phi, math.pi+theta, 0]
                 all_rots.append(xyz_rotation_angles)
             elif name_sym_dict[label][1] == 5:
-                xyz_rotation_angles = [phi, theta, 0]
+                xyz_rotation_angles = [phi, theta, math.pi]
                 all_rots.append(xyz_rotation_angles)
 
         return all_rots
@@ -1310,7 +1310,7 @@ class FATImage:
                     cv2.imwrite("{}/label_{}_{}.png".format(rotation_output_dir, label, cnt), rgb_gl)
                     cnt += 1
                 
-            resolution = 0.02
+            resolution = 0.01
             # Sample rotation across depth
             mask = np.argwhere(mask_list[box_id] > 0)
             centroid = [(np.max(mask[:,0])+np.min(mask[:,0]))/2, (np.max(mask[:,1])+np.min(mask[:,1]))/2]
@@ -1322,15 +1322,13 @@ class FATImage:
             # if label != "021_bleach_cleanser":
             # #     # bbox in bleach is inaccurate
             centroid = centroids_2d[box_id]
-            # centroid[0] += 40
-            centroid_max = np.flip(np.max(np.argwhere(mask_list[box_id] > 0), axis=0))
-            centroid_min = np.flip(np.min(np.argwhere(mask_list[box_id] > 0), axis=0))
-            # yp_centroid = [centroid_max[0]0.5 + centroid_min[0]0.5, centroid_max[1]0.5 + centroid_min[1]0.5]
-            yp_centroid = [centroid_max[0]*0.5+centroid_min[0]*0.5, centroid_max[1]*0.6+centroid_min[1]*    0.4]
+            if label == "021_bleach_cleanser" or label == "037_scissors":
+                centroid_max = np.flip(np.max(np.argwhere(mask_list[box_id] > 0), axis=0))
+                centroid_min = np.flip(np.min(np.argwhere(mask_list[box_id] > 0), axis=0))
+                centroid = np.array([centroid_max[0]*0.7+centroid_min[0]*0.5, centroid_max[1]*0.6+centroid_min[1]*    0.4])
             for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                 ## Vary depth only
-                # centre_world_point = self.get_world_point(centroid.tolist() + [depth])
-                centre_world_point = self.get_world_point(yp_centroid + [depth])
+                centre_world_point = self.get_world_point(centroid.tolist() + [depth])
                 for quaternion in object_rotation_list:
                     annotations.append({
                         'location' : (centre_world_point*100).tolist(),
@@ -1339,20 +1337,7 @@ class FATImage:
                         'id' : grid_i
                     })
                     grid_i += 1
-            # if label == "021_bleach_cleanser":
-            #     centroid[1] += 150
-            #     print("Second centroid from mask : {}".format(centroid))
-            #     for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
-            #         ## Vary depth only
-            #         centre_world_point = self.get_world_point(centroid.tolist() + [depth])
-            #         for quaternion in object_rotation_list:
-            #             annotations.append({
-            #                 'location' : (centre_world_point*100).tolist(),
-            #                 'quaternion_xyzw' : quaternion,
-            #                 'category_id' : self.category_names_to_id[label],
-            #                 'id' : grid_i
-            #             })
-            #             grid_i += 1
+
 
         return labels, annotations, predicted_mask_path
 
@@ -2625,7 +2610,7 @@ def run_ycb_6d(dataset_cfg=None):
     )
 
     mask_type = 'posecnn'
-    print_poses = True
+    print_poses = False
     # Running on model and PERCH
     cfg_file = dataset_cfg['maskrcnn_config']
 
@@ -2641,7 +2626,7 @@ def run_ycb_6d(dataset_cfg=None):
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
     # required_objects = ['002_master_chef_can']
-    required_objects = ['021_bleach_cleanser']
+    required_objects = ['004_sugar_box']
     # required_objects = ['004_sugar_box']
     # required_objects = ['006_mustard_bottle', '019_pitcher_base']
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
@@ -2680,36 +2665,15 @@ def run_ycb_6d(dataset_cfg=None):
     # for img_i in [0]:
     # Used 60 samples sphere for all
     # Trying 80 for sugar
-    bleach_list = [
-        'data/0055/000107-color.png',
-        'data/0055/000122-color.png',
-        'data/0051/001687-color.png',
-        'data/0051/001914-color.png',
-        'data/0051/001611-color.png',
-        'data/0051/001932-color.png',
-        'data/0051/001788-color.png',
-        'data/0051/001780-color.png',
-        'data/0051/001883-color.png',
-        'data/0055/000089-color.png',
-        'data/0055/000078-color.png',
-        'data/0051/001924-color.png',
-        'data/0051/001617-color.png',
-        'data/0051/001867-color.png',
-        'data/0051/001968-color.png',
-        'data/0055/001367-color.png',
-        'data/0055/000352-color.png',
-        'data/0055/001372-color.png',
-        'data/0051/001927-color.png',
-    ]
 
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
-    for scene_i in range(52, 56):
-        for img_i in reversed(range(1,2500)):
+    for scene_i in range(48, 60):
+        for img_i in range(1,2500):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
-        # for img_i in sugar_list:
+        # for img_i in s_list:
         # for img_i in bleach_list:
             # if "0050" not in img_i:
             #     continue

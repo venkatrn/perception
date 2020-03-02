@@ -1019,6 +1019,7 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
   //     // cout << result_depth[j]/100.0 << endl;
   //   }
   // }
+  #pragma omp parallel for
   for(int n = 0; n < num_poses; n ++){
       cv::Mat cv_color = cv::Mat(env_params_.height,env_params_.width,CV_8UC3);
       cv::Mat cv_depth = cv::Mat(env_params_.height,env_params_.width,CV_32SC1);//, result_depth.data() + n*env_params_.height*env_params_.width);
@@ -1049,10 +1050,10 @@ void EnvObjectRecognition::PrintGPUImages(std::vector<int32_t>& result_depth,
       if ((cost.size() > 0 && cost[n] < 200) || cost.size() == 0)
       {
         cv::imwrite(color_image_path, cv_color);
-        cv::imwrite(depth_image_path, cv_depth);
-        PointCloudPtr depth_img_cloud = 
-          GetGravityAlignedPointCloudCV(cv_depth, cv_color, 100.0);
-        PrintPointCloud(depth_img_cloud, 1, render_point_cloud_topic);
+        // cv::imwrite(depth_image_path, cv_depth);
+        // PointCloudPtr depth_img_cloud = 
+        //   GetGravityAlignedPointCloudCV(cv_depth, cv_color, 100.0);
+        // PrintPointCloud(depth_img_cloud, 1, render_point_cloud_topic);
       }
       
       // cv::imwrite(depth_image_path, color_depth_image);
@@ -5689,7 +5690,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     cv::Mat cv_depth_image, cv_predicted_mask_image;
     input_depth_image_path = input.input_depth_image;
     if (env_params_.use_external_pose_list == 1) {
-      gpu_stride = 5;
+      gpu_stride = 8;
       // For FAT dataset, we have 16bit images
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
       cv_predicted_mask_image = cv::imread(input.predicted_mask_image, CV_LOAD_IMAGE_UNCHANGED);
@@ -6521,6 +6522,12 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   vector<float> pose_centroid_y(num_poses, 0.0);
   vector<float> pose_centroid_z(num_poses, 0.0);
   vector<float> pose_total_points(num_poses, 0.0);
+  vector<float> min_x(num_poses, INT_MAX);
+  vector<float> max_x(num_poses, 0.0);
+  vector<float> min_y(num_poses, INT_MAX);
+  vector<float> max_y(num_poses, 0.0);
+  vector<float> min_z(num_poses, INT_MAX);
+  vector<float> max_z(num_poses, 0.0);
   for(int cloud_index = 0; cloud_index < rendered_point_num; cloud_index++)
   {
       int pose_index = cloud_pose_map[cloud_index];
@@ -6528,6 +6535,12 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
       pose_centroid_y[pose_index] += result_cloud[cloud_index + 1*rendered_point_num];
       pose_centroid_z[pose_index] += result_cloud[cloud_index + 2*rendered_point_num];
       pose_total_points[pose_index] += 1.0;
+      min_x[pose_index] = std::min(min_x[pose_index], result_cloud[cloud_index + 0*rendered_point_num]);
+      max_x[pose_index] = std::max(max_x[pose_index], result_cloud[cloud_index + 0*rendered_point_num]);
+      min_y[pose_index] = std::min(min_y[pose_index], result_cloud[cloud_index + 1*rendered_point_num]);
+      max_y[pose_index] = std::max(max_y[pose_index], result_cloud[cloud_index + 1*rendered_point_num]);
+      min_z[pose_index] = std::min(min_z[pose_index], result_cloud[cloud_index + 2*rendered_point_num]);
+      max_z[pose_index] = std::max(max_z[pose_index], result_cloud[cloud_index + 2*rendered_point_num]);
       // for(int i = 0; i < env_params_.height; i = i + stride)
       // {
       //   for(int j = 0; j < env_params_.width; j = j + stride)
@@ -6542,9 +6555,13 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   // std::transform(pose_centroid_x.begin(), pose_centroid_z.end(), pose_total_points.begin(), pose_centroid_z.begin(), std::divides<float>()); 
   for (int i = 0; i < num_poses; i++)
   {
-    pose_centroid_x[i] /= pose_total_points[i];
-    pose_centroid_y[i] /= pose_total_points[i];
-    pose_centroid_z[i] /= pose_total_points[i];
+    // pose_centroid_x[i] /= pose_total_points[i];
+    // pose_centroid_y[i] /= pose_total_points[i];
+    // pose_centroid_z[i] /= pose_total_points[i];
+
+    pose_centroid_x[i] = (max_x[i] + min_x[i])/2;
+    pose_centroid_y[i] = (max_y[i] + min_y[i])/2;
+    pose_centroid_z[i] = (max_z[i] + min_z[i])/2;
     
     ContPose pose_in = objects[i].cont_pose();
     // printf("Centroid old : %f,%f,%f\n", pose_in.x(), pose_in.y(), pose_in.z());
