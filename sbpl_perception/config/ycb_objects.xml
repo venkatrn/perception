@@ -1,113 +1,87 @@
 <launch>
   <param name="mesh_in_mm" value="false"/>
   <rosparam param="model_bank" subst_value="True">
-
     [
-    <!--Format-->
-    <!--
+      <!--Format-->
+      <!--
       [name,
       file_descriptor,
       flipped (up-side down in the images wrt to the model),
       symmetric (rotationally symmetric about Z-axis)]
       -->
-      [004_sugar_box,
-      <!-- $(find sbpl_perception)/data/ycb_models/004_sugar_box_aligned.ply, -->
-      /media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset/models/004_sugar_box/textured.ply,
-      false,
-      false,
-      1,
-      0.06,
-      1
+      [ 
+        004_sugar_box,
+        <!-- $(find sbpl_perception)/data/ycb_models/004_sugar_box_aligned.ply, -->
+        $(find sbpl_perception)/data/ycb_models/004_sugar_box/textured.ply,
+        false,
+        false,
+        1,
+        0.06,
+        1
       ],
-    <!-- [003_cracker_box,
-    $(find sbpl_perception)/data/ycb_models/003_cracker_box.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ],
-    [
-    005_tomato_soup_can,
-    $(find sbpl_perception)/data/ycb_models/005_tomato_soup_can.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ],
-    [
-    006_mustard_bottle,
-    $(find sbpl_perception)/data/ycb_models/006_mustard_bottle.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ],
-    [
-    010_potted_meat_can,
-    $(find sbpl_perception)/data/ycb_models/010_potted_meat_can.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ],
-    [
-    011_banana,
-    $(find sbpl_perception)/data/ycb_models/011_banana.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ],
-    [
-    019_pitcher_base,
-    $(find sbpl_perception)/data/ycb_models/019_pitcher_base.ply,
-    false,
-    false,
-    0,
-    0.1,
-    1
-    ],
-    [
-    024_bowl,
-    $(find sbpl_perception)/data/ycb_models/024_bowl.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ],
-    [
-    025_mug,
-    $(find sbpl_perception)/data/ycb_models/025_mug.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ],
-    [
-    035_power_drill,
-    $(find sbpl_perception)/data/ycb_models/035_power_drill.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ],
-    [
-    052_extra_large_clamp,
-    $(find sbpl_perception)/data/ycb_models/052_extra_large_clamp.ply,
-    false,
-    false,
-    1,
-    0.06,
-    1
-    ] -->
+      [ 
+        005_tomato_soup_can,
+        $(find sbpl_perception)/data/ycb_models/005_tomato_soup_can/textured.ply,
+        false,
+        false,
+        2,
+        0.06,
+        1
+      ],
+      [ 
+        002_master_chef_can,
+        $(find sbpl_perception)/data/ycb_models/002_master_chef_can/textured.ply,
+        false,
+        false,
+        2,
+        0.06,
+        1
+      ],
+      [
+        010_potted_meat_can,
+        $(find sbpl_perception)/data/ycb_models/010_potted_meat_can/textured.ply,
+        false,
+        false,
+        1,
+        0.06,
+        1
+      ],
+      [
+        024_bowl,
+        $(find sbpl_perception)/data/ycb_models/024_bowl/textured.ply,
+        false,
+        false,
+        2,
+        0.06,
+        1
+      ],
+      [
+        006_mustard_bottle,
+        $(find sbpl_perception)/data/ycb_models/006_mustard_bottle/textured.ply,
+        false,
+        false,
+        1,
+        0.06,
+        1
+      ],
+      [
+        011_banana,
+        $(find sbpl_perception)/data/ycb_models/011_banana/textured.ply,
+        false,
+        false,
+        1,
+        0.06,
+        1
+      ],
+      [
+        025_mug,
+        $(find sbpl_perception)/data/ycb_models/025_mug/textured.ply,
+        false,
+        false,
+        2,
+        0.06,
+        1
+      ],
     ]
   </rosparam>
 </launch>

@@ -69,6 +69,7 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
   private_nh.param("use_external_pose_list", use_external_pose_list,0);
   private_nh.param("use_input_images", use_input_images,0);
   private_nh.param("use_icp", use_icp, 1);
+  private_nh.param("use_render_greedy", use_render_greedy, 1);
   private_nh.param("camera_frame", camera_frame_,
                    std::string("/head_mount_kinect_rgb_link"));
   private_nh.param("camera_optical_frame", camera_optical_frame_,
@@ -129,7 +130,7 @@ void PerceptionInterface::CloudCB(const sensor_msgs::PointCloud2ConstPtr
                                   &sensor_cloud) {
 
   // For tracking based testing, republish input until processing starts
-  filtered_point_cloud_pub_.publish(sensor_cloud);
+  // filtered_point_cloud_pub_.publish(sensor_cloud);
   input_image_repub_.publish(recent_color_image_);
   if (capture_kinect_ == false) {
     ROS_ERROR("%s", "Capture kinect false");
@@ -268,8 +269,8 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   // Convert to ROS data type
   pcl_conversions::fromPCL(outputPCL, output);
 
-  // for (int i = 0; i < 10; i++)
-  //   filtered_point_cloud_pub_.publish(output);
+  for (int i = 0; i < 10; i++)
+    filtered_point_cloud_pub_.publish(output);
 
   // pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
   // table_removed_cloud = perception_utils::RemoveGroundPlane(table_removed_cloud,
@@ -365,6 +366,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   req.use_external_pose_list = use_external_pose_list;
   req.use_icp = use_icp;
   req.use_input_images = use_input_images;
+  req.use_render_greedy = use_render_greedy;
   tf::matrixEigenToMsg(camera_pose.matrix(), req.camera_pose);
   pcl::toROSMsg(*table_removed_cloud, req.input_organized_cloud);
 
@@ -499,9 +501,21 @@ void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
 
 void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
                                              &object_name) {
+  latest_requested_objects_.clear();
   cout << "[Perception Interface]: Got request to identify " << object_name.data
        << endl;
-  latest_requested_objects_ = vector<string>({object_name.data});
+  // latest_requested_objects_ = vector<string>({object_name.data});
+  istringstream ss(object_name.data); 
+  do { 
+      string word; 
+      ss >> word; 
+      if (word.size() > 0)
+      {
+        cout << "Parsed requested object : " << word << endl; 
+        latest_requested_objects_.push_back(word);
+      }
+  } while (ss); 
+
   // latest_requested_objects_ = {"pepsi_can", "sprite_can", "coke_bottle"};
   // latest_requested_objects_ = {"004_sugar_box"};
   // latest_requested_objects_ = {"crate"};

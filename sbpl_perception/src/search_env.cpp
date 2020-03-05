@@ -247,7 +247,8 @@ void EnvObjectRecognition::LoadObjFiles(const ModelBank
   env_params_.num_models = static_cast<int>(model_names.size());
 
   obj_models_.clear();
-
+  tris.clear();
+  tris_model_count.clear();
   for (int ii = 0; ii < env_params_.num_models; ++ii) {
     string model_name = model_names[ii];
     auto model_bank_it = model_bank.find(model_name);
@@ -1666,9 +1667,12 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
     int* dc_index;
     int* cloud_pose_map;
     int rendered_point_num;
-
+    string stage = "CLOUD";
+    // if (perch_params_.vis_expanded_states) {
+    //   stage = "DEBUG";
+    // } 
     GetStateImagesUnifiedGPU(
-      "CLOUD",
+      stage,
       last_object_states,
       source_result_color,
       source_result_depth,
@@ -1685,6 +1689,13 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
       observed_cost_gpu,
       points_diff_cost_gpu
     );
+
+    // if (perch_params_.vis_expanded_states) {
+    //   PrintGPUImages(
+    //     result_depth, result_color, num_poses, 
+    //     "succ_" + std::to_string(source_id), adjusted_poses_occluded,
+    //     total_cost);
+    // }
 
     //// Do ICP for occluded stuff, poses which are not occluded by other would be same as original
     // PrintGPUClouds(
@@ -1727,7 +1738,7 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
     }
     printf("Using cost type : %d\n", cost_type);
 
-    string stage = "COST";
+    stage = "COST";
     if (perch_params_.vis_expanded_states) {
       stage = "DEBUG";
     }    
@@ -1755,7 +1766,7 @@ void EnvObjectRecognition::ComputeGreedyCostsInParallelGPU(const std::vector<int
     if (perch_params_.vis_expanded_states) {
       PrintGPUImages(
         adjusted_result_depth, adjusted_result_color, num_poses, 
-        "succ_" + std::to_string(source_id), adjusted_poses_occluded,
+        "succ_icp_" + std::to_string(source_id) + "_batch_" + std::to_string(batch_index), adjusted_poses_occluded,
         total_cost);
     }
 
@@ -2485,6 +2496,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
   }
   end = chrono::system_clock::now();
   chrono::duration<double> elapsed_seconds = end-start;
+  cout << "ComputeGreedyRenderPoses() took " << elapsed_seconds.count() << " seconds\n";
   env_stats_.time = elapsed_seconds.count();
   // env_stats_.icp_time /= num_batches;
   string fname = debug_dir_ + "depth_greedy_state.png";
@@ -5690,7 +5702,7 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     cv::Mat cv_depth_image, cv_predicted_mask_image;
     input_depth_image_path = input.input_depth_image;
     if (env_params_.use_external_pose_list == 1) {
-      gpu_stride = 8;
+      gpu_stride = 5;
       // For FAT dataset, we have 16bit images
       cv_depth_image = cv::imread(input.input_depth_image, CV_LOAD_IMAGE_ANYDEPTH);
       cv_predicted_mask_image = cv::imread(input.predicted_mask_image, CV_LOAD_IMAGE_UNCHANGED);
@@ -5821,8 +5833,12 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
   if (kUseGPU && !input.use_input_images)
   {
     printf("Copying PCL cloud to array for GPU\n");
+    // unfiltered_depth_data.assign(depth_image, depth_image + kCameraWidth * kCameraHeight-1);
     result_observed_cloud = (float*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(float));
     result_observed_cloud_color = (uint8_t*) malloc(gpu_point_dim * env_params_.width*env_params_.height * sizeof(uint8_t));
+    unfiltered_depth_data = (int*) malloc(kCameraHeight * kCameraWidth * sizeof(int));
+
+    // observed_cloud_ is the downsampled input point cloud
     observed_point_num = observed_cloud_->points.size();
     
     //// Need to transform back to camera frame for GPU version as KNN happens in cloud in camera frame
@@ -5839,9 +5855,26 @@ void EnvObjectRecognition::SetInput(const RecognitionInput &input) {
     for (int i = 0; i < observed_point_num; i++)
     {
       PointT point = transformed_cloud->points[i];
+      uint32_t rgb = *reinterpret_cast<int*>(&point.rgb);
+
       result_observed_cloud[i + 0*observed_point_num] = point.x;
       result_observed_cloud[i + 1*observed_point_num] = point.y;
       result_observed_cloud[i + 2*observed_point_num] = point.z;
+
+      result_observed_cloud_color[i + 0*observed_point_num] = (rgb >> 16);
+      result_observed_cloud_color[i + 1*observed_point_num] = (rgb >> 8);
+      result_observed_cloud_color[i + 2*observed_point_num] = rgb;
+    }
+    for (int ii = 0; ii < kCameraHeight; ++ii) {
+      for (int jj = 0; jj < kCameraWidth; ++jj) {
+        PointT p = depth_img_cloud->at(jj, ii);
+        if (isnan(p.z) || isinf(p.z)) {
+          unfiltered_depth_data[ii * kCameraWidth + jj] = kKinectMaxDepth;
+        } else {
+          unfiltered_depth_data[ii * kCameraWidth + jj] = static_cast<int>
+                                                    (p.z * gpu_depth_factor);
+        }
+      }
     }
   }
   // Precompute RCNN heuristics.

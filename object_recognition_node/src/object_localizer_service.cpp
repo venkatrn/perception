@@ -35,6 +35,7 @@ bool ObjectLocalizerService::LocalizerCallback(LocalizeObjects::Request &req,
   recognition_input.use_input_images = req.use_input_images;
   ROS_DEBUG("External Render : %d\n", recognition_input.use_external_render);
   recognition_input.reference_frame_ = req.reference_frame_;
+  bool use_render_greedy = req.use_render_greedy;
 
   Eigen::Matrix4d pose(req.camera_pose.data.data());
   // Transpose to convert column-major raw data initialization to row-major.
@@ -48,10 +49,15 @@ bool ObjectLocalizerService::LocalizerCallback(LocalizeObjects::Request &req,
                    recognition_input.table_height);
   ROS_DEBUG_STREAM("Number of target objects:\n" << static_cast<int>
                    (recognition_input.model_names.size()));
+  ROS_DEBUG_STREAM("Use Render Greedy:" << use_render_greedy << endl);
 
   vector<Eigen::Affine3f> object_transforms;
-  const bool success = LocalizerHelper(mpi_world_, *object_recognizer_,
-                                       recognition_input, &object_transforms);
+  const bool success = LocalizerHelper(mpi_world_, 
+                                        *object_recognizer_,
+                                        recognition_input, 
+                                        &object_transforms,
+                                        use_render_greedy
+                                       );
 
   if (success) {
 
@@ -97,7 +103,8 @@ return success;
 bool ObjectLocalizerService::LocalizerHelper(const
                                              std::shared_ptr<boost::mpi::communicator> &mpi_world,
                                              const ObjectRecognizer &object_recognizer, const RecognitionInput &input,
-                                             vector<Eigen::Affine3f> *object_transforms) {
+                                             vector<Eigen::Affine3f> *object_transforms,
+                                             bool use_render_greedy) {
   object_transforms->clear();
 
   // Set input from master input
@@ -111,8 +118,20 @@ bool ObjectLocalizerService::LocalizerHelper(const
   broadcast(*mpi_world, recognition_input, kMasterRank);
 
   std::vector<Eigen::Affine3f> preprocessing_object_transforms;
-  const bool found_solution = object_recognizer.LocalizeObjects(
+  std::vector<ContPose> detected_poses;
+  std::vector<std::string> detected_model_names;
+  bool found_solution;
+  if (use_render_greedy)
+  {
+    found_solution = object_recognizer.LocalizeObjectsGreedyRender(
+                                recognition_input, object_transforms, &preprocessing_object_transforms,
+                                &detected_poses, &detected_model_names);
+  }
+  else
+  {
+    found_solution = object_recognizer.LocalizeObjects(
                                 recognition_input, object_transforms, &preprocessing_object_transforms);
+  }
 
   return found_solution;
 }

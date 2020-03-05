@@ -5,12 +5,12 @@
   <arg name="image_debug" default="false" />
   <arg name="debug" default="false" />
   <arg unless="$(arg debug)" name="launch_prefix" value="" />
-  <arg     if="$(arg debug)" name="launch_prefix" value="gdb --ex run --args" />
+  <arg     if="$(arg debug)" name="launch_prefix" value="cuda-gdb" />
 
   <include file="$(find sbpl_perception)/config/ycb_objects.xml"/>
 
-  <rosparam command="load" file="$(find sbpl_perception)/config/pr2_env_config.yaml" />
-  <rosparam command="load" file="$(find sbpl_perception)/config/pr2_planner_config.yaml" />
+  <rosparam command="load" file="$(find sbpl_perception)/config/pr2_conv_env_config.yaml" />
+  <rosparam command="load" file="$(find sbpl_perception)/config/pr2_conv_planner_config.yaml" />
   <rosparam command="load" file="$(find sbpl_perception)/config/camera_config.yaml" />
 
   <node pkg="object_recognition_node" type="object_localizer" name="object_localizer_service" output="screen" launch-prefix="" respawn="false">
@@ -22,19 +22,20 @@
   </node>
 
   <node pkg="object_recognition_node" type="obj_rec_node" name="obj_rec_node" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false">
-    <remap from="input_cloud" to="/camera/depth/points"/>
+    <remap from="input_cloud" to="/camera/depth_registered/points"/>
     <remap from="input_color_image" to="/camera/rgb/image_color"/>
-    <param name="pcl_visualization" value="true"/>
+    <param name="pcl_visualization" value="false"/>
     <param name="use_external_render" value="0"/>
     <param name="use_external_pose_list" value="0"/>
     <param name="use_icp" value="1"/>
     <param name="use_input_images" value="0"/>
+    <param name="use_render_greedy" value="1"/>
 
-    <param name="table_height" value="0.635"/> <!--1.13-->
-    <param name="xmin" value="0.0"/> <!--1.13-->
+    <param name="table_height" value="0.715"/> <!--1.13-->
+    <param name="xmin" value="0.2"/> <!--1.13-->
     <param name="xmax" value="0.6"/> <!--1.13-->
-    <param name="ymin" value="-5.4"/> <!--1.13-->
-    <param name="ymax" value="5.4"/> <!--1.13-->
+    <param name="ymin" value="-1.0"/> <!--1.13-->
+    <param name="ymax" value="1.0"/> <!--1.13-->
     <param name="reference_frame" value="/base_footprint"/>
     <!-- <param name="camera_frame" value="/camera_rgb_optical_frame"/> -->
     <param name="camera_optical_frame" value="/camera_rgb_optical_frame"/>

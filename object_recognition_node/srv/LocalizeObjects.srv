@@ -34,6 +34,7 @@ bool use_external_render
 bool use_external_pose_list
 bool use_icp
 bool use_input_images
+bool use_render_greedy
 ---
 
 # An array of 4x4 homogeneous matrix transformations from 3D model to object pose in the

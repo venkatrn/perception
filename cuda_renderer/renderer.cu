@@ -920,7 +920,10 @@ namespace cuda_renderer {
                             cuda_cloud, query_pitch_in_bytes, cuda_cloud_color, result_cloud_point_num, mask_ptr, width, height, 
                             kCameraCX, kCameraCY, kCameraFX, kCameraFY, depth_factor, stride, cuda_cloud_pose_map,
                             NULL, NULL);
-        
+        if (cudaGetLastError() != cudaSuccess) 
+        {
+            printf("ERROR: Unable to execute kernel depth_to_2d_cloud\n");
+        }
         //// Free image memory used during point cloud construction
         device_depth_int.clear(); device_depth_int.shrink_to_fit();
         device_red_int.clear(); device_red_int.shrink_to_fit();
@@ -1052,15 +1055,17 @@ namespace cuda_renderer {
         // Points in observed that get explained by render
         thrust::device_vector<uint8_t> cuda_observed_explained_vec(num_images * observed_point_num, 0);
         uint8_t* cuda_observed_explained = thrust::raw_pointer_cast(cuda_observed_explained_vec.data());
-        
         int* cuda_observed_cloud_label;
         uint8_t* cuda_observed_cloud_color;
-        cudaMalloc(&cuda_observed_cloud_label, observed_point_num * size_of_int);
+
         cudaMalloc(&cuda_observed_cloud_color, point_dim * observed_point_num * size_of_uint);
-        
-        cudaMemcpy(cuda_observed_cloud_label, result_observed_cloud_label, observed_point_num * size_of_int, cudaMemcpyHostToDevice);
         cudaMemcpy(cuda_observed_cloud_color, observed_color, point_dim * observed_point_num * size_of_uint, cudaMemcpyHostToDevice);
 
+        if (cost_type == 2)
+        {
+            cudaMalloc(&cuda_observed_cloud_label, observed_point_num * size_of_int);
+            cudaMemcpy(cuda_observed_cloud_label, result_observed_cloud_label, observed_point_num * size_of_int, cudaMemcpyHostToDevice);
+        }
         peak_memory_usage = std::max(print_cuda_memory_usage(), peak_memory_usage);
 
         dim3 numBlocksR((result_cloud_point_num + threadsPerBlock - 1) / threadsPerBlock, 1);

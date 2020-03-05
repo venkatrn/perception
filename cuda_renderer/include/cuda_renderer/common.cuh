@@ -452,7 +452,7 @@ namespace cuda_renderer {
                     rgb2lab(red1,green1,blue1,lab1);
                     double cur_dist = color_distance(lab1[0],lab1[1],lab1[2],lab2[0],lab2[1],lab2[2]);
                     // printf("color distance :%f\n", cur_dist);
-                    if(cur_dist > 12.5){
+                    if(cur_dist > 15){
                         // add to render cost if color doesnt match
                         atomicAdd(&cuda_rendered_cost[pose_index], cost);
                     }

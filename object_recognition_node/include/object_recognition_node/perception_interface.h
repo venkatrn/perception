@@ -74,6 +74,7 @@ class PerceptionInterface
     int use_icp;
     int use_input_images;
     bool capture_kinect_;
+    int use_render_greedy;
 
     // Cache results of the latest call to ObjectLocalizerService.
     std::vector<std::string> latest_requested_objects_;
