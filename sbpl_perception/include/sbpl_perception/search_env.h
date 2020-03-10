@@ -137,8 +137,9 @@ struct PERCHParams {
   bool vis_successors;
 
   bool use_color_cost;
-
   int gpu_batch_size;
+  bool use_gpu;
+  double color_distance_threshold;
 
   PERCHParams() : initialized(false) {}
 
@@ -163,6 +164,8 @@ struct PERCHParams {
     ar &downsampling_leaf_size;
     ar &use_color_cost;
     ar &gpu_batch_size;
+    ar &use_gpu;
+    ar &color_distance_threshold;
   }
 };
 // BOOST_IS_MPI_DATATYPE(PERCHParams);

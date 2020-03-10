@@ -94,7 +94,8 @@ def render_pose(rendered_dir, count, class_name, fixed_transforms_dict, camera_i
 
 image_directory = "/media/aditya/A69AFABA9AFA85D9/Datasets/YCB_Video_Dataset"
 # annotation_file = image_directory + '/instances_keyframe_pose.json'
-annotation_file = image_directory + '/instances_train_pose.json'
+# annotation_file = image_directory + '/instances_keyframe_pose.json'
+annotation_file = image_directory + '/instances_keyframe_bbox_pose.json'
 scale = 1
 example_coco = COCO(annotation_file)
 camera_intrinsics = example_coco.dataset['camera_intrinsic_settings']

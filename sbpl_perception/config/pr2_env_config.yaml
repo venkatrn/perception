@@ -14,7 +14,8 @@ perch_params:
   use_model_specific_search_resolution: false
 
   ## RGB
-  use_color_cost: false
+  use_color_cost: true
+  color_distance_threshold: 12.5
 
   ## With Downsampling
   use_downsampling: true
@@ -32,6 +33,10 @@ perch_params:
   use_clutter_mode: false
   # Should be in [0,1]
   clutter_regularizer: 0.1
+
+  ## GPU stuff
+  use_gpu: true
+  gpu_batch_size: 700
 
   ## Visualization and Debugging
   visualize_expanded_states: false

@@ -633,6 +633,7 @@ namespace cuda_renderer {
         int cost_type,
         bool calculate_observed_cost,
         float sensor_resolution,
+        float color_distance_threshold,
         std::vector<int32_t>& result_depth, 
         std::vector<std::vector<uint8_t>>& result_color,
         float* &result_cloud,
@@ -655,6 +656,7 @@ namespace cuda_renderer {
         printf("USE_CLUTTER : %d\n", USE_CLUTTER);
         printf("USE_TREE : %d\n", USE_TREE);
         printf("sensor_resolution : %f\n", sensor_resolution);
+        printf("color_distance_threshold : %f\n", color_distance_threshold);
         printf("cost_type : %d\n", cost_type);
         printf("point_dim : %d\n", point_dim);
         printf("stride : %d\n", stride);
@@ -1085,7 +1087,8 @@ namespace cuda_renderer {
             cuda_observed_explained,
             device_pose_segmentation_label_vec,
             cuda_observed_cloud_label,
-            cost_type);
+            cost_type,
+            color_distance_threshold);
         
         thrust::device_vector<float> percentage_multiplier_val(num_images, 100);
         if (stage.compare("DEBUG") == 0 || stage.compare("COST") == 0)
@@ -1136,12 +1139,12 @@ namespace cuda_renderer {
                 cuda_pose_observed_explained_vec.begin(), cuda_pose_points_diff_cost_vec.begin(), 
                 thrust::minus<float>()
             );
-            printf("Point diff\n");
-            thrust::copy(
-                cuda_pose_points_diff_cost_vec.begin(),
-                cuda_pose_points_diff_cost_vec.end(), 
-                std::ostream_iterator<int>(std::cout, " ")
-            );
+            // printf("Point diff\n");
+            // thrust::copy(
+            //     cuda_pose_points_diff_cost_vec.begin(),
+            //     cuda_pose_points_diff_cost_vec.end(), 
+            //     std::ostream_iterator<int>(std::cout, " ")
+            // );
             
             // Subtract total observed points for each pose with explained points for each pose
             thrust::device_vector<float> cuda_pose_observed_points_total_vec = pose_observed_points_total;
@@ -1228,6 +1231,7 @@ namespace cuda_renderer {
     {
         printf("depth2cloud_global()\n");
         /**
+            Convert a given input to point cloud, used to convert observed images to point cloud
             @label_mask_data - Label of every pixel in input 2D image
             @result_observed_cloud_label - Label of every pixel in output 3D cloud, downsampled
             Returns :
@@ -1403,6 +1407,7 @@ namespace cuda_renderer {
     )
     {
         /*
+         * Function not mainted
          * @pose_observed_points_total - number of total points in observed scene corresponding to given object
          * It is calculated using segmentation label
          * @result_observed_cloud_label - label for every point in the observed cloud, used in calculating render cost,
@@ -1481,7 +1486,8 @@ namespace cuda_renderer {
             cuda_observed_explained,
             cuda_pose_segmentation_label,
             cuda_observed_cloud_label,
-            cost_type);
+            cost_type,
+            15);
         
 
         
