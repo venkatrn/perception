@@ -109,12 +109,7 @@ EnvObjectRecognition::EnvObjectRecognition(const
   // kCameraWidth = kCameraWidth;
   // kNumPixels = kCameraWidth * kCameraHeight;
 
-  if (!perch_params_.use_gpu)
-  {
-    kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
-                                                      kCameraHeight, kCameraWidth));
-    scene_ = kinect_simulator_->scene_;
-  }
+  
   observed_cloud_.reset(new PointCloud);
   original_input_cloud_.reset(new PointCloud);
   constraint_cloud_.reset(new PointCloud);
@@ -230,10 +225,17 @@ EnvObjectRecognition::EnvObjectRecognition(const
   mpi_comm_->barrier();
   broadcast(*mpi_comm_, perch_params_, kMasterRank);
   assert(perch_params_.initialized);
-
+  
   if (!perch_params_.initialized) {
     printf("ERROR: PERCH Params not initialized for process %d\n",
            mpi_comm_->rank());
+  }
+  
+  if (perch_params_.use_gpu == 0)
+  {
+    kinect_simulator_ = SimExample::Ptr(new SimExample(0, argv,
+                                                      kCameraHeight, kCameraWidth));
+    scene_ = kinect_simulator_->scene_;
   }
 
 }
@@ -2423,6 +2425,7 @@ GraphState EnvObjectRecognition::ComputeGreedyRenderPoses() {
   {
     int start_index = bi * perch_params_.gpu_batch_size;
     vector<ObjectState>::const_iterator batch_start = last_object_states.begin() + start_index;
+    // Take min of gpu batch size of number of poses left
     int end_index = std::min((bi + 1) * perch_params_.gpu_batch_size, (int) candidate_succ_ids.size());
     if (end_index > candidate_succ_ids.size() || start_index >= candidate_succ_ids.size()) break;
 
@@ -6463,7 +6466,8 @@ vector<PointCloudPtr> EnvObjectRecognition::GetObjectPointClouds(
 }
 
 void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
-                                                      vector<ObjectState>& modified_objects)
+                                                      vector<ObjectState>& modified_objects,
+                                                      int start_index)
 {
   /*
    * Render once and realign the centroid with the centroid in the pose
@@ -6471,7 +6475,7 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
    * Uses min/max of rendered point cloud to get centroid
    */
   int num_poses = objects.size();
-  printf("GetShiftedCentroidPosesGPU() for %d poses\n", num_poses);
+  printf("GetShiftedCentroidPosesGPU() for %d poses, batch index : %d\n", num_poses, start_index);
   std::vector<int> random_poses_occluded(num_poses, 0);
   std::vector<int> random_poses_occluded_other(num_poses, 0);
   std::vector<float> random_pose_clutter_cost(num_poses, 0);
@@ -6526,7 +6530,6 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   //   pose_segmentation_label
   // );
   
-  // PrintGPUImages(result_depth, result_color, num_poses, "succ_pre_shift", random_poses_occluded);
 
   float* result_cloud;
   uint8_t* result_cloud_color;
@@ -6546,11 +6549,17 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
   float* observed_cost;
   float* points_diff_cost_gpu;
 
+  string state = "CLOUD";
+  if (perch_params_.vis_successors)
+  {
+    state = "DEBUG";
+  }
   GetStateImagesUnifiedGPU(
-    "CLOUD",
+    state,
     objects,
     random_color,
-    source_result_depth,
+    // source_result_depth,
+    random_depth,
     result_color,
     result_depth,
     0,
@@ -6565,23 +6574,29 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
     points_diff_cost_gpu
   );
 
+  
+  if (perch_params_.vis_successors)
+  {
+    PrintGPUImages(result_depth, result_color, num_poses, "succ_pre_shift", random_poses_occluded);
+  }
   vector<float> pose_centroid_x(num_poses, 0.0);
   vector<float> pose_centroid_y(num_poses, 0.0);
   vector<float> pose_centroid_z(num_poses, 0.0);
   vector<float> pose_total_points(num_poses, 0.0);
   vector<float> min_x(num_poses, INT_MAX);
-  vector<float> max_x(num_poses, 0.0);
+  vector<float> max_x(num_poses, INT_MIN);
   vector<float> min_y(num_poses, INT_MAX);
-  vector<float> max_y(num_poses, 0.0);
+  vector<float> max_y(num_poses, INT_MIN);
   vector<float> min_z(num_poses, INT_MAX);
-  vector<float> max_z(num_poses, 0.0);
+  vector<float> max_z(num_poses, INT_MIN);
   for(int cloud_index = 0; cloud_index < rendered_point_num; cloud_index++)
   {
       int pose_index = cloud_pose_map[cloud_index];
-      pose_centroid_x[pose_index] += result_cloud[cloud_index + 0*rendered_point_num];
-      pose_centroid_y[pose_index] += result_cloud[cloud_index + 1*rendered_point_num];
-      pose_centroid_z[pose_index] += result_cloud[cloud_index + 2*rendered_point_num];
-      pose_total_points[pose_index] += 1.0;
+      // pose_centroid_x[pose_index] += result_cloud[cloud_index + 0*rendered_point_num];
+      // pose_centroid_y[pose_index] += result_cloud[cloud_index + 1*rendered_point_num];
+      // pose_centroid_z[pose_index] += result_cloud[cloud_index + 2*rendered_point_num];
+      // pose_total_points[pose_index] += 1.0;
+
       min_x[pose_index] = std::min(min_x[pose_index], result_cloud[cloud_index + 0*rendered_point_num]);
       max_x[pose_index] = std::max(max_x[pose_index], result_cloud[cloud_index + 0*rendered_point_num]);
       min_y[pose_index] = std::min(min_y[pose_index], result_cloud[cloud_index + 1*rendered_point_num]);
@@ -6618,7 +6633,7 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
     float x_diff = pose_in.x()-pose_centroid_x[i];
     float y_diff = pose_in.y()-pose_centroid_y[i];
     float z_diff = pose_in.z()-pose_centroid_z[i];
-    // printf("Centroid diff : %f,%f,%f\n", x_diff, y_diff, z_diff);
+    // printf("Centroid diff for pose %d : %f,%f,%f\n", i, x_diff, y_diff, z_diff);
 
     
     ContPose pose_out = 
@@ -6626,7 +6641,8 @@ void EnvObjectRecognition::GetShiftedCentroidPosesGPU(const vector<ObjectState>&
 
     ObjectState modified_object_state(objects[i].id(), objects[i].symmetric(), pose_out, objects[i].segmentation_label_id());
 
-    modified_objects.push_back(modified_object_state);
+    // modified_objects.push_back(modified_object_state);
+    modified_objects[i + start_index] = modified_object_state;
 
   }
 
@@ -6848,9 +6864,27 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
           {
             if (unshifted_object_states.size() > 0)
             {
+              shifted_object_states.resize(unshifted_object_states.size());
               if (env_params_.shift_pose_centroid == 1)
               {
-                GetShiftedCentroidPosesGPU(unshifted_object_states, shifted_object_states);
+                int num_batches = unshifted_object_states.size()/perch_params_.gpu_batch_size + 1;
+                printf("Num GPU batches for given batch size : %d\n", num_batches);
+                for (int bi = 0; bi < num_batches; bi++)
+                {
+                  int start_index = bi * perch_params_.gpu_batch_size;
+                  vector<ObjectState>::const_iterator batch_start = unshifted_object_states.begin() + start_index;
+                  int end_index = std::min((bi + 1) * perch_params_.gpu_batch_size, (int) unshifted_object_states.size());
+
+                  if (end_index > unshifted_object_states.size() || start_index >= unshifted_object_states.size()) break;
+
+                  vector<ObjectState>::const_iterator batch_end = unshifted_object_states.begin() + end_index;
+                  vector<ObjectState> batch_unshifted_object_states(batch_start, batch_end);
+                  printf("\n\nGetting shifted poses for GPU batch : %d, num poses : %d\n", bi, batch_unshifted_object_states.size());
+  
+                  GetShiftedCentroidPosesGPU(batch_unshifted_object_states, shifted_object_states, start_index);
+                  batch_unshifted_object_states.clear();
+                }
+
                 valid_succ_cache[ii].clear();
               }
               else
@@ -6860,7 +6894,8 @@ void EnvObjectRecognition::GenerateSuccessorStates(const GraphState
               // std::copy(shifted_object_states.begin(), shifted_object_states.end(), valid_succ_cache[ii].begin());
               for (size_t i = 0; i < shifted_object_states.size(); i++)
               {
-                // cout << " shifted " << i << endl;
+                cout << " un-shifted " << unshifted_object_states[i] << endl;
+                cout << " shifted " << shifted_object_states[i] << endl;
                 const ObjectState object_state = shifted_object_states[i];
                 GraphState s = source_state; 
                 s.AppendObject(object_state);

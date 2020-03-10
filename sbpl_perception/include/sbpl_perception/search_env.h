@@ -361,7 +361,8 @@ class EnvObjectRecognition : public EnvironmentMHA {
   std::vector<PointCloudPtr> segmented_object_clouds;
   std::vector<std::string> segmented_object_names;
   void GetShiftedCentroidPosesGPU(const vector<ObjectState>& objects,
-                                  vector<ObjectState>& modified_objects);
+                                  vector<ObjectState>& modified_objects,
+                                  int start_index);
   vector<float> segmented_observed_point_count;
   std::vector<pcl::search::KdTree<PointT>::Ptr> segmented_object_knn;
   std::vector<uint8_t> predicted_mask_image;
