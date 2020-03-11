@@ -1,11 +1,11 @@
 search_resolution_translation: 0.07 # m 0.04
-search_resolution_yaw: 0.2526991 # rad
-mesh_in_mm: true
-mesh_scaling_factor: 0.6
-# use_external_render : 0
-# use_external_pose_list : 0
-# use_icp : 1
-# use_full_object_point_cloud: true
+search_resolution_yaw: 0.4 # rad
+mesh_in_mm: false
+mesh_scaling_factor: 1
+
+# Below for soda data
+# mesh_in_mm: true
+# mesh_scaling_factor: 0.6
 
 perch_params:
   min_points_for_constraint_cloud: 50
@@ -17,18 +17,17 @@ perch_params:
 
   ## RGB
   use_color_cost: true
+  color_distance_threshold: 15
 
   ## With Downsampling
   use_downsampling: true
-  sensor_resolution_radius: 0.005 #m
-  # sensor_resolution_radius: 0.005 #m
-  min_neighbor_points_for_valid_pose: 25 #50
-  downsampling_leaf_size: 0.01
-  # downsampling_leaf_size: 0.01
+  sensor_resolution_radius: 0.0075 #m
+  min_neighbor_points_for_valid_pose: 30 #50
+  downsampling_leaf_size: 0.0075
 
-  ## Without Downsampling
-  # sensor_resolution_radius: 0.003 #m
-  # min_neighbor_points_for_valid_pose: 500 #50
+  ## GPU stuff
+  use_gpu: true
+  gpu_batch_size: 500
 
   ## Clutter mode
   use_clutter_mode: false
@@ -36,7 +35,7 @@ perch_params:
   clutter_regularizer: 0.1
 
   ## Visualization and Debugging
-  visualize_expanded_states: false
+  visualize_expanded_states: true
   visualize_successors: false
-  print_expanded_states: true
+  print_expanded_states: false
   debug_verbose: false # unused

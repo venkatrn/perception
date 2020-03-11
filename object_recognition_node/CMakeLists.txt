@@ -49,7 +49,7 @@ find_package(catkin
   COMPONENTS
   image_transport
   roscpp sensor_msgs perception_utils
-  keyboard tf tf_conversions eigen_conversions sbpl_perception
+  tf tf_conversions eigen_conversions sbpl_perception
 )
 find_package(Threads REQUIRED)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -96,7 +96,7 @@ generate_messages(
   )
 
 catkin_package(
-  CATKIN_DEPENDS image_transport roscpp sensor_msgs perception_utils keyboard tf tf_conversions
+  CATKIN_DEPENDS image_transport roscpp sensor_msgs perception_utils tf tf_conversions
   sbpl_perception
   DEPENDS
   #MPI Boost

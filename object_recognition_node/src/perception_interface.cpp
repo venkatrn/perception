@@ -94,9 +94,9 @@ PerceptionInterface::PerceptionInterface(ros::NodeHandle nh) : nh_(nh),
                             this);
   color_image_sub_ = nh.subscribe("input_color_image", 1, &PerceptionInterface::ImageCB,
                             this);
-  keyboard_sub_ = nh.subscribe("/keypress_topic", 1,
-                               &PerceptionInterface::KeyboardCB,
-                               this);
+  // keyboard_sub_ = nh.subscribe("/keypress_topic", 1,
+  //                              &PerceptionInterface::KeyboardCB,
+  //                              this);
   requested_objects_sub_ = nh.subscribe("/requested_object", 1,
                                         &PerceptionInterface::RequestedObjectsCB,
                                         this);
@@ -491,13 +491,13 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr
   }
 }
 
-void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
-  if (static_cast<char>(pressed_key.code) == 'c') {
-    cout << "Its a c!" << endl;
-    capture_kinect_ = true;
-  }
-  return;
-}
+// void PerceptionInterface::KeyboardCB(const keyboard::Key &pressed_key) {
+//   if (static_cast<char>(pressed_key.code) == 'c') {
+//     cout << "Its a c!" << endl;
+//     capture_kinect_ = true;
+//   }
+//   return;
+// }
 
 void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
                                              &object_name) {
@@ -505,16 +505,16 @@ void PerceptionInterface::RequestedObjectsCB(const std_msgs::String
   cout << "[Perception Interface]: Got request to identify " << object_name.data
        << endl;
   // latest_requested_objects_ = vector<string>({object_name.data});
-  istringstream ss(object_name.data); 
-  do { 
-      string word; 
-      ss >> word; 
+  istringstream ss(object_name.data);
+  do {
+      string word;
+      ss >> word;
       if (word.size() > 0)
       {
-        cout << "Parsed requested object : " << word << endl; 
+        cout << "Parsed requested object : " << word << endl;
         latest_requested_objects_.push_back(word);
       }
-  } while (ss); 
+  } while (ss);
 
   // latest_requested_objects_ = {"pepsi_can", "sprite_can", "coke_bottle"};
   // latest_requested_objects_ = {"004_sugar_box"};

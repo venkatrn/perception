@@ -8,7 +8,7 @@
 
 #include <actionlib/server/simple_action_server.h>
 #include <geometry_msgs/Pose.h>
-#include <keyboard/Key.h>
+// #include <keyboard/Key.h>
 #include <object_recognition_node/object_localizer_service.h>
 #include <object_recognition_node/DoPerchAction.h>
 #include <perception_utils/pcl_typedefs.h>
@@ -63,7 +63,7 @@ class PerceptionInterface
     ros::Subscriber cloud_sub_;
     ros::Subscriber depth_image_sub_;
     ros::Subscriber color_image_sub_;
-    ros::Subscriber keyboard_sub_;
+    // ros::Subscriber keyboard_sub_;
     ros::Subscriber requested_objects_sub_;
     std::string reference_frame_;
     std::string camera_frame_;
@@ -94,7 +94,7 @@ class PerceptionInterface
     void DetectObjects();
 
     // Keyboard callback for variour triggers
-    void KeyboardCB(const keyboard::Key &pressed_key);
+    // void KeyboardCB(const keyboard::Key &pressed_key);
 
     // Callback from requested object name. TODO: support multiple objects.
     void RequestedObjectsCB(const std_msgs::String &object_name);
