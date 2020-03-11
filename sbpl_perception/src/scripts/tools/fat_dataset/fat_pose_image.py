@@ -1083,7 +1083,7 @@ class FATImage:
             # Second for changing raw. Here may need to rewrite the render or transition matrix!!!!!!!
             # First (half: 0, whole: 1) Second (0:0, 1:0-pi, 2:0-2pi)
             "002_master_chef_can": [0,0], #half_0
-            # "003_cracker_box": [0,1], #half_0-pi
+            "003_cracker_box": [0,0], #half_0-pi
             "004_sugar_box": [0,4], #half_0-pi
             "005_tomato_soup_can": [0,0], #half_0
             "006_mustard_bottle": [0,0], #whole_0-pi
@@ -1094,6 +1094,7 @@ class FATImage:
             "011_banana": [1,0], #whole_0-2pi #from psc
             "019_pitcher_base": [0,0], #whole_0-2pi
             "021_bleach_cleanser": [0,0], #whole_0-2pi, 55 and 
+            # "021_bleach_cleanser": [0,2], #whole_0-2pi, 55 and 
             "024_bowl": [1,0], #whole_0
             "025_mug": [0,1], #whole_0-2pi
             # "035_power_drill" : [1,0], #whole_0-2pi
@@ -1180,7 +1181,10 @@ class FATImage:
             cmin -= delt
         return rmin, rmax, cmin, cmax
 
-    def get_posecnn_mask(self, mask_image_id=None):
+    def get_posecnn_mask(self, mask_image_id=None, centroid_type="roi", annotations=None):
+        '''
+            Uses posecnn mask and computes centroid using different methods for rendering shift
+        '''
         posecnn_meta = scio.loadmat('{0}/results_PoseCNN_RSS2018/{1}.mat'.format(self.coco_image_directory, str(mask_image_id).zfill(6)))
         overall_mask = np.array(posecnn_meta['labels'])
         posecnn_rois = np.array(posecnn_meta['rois'])
@@ -1193,14 +1197,34 @@ class FATImage:
         for idx in range(len(lst)):
             itemid = int(lst[idx])
             # print(itemid)
-            labels.append(self.category_id_to_names[itemid-1]['name'])
-            rmin, rmax, cmin, cmax = self.get_posecnn_bbox(idx, posecnn_rois)
-            boxes.append([cmin, rmin, cmax, rmax])
-            centroids_2d.append(np.flip(np.array([(rmin+rmax)/2, (cmin+cmax)/2])))
+            label = self.category_id_to_names[itemid-1]['name']
+            labels.append(label)
+            
             mask = np.copy(overall_mask)
             mask[mask != itemid] = 0
             masks.append(mask)
-        
+
+            # rmin is min of row in np 2d array, #cmin is min of column in 2d np array
+            if centroid_type == "roi":
+                rmin, rmax, cmin, cmax = self.get_posecnn_bbox(idx, posecnn_rois)
+            elif centroid_type == "mask":
+                mask_args = np.argwhere(mask > 0)
+                rmin, rmax, cmin, cmax = np.min(mask_args[:,0]), np.max(mask_args[:,0]), np.min(mask_args[:,1]), np.max(mask_args[:,1])
+            elif centroid_type == "box_gt":
+                for ann in annotations:
+                    # box contains X(along width), Y, top left and bottom right
+                    if itemid-1 == ann['category_id']:
+                        box = ann['bbox']
+                        # boxes_all.append([int(x) for x in box])
+                        # X (along width), Y
+                        # centroids_2d_all.append(np.array([(box[0]+box[2])/2, (box[1]+box[3])/2]))
+                        rmin, rmax, cmin, cmax = box[1], box[3], box[0], box[2]
+                        break
+
+            boxes.append([cmin, rmin, cmax, rmax])
+            centroids_2d.append(np.array([(cmin+cmax)/2, (rmin+rmax)/2]))
+
+        print(boxes)
         return labels, masks, boxes, centroids_2d 
 
     def overlay_masks(self, cv_image, bboxes, masks, labels, centroids):
@@ -1209,9 +1233,13 @@ class FATImage:
 
         for box_id in range(len(labels)):
             label = labels[box_id]
-            box = bboxes[box_id]
+            if box_id >= len(bboxes) or box_id >= len(masks):
+                continue
+            box = [int(x) for x in bboxes[box_id]]
+            center = [int(x) for x in centroids[box_id]]
             mask = masks[box_id].astype(np.uint8)
             # print(mask)
+
 
             top_left, bottom_right = box[:2], box[2:]
             cv_image = cv2.rectangle(
@@ -1232,11 +1260,13 @@ class FATImage:
             cv2.putText(
                 cv_image, s, (x, y), cv2.FONT_HERSHEY_SIMPLEX, .3, (0, 0, 0), 1
             )
+
+            cv_image = cv2.circle(cv_image, tuple(center), 8, (0, 0, 0), -1)
         return cv_image
 
 
     def visualize_sphere_sampling(
-            self, image_data, print_poses=True, required_objects=None, num_samples=80, mask_type='mask_rcnn', mask_image_id=None):
+            self, image_data, annotations=None, print_poses=True, required_objects=None, num_samples=80, mask_type='mask_rcnn', mask_image_id=None):
         
         from maskrcnn_benchmark.config import cfg
         from dipy.core.geometry import cart2sphere, sphere2cart
@@ -1262,18 +1292,40 @@ class FATImage:
             composite, mask_list_all, rotation_list, centroids_2d_all, boxes_all, overall_binary_mask \
                     = self.coco_demo.run_on_opencv_image(color_img, use_thresh=True)
             # if print_poses:
-            composite_image_path = '{}/mask.png'.format(rotation_output_dir)
-            cv2.imwrite(composite_image_path, composite)
+            composite_image_path = '{}/mask_mask_rcnn.png'.format(rotation_output_dir)
+            # cv2.imwrite(composite_image_path, composite)
             print(rotation_list['top_viewpoint_ids'])
             labels_all = rotation_list['labels']
             
         elif mask_type == "posecnn":
             predicted_mask_path = os.path.join(os.path.dirname(depth_img_path), os.path.splitext(os.path.basename(color_img_path))[0] + '.predicted_mask_posecnn.png')
-            labels_all, mask_list_all, boxes_all, centroids_2d_all = self.get_posecnn_mask(mask_image_id)
+            labels_all, mask_list_all, boxes_all, centroids_2d_all = self.get_posecnn_mask(mask_image_id, centroid_type="mask")
             composite = self.overlay_masks(color_img, boxes_all, mask_list_all, labels_all, centroids_2d_all)
-            composite_image_path = '{}/mask.png'.format(rotation_output_dir)
-            cv2.imwrite(composite_image_path, composite)
+            composite_image_path = '{}/mask_posecnn.png'.format(rotation_output_dir)
+            # composite_image_path = '{}/mask.png'.format(rotation_output_dir)
+            # cv2.imwrite(composite_image_path, composite)
             # print(labels_all)
+        
+        elif mask_type == "posecnn_gt_bbox":
+            predicted_mask_path = os.path.join(os.path.dirname(depth_img_path), os.path.splitext(os.path.basename(color_img_path))[0] + '.predicted_mask_posecnn.png')
+            labels_all, mask_list_all, boxes_all, centroids_2d_all = self.get_posecnn_mask(mask_image_id, centroid_type="box_gt", annotations=annotations)
+            # boxes_all = []
+            # centroids_2d_all = []
+            # for label in labels_all:
+            #     # print(label)
+            #     for ann in annotations:
+            #         # print(self.category_id_to_names[ann['category_id']])
+            #         if label == self.category_id_to_names[ann['category_id']]['name']:
+            #             box = ann['bbox']
+            #             boxes_all.append([int(x) for x in box])
+            #             # X (along width), Y
+            #             centroids_2d_all.append(np.array([(box[0]+box[2])/2, (box[1]+box[3])/2]))
+            # import pdb
+            # pdb.set_trace()
+            composite = self.overlay_masks(color_img, boxes_all, mask_list_all, labels_all, centroids_2d_all)
+            composite_image_path = '{}/mask_posecnn_gt_bbox.png'.format(rotation_output_dir)
+
+        cv2.imwrite(composite_image_path, composite)
         
 
         labels = labels_all
@@ -1294,7 +1346,7 @@ class FATImage:
                     mask_i = labels_all.index(label)
                     # print(str(mask_i) + " found")
                     filter_mask = mask_list_all[mask_i]
-                    print(mask_label_i)
+                    # print(mask_label_i)
                     # Use binary mask to assign label in overall mask
                     overall_binary_mask[filter_mask > 0] = mask_label_i
                     labels.append(label)
@@ -1345,22 +1397,23 @@ class FATImage:
                     cv2.imwrite("{}/label_{}_{}.png".format(rotation_output_dir, label, cnt), rgb_gl)
                     cnt += 1
                 
-            resolution = 0.01
-            # Sample rotation across depth
-            mask = np.argwhere(mask_list[box_id] > 0)
-            centroid = [(np.max(mask[:,0])+np.min(mask[:,0]))/2, (np.max(mask[:,1])+np.min(mask[:,1]))/2]
-            centroid = np.flip(centroid)
-            # centroid = np.flip(np.mean(np.argwhere(mask_list[box_id] > 0), axis=0))
-            print("Centroid from mask : {}".format(centroid))
-            print("Centroid from box : {}".format(centroids_2d[box_id]))
-            # centroid[1] -= 60
-            # if label != "021_bleach_cleanser":
-            # #     # bbox in bleach is inaccurate
+            if label == "037_scissors":
+                resolution = 0.01
+            else:
+                resolution = 0.02
+            
+            # mask = np.argwhere(mask_list[box_id] > 0)
+            # centroid = [(np.max(mask[:,0])+np.min(mask[:,0]))/2, (np.max(mask[:,1])+np.min(mask[:,1]))/2]
+            # centroid = np.flip(centroid)
             centroid = centroids_2d[box_id]
-            if label == "021_bleach_cleanser" or label == "037_scissors":
-                centroid_max = np.flip(np.max(np.argwhere(mask_list[box_id] > 0), axis=0))
-                centroid_min = np.flip(np.min(np.argwhere(mask_list[box_id] > 0), axis=0))
-                centroid = np.array([centroid_max[0]*0.7+centroid_min[0]*0.5, centroid_max[1]*0.6+centroid_min[1]*    0.4])
+            print("Centroid from min/max mask (X (along width), Y) : {}".format(centroid))
+            # print("Centroid from GT (X (along width), Y): {}".format(centroids_2d[box_id]))
+            
+            # if label == "021_bleach_cleanser" or label == "037_scissors":
+            #     centroid_max = np.flip(np.max(np.argwhere(mask_list[box_id] > 0), axis=0))
+            #     centroid_min = np.flip(np.min(np.argwhere(mask_list[box_id] > 0), axis=0))
+            #     centroid = np.array([centroid_max[0]*0.7+centroid_min[0]*0.5, centroid_max[1]*0.6+centroid_min[1]*    0.4])
+
             for _, depth in enumerate(np.arange(min_depth, max_depth, resolution)):
                 ## Vary depth only
                 centre_world_point = self.get_world_point(centroid.tolist() + [depth])
@@ -1374,7 +1427,7 @@ class FATImage:
                     grid_i += 1
 
 
-        return labels, annotations, predicted_mask_path
+        return labels, annotations, predicted_mask_path, composite_image_path
 
 
     def visualize_model_output(self, image_data, use_thresh=False, use_centroid=True, print_poses=True, required_objects=None):
@@ -2624,8 +2677,8 @@ def run_ycb_gpu():
 def run_ycb_6d(dataset_cfg=None):
     
     image_directory = dataset_cfg['image_dir']
-    annotation_file = image_directory + 'instances_keyframe_pose.json'
-    # annotation_file = image_directory + 'instances_keyframe_bbox_pose.json'
+    # annotation_file = image_directory + 'instances_keyframe_pose.json'
+    annotation_file = image_directory + 'instances_keyframe_bbox_pose.json'
     model_dir = dataset_cfg['model_dir']
 
     fat_image = FATImage(
@@ -2645,7 +2698,8 @@ def run_ycb_6d(dataset_cfg=None):
         python_debug_dir=dataset_cfg["python_debug_dir"]
     )
 
-    mask_type = 'posecnn'
+    # mask_type = 'posecnn'
+    mask_type = 'posecnn_gt_bbox'
     print_poses = False
     # Running on model and PERCH
     cfg_file = dataset_cfg['maskrcnn_config']
@@ -2656,33 +2710,33 @@ def run_ycb_6d(dataset_cfg=None):
     f_runtime.write("{} {} {} {} {}\n".format('name', 'expands', 'runtime', 'icp_runtime', 'peak_gpu_mem'))
 
     #filter_objects = ['010_potted_meat_can'] - 49, 59, 53
-    filter_objects = None
+    filter_objects = ['003_cracker_box']
     # required_objects = ['025_mug', '007_tuna_fish_can', '002_master_chef_can']
     # required_objects = fat_image.category_names
     # required_objects = ['002_master_chef_can', '025_mug', '007_tuna_fish_can']
     # required_objects = ['040_large_marker', '024_bowl', '007_tuna_fish_can', '002_master_chef_can', '005_tomato_soup_can']
     # required_objects = ['002_master_chef_can']
-    # required_objects = ['004_sugar_box']
-    # required_objects = ['004_sugar_box']
-    # required_objects = ['006_mustard_bottle', '019_pitcher_base']
+    # required_objects = ['021_bleach_cleanser'] # 51, 54, 55, 57
+    # required_objects = ['037_scissors'] # 51
+    required_objects = ['003_cracker_box'] # 50 54 59
     # required_objects = ['019_pitcher_base','005_tomato_soup_can','004_sugar_box' ,'007_tuna_fish_can', '010_potted_meat_can', '024_bowl', '002_master_chef_can', '025_mug', '003_cracker_box', '006_mustard_bottle']
     # required_objects = fat_image.category_names
-    required_objects = [
-        "002_master_chef_can",
-        "004_sugar_box",
-        "005_tomato_soup_can",
-        "006_mustard_bottle",
-        "007_tuna_fish_can",
-        "009_gelatin_box",
-        "010_potted_meat_can",
-        "011_banana",
-        "019_pitcher_base",
-        "024_bowl",
-        "025_mug",
-        "040_large_marker",
-        "061_foam_brick"
-    ]
-    if mask_type != "posecnn" or print_poses:
+    # required_objects = [
+    #     "002_master_chef_can",
+    #     "004_sugar_box",
+    #     "005_tomato_soup_can",
+    #     "006_mustard_bottle",
+    #     "007_tuna_fish_can",
+    #     "009_gelatin_box",
+    #     "010_potted_meat_can",
+    #     "011_banana",
+    #     "019_pitcher_base",
+    #     "024_bowl",
+    #     "025_mug",
+    #     "040_large_marker",
+    #     "061_foam_brick"
+    # ]
+    if "posecnn" not in mask_type or print_poses:
         fat_image.init_model(cfg_file, print_poses=print_poses, required_objects=required_objects, model_weights=dataset_cfg['maskrcnn_model_path'])
     f_accuracy.write("name,")
     for object_name in required_objects:
@@ -2704,8 +2758,9 @@ def run_ycb_6d(dataset_cfg=None):
 
     IMG_LIST = np.loadtxt(os.path.join(image_directory, 'image_sets/keyframe.txt'), dtype=str).tolist()
 
-    for scene_i in range(51, 52):
-        for img_i in range(1, 2):
+    # for scene_i in range(48, 60):
+    for scene_i in [54]:
+        for img_i in reversed(range(1700, 2500)):
         # for img_i in IMG_LIST:
         # for img_i in tuna_list:
         # for img_i in can_list:
@@ -2720,9 +2775,9 @@ def run_ycb_6d(dataset_cfg=None):
             #     continue
             # image_data, annotations = fat_image.get_random_image(name='{}_16k/kitchen_4/000005.left.jpg'.format(category_name))
             image_data, annotations = fat_image.get_random_image(
-                name=image_name, required_objects=required_objects
+                name=image_name, required_objects=None
             )
-            # print(annotations[0])
+            # print(annotations)
             # Skip if required image or image name is not in dataset
             if image_data is None or annotations is None:
                 continue
@@ -2748,13 +2803,13 @@ def run_ycb_6d(dataset_cfg=None):
             if True:
                 model_poses_file = None
                 mask_image_index = None
-                if mask_type == 'posecnn':
+                if 'posecnn' in mask_type:
                     # keylist_name = '00{}/00{}'.format(str(scene_i), str(img_i).zfill(4))
                     keylist_name = image_name.replace('data/', '').replace('-color.png', '')
                     mask_image_index = IMG_LIST.index(keylist_name)
-                labels, model_annotations, predicted_mask_path = \
+                labels, model_annotations, predicted_mask_path, model_poses_file = \
                     fat_image.visualize_sphere_sampling(
-                        image_data, print_poses=print_poses, required_objects=required_objects, num_samples=60,
+                        image_data, annotations=annotations, print_poses=print_poses, required_objects=required_objects, num_samples=80,
                         mask_type=mask_type, mask_image_id=mask_image_index
                     )
                 # # Run model to get multiple poses for each object

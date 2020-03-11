@@ -841,6 +841,7 @@ def load_ycb_bbox_dataset():
 
             # print(class_name)
             # print(pose_matrix)
+            # [xmin, ymin, xmax, ymax]
             class_bounding_box = bboxes[:,:,i].flatten()
             # print(class_bounding_box)
             quat = get_xyzw_quaternion(RT_transform.mat2quat(pose_matrix[:3,:3]).tolist())
